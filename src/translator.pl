@@ -18,7 +18,6 @@ translate_clause(Input, (Head :- BodyConj)) :- Input = [=, [F|Args0], BodyExpr],
                                                append(GoalsPrefix, GoalsB, Goals),
                                                goals_list_to_conj(Goals, BodyConj).
 
-
 %Conjunction builder, turning goals list to a flat conjunction:
 goals_list_to_conj([], true)      :- !.
 goals_list_to_conj([G], G)        :- !.
@@ -110,6 +109,26 @@ translate_expr([H0|T0], Goals, Out) :-
                                                     Agg   =.. [AF, X],
                                                     GCall =.. [GF, X],
                                                     append(GsH, [ConjInit, foldall(Agg, GCall, Init, Out)], Goals)
+        %--- Higher-order functions with pseudo-lambdas ---:
+        ; HV == 'foldl-atom', T = [List, Init, AccVar, XVar, Body]
+          -> translate_expr_to_conj(List, ConjList, L),
+             translate_expr_to_conj(Init, ConjInit, InitV),
+             translate_expr_to_conj(Body, BodyConj, BodyGoal),
+             exclude(==(true), [ConjList, ConjInit], CleanConjs),
+             append(GsH, CleanConjs, GsMid),
+             append(GsMid, [foldl([XVar, AccVar, NewAcc]>>(BodyConj, NewAcc is BodyGoal), L, InitV, Out)], Goals)
+        ; HV == 'map-atom', T = [List, XVar, Body]
+          -> translate_expr_to_conj(List, ConjList, L),
+             translate_expr_to_conj(Body, BodyCallConj, BodyCall),
+             exclude(==(true), [ConjList], CleanConjs),
+             append(GsH, CleanConjs, GsMid),
+             append(GsMid, [maplist([XVar, Y]>>(BodyCallConj, Y is BodyCall), L, Out)], Goals)
+        ; HV == 'filter-atom', T = [List, XVar, Cond]
+          -> translate_expr_to_conj(List, ConjList, L),
+             translate_expr_to_conj(Cond, CondConj, CondGoal),
+             exclude(==(true), [ConjList], CleanConjs),
+             append(GsH, CleanConjs, GsMid),
+             append(GsMid, [include([XVar]>>(CondConj, CondGoal), L, Out)], Goals)
         %--- Spaces ---:
         ; ( HV == 'add-atom' ; HV == 'remove-atom' ) -> append(T, [Out], RawArgs),
                                                         Goal =.. [HV|RawArgs],
@@ -148,15 +167,26 @@ translate_expr([H0|T0], Goals, Out) :-
           Goal = catch((Conj, Out = ExprOut),
                        Exception,
                        (Exception = error(Type, Ctx) -> Out = ['Error', Type, Ctx]
-                                                      ;  Out = ['Error', Exception])),
+                                                      ; Out = ['Error', Exception])),
           append(Inner, [Goal], Goals)
         %--- Automatic 'smart' dispatch, translator deciding when to create a predicate call, data list, or dynamic dispatch: ---
         ; translate_args(T, GsT, AVs),
           append(GsH, GsT, Inner),
           %Known function => direct call:
-          ( atom(HV), fun(HV) -> append(AVs, [Out], ArgsV),
-                                 Goal =.. [HV|ArgsV],
-                                 append(Inner, [Goal], Goals)
+          ( atom(HV), fun(HV) % Check for type definition [:,HV,TypeChain]
+            -> ( catch(match('&self', [':', HV, TypeChain], TypeChain, TypeChain), _, fail)
+                 -> TypeChain = [->|Xs],
+                    append(ArgTypes, [OutType], Xs),
+                    translate_args_by_type(T, ArgTypes, GsT2, AVs2),
+                    append(GsH, GsT2, Inner2),
+                    append(AVs2, [Out], ArgsV),
+                    Goal =.. [HV|ArgsV],
+                    ( OutType == '%Undefined%'
+                      -> append(Inner2, [Goal], Goals)
+                       ; append(Inner2, [Goal, ('get-type'(Out, OutType) ; 'get-metatype'(Out, OutType))], Goals) )
+                  ; append(AVs, [Out], ArgsV),
+                    Goal =.. [HV|ArgsV],
+                    append(Inner, [Goal], Goals) )
           %Literals (numbers, strings, etc.), known non-function atom => data:
           ; ( atomic(HV), \+ atom(HV) ; atom(HV), \+ fun(HV) ) -> Out = [HV|AVs],
                                                                   Goals = Inner
@@ -166,6 +196,17 @@ translate_expr([H0|T0], Goals, Out) :-
                            Out = [HV1|AVs]
           %Unknown head (var/compound) => runtime dispatch:
           ; append(Inner, [reduce([HV|AVs], Out)], Goals) )).
+
+%Selectively apply translate_args for non-Expression args while Expression args stay as data input:
+translate_args_by_type([], _, [], []) :- !.
+translate_args_by_type([A|As], [T|Ts], GsOut, [AV|AVs]) :-
+                      ( T == 'Expression' -> AV = A, GsA = []
+                                           ; translate_expr(A, GsA1, AV),
+                                             ( T == '%Undefined%'
+                                               -> GsA = GsA1
+                                                ; append(GsA1, [('get-type'(AV, T) ; 'get-metatype'(AV, T))], GsA))),
+                                             translate_args_by_type(As, Ts, GsRest, AVs),
+                                             append(GsA, GsRest, GsOut).
 
 %Handle data list:
 eval_data_term(X, [], X) :- (var(X); atomic(X)), !.
