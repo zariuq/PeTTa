@@ -15,11 +15,16 @@
 (= (assertAlphaEqual $A $B)
    (assert (=alpha $A $B)))
 
-(: unify (-> Expression Expression Expression Expression %Undefined%))
-(= (unify $a $b $then $else)
-   (if (= $a $b)
-       (eval $then)
-       (eval $else)))
+; unify: Pattern matching in space - if $pattern matches something in $space, return $then, else $else
+; This is the HE builtin behavior, implemented using match/collapse for cross-platform compatibility
+; Note: This is different from equality testing - it searches for a pattern in a space
+(: unify (-> SpaceType Atom Expression Expression %Undefined%))
+(= (unify $space $pattern $then $else)
+  (let $results (collapse (match $space $pattern $pattern))
+    (case $results
+      ((Empty $else)
+       (() $else)
+       ($_ $then)))))
 
 (: add-reduct (-> %Undefined% Expression Bool))
 (= (add-reduct $space $f)
