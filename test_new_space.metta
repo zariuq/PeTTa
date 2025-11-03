@@ -1,0 +1,5 @@
+!(println! "What does new-space return?")
+!(println! (new-space))
+!(bind! &test (new-space))
+!(println! "Bound &test to new-space")
+!(println! &test)

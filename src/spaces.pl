@@ -8,6 +8,16 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
                                Term =.. [Space, Rel | Args],
                                assertz(Term).
 
+% Convert user spaces to tagged subspaces in &self
+'add-atom'(Space, Atom, Result) :-
+    atom(Space),
+    Space \== '&self',
+    Space \== '&mork',
+    atom_chars(Space, ['&'|Rest]),
+    Rest \== [], !,
+    atom_chars(SpaceName, Rest),
+    'add-atom'('&self', [subspace, SpaceName, Atom], Result).
+
 %Add a function atom:
 'add-atom'(Space, Term, true) :- Term = [=,[FAtom|_],_], !,
                                  add_sexp(Space, Term),
@@ -32,6 +42,17 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
                                           ensure_dynamic_arity(Space, Arity),
                                           Term =.. [Space, Rel | Args],
                                           retractall(Term).
+
+% Elegant fix: Convert user spaces to tagged subspaces in &self
+match(Space, Pattern, OutPattern, Result) :-
+    atom(Space),
+    Space \== '&self',
+    Space \== '&mork',
+    atom_chars(Space, ['&'|Rest]),
+    Rest \== [], !,
+    atom_chars(SpaceName, Rest),
+    % Match the wrapped pattern and extract the result
+    match('&self', [subspace, SpaceName, Pattern], [subspace, SpaceName, OutPattern], Result).
 
 %Match for conjunctive pattern
 match(_, LComma, OutPattern, Result) :- LComma == [','], !,
