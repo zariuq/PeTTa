@@ -1,0 +1,117 @@
+;; MM0-style experiment using Nil's BC (no env), renamed symbols
+
+;; Nat + fromNumber (for depth)
+(: Nat Type)
+(: Z Nat)
+(: S (-> Nat Nat))
+(: fromNumber (-> Number Nat))
+(= (fromNumber $n) (if (<= $n 0) Z (S (fromNumber (- $n 1)))))
+
+;; Backward chainer without env (Nil-style), up to arity 5
+(: bc (-> $kb Nat $q $q))
+(= (bc $kb $_ (: $p $t)) (match $kb (: $p $t) (: $p $t)))
+
+(= (bc $kb (S $k) (: ($r $a) $t))
+   (let* (((: $r (-> (: $aT $t))) (bc $kb $k (: $r (-> (: $aT $t)))))
+          ((: $a $aT) (bc $kb $k (: $a $aT))))
+     (: ($r $a) $t)))
+
+(= (bc $kb (S $k) (: ($r $a1 $a2) $t))
+   (let* (((: $r (-> (: $t1 $T1) (: $t2 $T2) $t))
+           (bc $kb $k (: $r (-> (: $t1 $T1) (: $t2 $T2) $t))))
+          ((: $a1 $T1) (bc $kb $k (: $a1 $T1)))
+          ((: $a2 $T2) (bc $kb $k (: $a2 $T2))))
+     (: ($r $a1 $a2) $t)))
+
+(= (bc $kb (S $k) (: ($r $a1 $a2 $a3) $t))
+   (let* (((: $r (-> (: $t1 $T1) (: $t2 $T2) (: $t3 $T3) $t))
+           (bc $kb $k (: $r (-> (: $t1 $T1) (: $t2 $T2) (: $t3 $T3) $t))))
+          ((: $a1 $T1) (bc $kb $k (: $a1 $T1)))
+          ((: $a2 $T2) (bc $kb $k (: $a2 $T2)))
+          ((: $a3 $T3) (bc $kb $k (: $a3 $T3))))
+     (: ($r $a1 $a2 $a3) $t)))
+
+(= (bc $kb (S $k) (: ($r $a1 $a2 $a3 $a4) $t))
+   (let* (((: $r (-> (: $t1 $T1) (: $t2 $T2) (: $t3 $T3) (: $t4 $T4) $t))
+           (bc $kb $k (: $r (-> (: $t1 $T1) (: $t2 $T2) (: $t3 $T3) (: $t4 $T4) $t))))
+          ((: $a1 $T1) (bc $kb $k (: $a1 $T1)))
+          ((: $a2 $T2) (bc $kb $k (: $a2 $T2)))
+          ((: $a3 $T3) (bc $kb $k (: $a3 $T3)))
+          ((: $a4 $T4) (bc $kb $k (: $a4 $T4))))
+     (: ($r $a1 $a2 $a3 $a4) $t)))
+
+(= (bc $kb (S $k) (: ($r $a1 $a2 $a3 $a4 $a5) $t))
+   (let* (((: $r (-> (: $t1 $T1) (: $t2 $T2) (: $t3 $T3) (: $t4 $T4) (: $t5 $T5) $t))
+           (bc $kb $k (: $r (-> (: $t1 $T1) (: $t2 $T2) (: $t3 $T3) (: $t4 $T4) (: $t5 $T5) $t))))
+          ((: $a1 $T1) (bc $kb $k (: $a1 $T1)))
+          ((: $a2 $T2) (bc $kb $k (: $a2 $T2)))
+          ((: $a3 $T3) (bc $kb $k (: $a3 $T3)))
+          ((: $a4 $T4) (bc $kb $k (: $a4 $T4)))
+          ((: $a5 $T5) (bc $kb $k (: $a5 $T5))))
+     (: ($r $a1 $a2 $a3 $a4 $a5) $t)))
+
+;; MM0-style KB
+!(bind! &mm0 (new-space))
+!(add-atom &mm0 (: term Const))
+!(add-atom &mm0 (: wff  Const))
+!(add-atom &mm0 (: tt   term))
+!(add-atom &mm0 (: tze  term))
+!(add-atom &mm0 (: tpl  (-> (: $t term) (: $r term) term)))
+!(add-atom &mm0 (: weq  (-> (: $t term) (: $r term) wff)))
+!(add-atom &mm0 (: wim  (-> (: $P wff) (: $Q wff) wff)))
+
+;; Axioms
+!(add-atom &mm0 (: a1 (-> (: $t term)
+                          (: $r term)
+                          (: $s term)
+                          (wim (weq $t $r) (wim (weq $t $s) (weq $r $s))))))
+!(add-atom &mm0 (: a2 (-> (: $t term) (weq (tpl $t tze) $t))))
+!(add-atom &mm0 (: mp (-> (: $maj (wim $P $Q))
+                          (: $P wff)
+                          (: $Q wff)
+                          (: $min $P)
+                          $Q)))
+
+;; Tests analogous to Nil's but with mm0 names
+!(test (bc &mm0 (fromNumber 1) (: $prf (weq tt tt)))
+       (: (a1 a2 a2) (weq tt tt)))
+
+!(add-atom &mm0 (: t term))
+!(test (bc &mm0 (fromNumber 1)
+           (: $prf (wim (weq t t) (wim (weq t t) (weq t t)))))
+       (: (a1 t t t) (wim (weq t t) (wim (weq t t) (weq t t)))))
+
+!(test (bc &mm0 (fromNumber 2)
+           (: $prf (wim (weq (tpl tt tze) tt)
+                           (wim (weq (tpl tt tze) tt) (weq tt tt)))))
+       (: (a1 (tpl tt tze) tt tt)
+          (wim (weq (tpl tt tze) tt)
+               (wim (weq (tpl tt tze) tt) (weq tt tt)))))
+
+!(test (bc &mm0 (fromNumber 1)
+           (: $prf (weq (tpl tt tze) tt)))
+       (: (a2 tt) (weq (tpl tt tze) tt)))
+
+!(test (bc &mm0 (fromNumber 2)
+           (: $prf (wff)))
+       (: (weq (tpl tt tze) tt) wff))
+
+!(test (bc &mm0 (fromNumber 4)
+           (: $prf (wim (weq (tpl tt tze) tt) (weq tt tt))))
+       (: (mp (a1 (tpl tt tze) tt tt)
+              (weq (tpl tt tze) tt)
+              (wim (weq (tpl tt tze) tt) (weq tt tt))
+              (a2 tt))
+          (wim (weq (tpl tt tze) tt) (weq tt tt))))
+
+!(test (bc &mm0 (fromNumber 5)
+           (: $prf (weq tt tt)))
+       (: (mp (mp (a1 (tpl tt tze) tt tt)
+                  (weq (tpl tt tze) tt)
+                  (wim (weq (tpl tt tze) tt) (weq tt tt))
+                  (a2 tt))
+              (weq (tpl tt tze) tt)
+              (weq tt tt)
+              (a2 tt))
+          (weq tt tt)))
+

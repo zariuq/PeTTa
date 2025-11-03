@@ -1,0 +1,15 @@
+/home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/deps/thiserror-5ef9ac81e1759d0b.d: /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/provide.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs /home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/build/thiserror-760196dd3dcf4f41/out/private.rs
+
+/home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/deps/libthiserror-5ef9ac81e1759d0b.rlib: /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/provide.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs /home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/build/thiserror-760196dd3dcf4f41/out/private.rs
+
+/home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/deps/libthiserror-5ef9ac81e1759d0b.rmeta: /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/provide.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs /home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs /home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/build/thiserror-760196dd3dcf4f41/out/private.rs
+
+/home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs:
+/home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs:
+/home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs:
+/home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/provide.rs:
+/home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs:
+/home/zar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs:
+/home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/build/thiserror-760196dd3dcf4f41/out/private.rs:
+
+# env-dep:OUT_DIR=/home/zar/claude/hyperon/PeTTa/mork_ffi/target/release/build/thiserror-760196dd3dcf4f41/out

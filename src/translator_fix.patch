@@ -1,0 +1,20 @@
+--- translator.pl.orig	2024-11-01 16:29:00.000000000 +0000
++++ translator.pl	2024-11-03 22:00:00.000000000 +0000
+@@ -133,9 +133,16 @@
+        ; ( HV == 'add-atom' ; HV == 'remove-atom' ) -> append(T, [Out], RawArgs),
+                                                        Goal =.. [HV|RawArgs],
+                                                        append(GsH, [Goal], Goals)
+-       ; HV == match, T = [Space, Pattern, Body] -> translate_expr(Space, G1, S),
++       ; HV == match, T = [Space, Pattern, Body] ->
++                                                    % Special handling for space references
++                                                    ( atom(Space), atom_chars(Space, ['&'|RestChars]),
++                                                      RestChars \== []
++                                                    ->
++                                                      % It's a user-defined space like &kb
++                                                      % Use the generic space handler instead
++                                                      G1 = [], S = '&self'
++                                                    ; translate_expr(Space, G1, S) ),
+                                                     translate_expr(Body, GsB, Out),
+                                                     append(G1, [match(S, Pattern, Out, Out)], G2),
+                                                     append(G2, GsB, Goals)
+        %--- Manual dispatch options: ---

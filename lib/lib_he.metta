@@ -18,13 +18,21 @@
 ; unify: Pattern matching in space - if $pattern matches something in $space, return $then, else $else
 ; This is the HE builtin behavior, implemented using match/collapse for cross-platform compatibility
 ; Note: This is different from equality testing - it searches for a pattern in a space
-(: unify (-> SpaceType Atom Expression Expression %Undefined%))
+;; Original with case - causes non-determinism in PeTTa
+;; (: unify (-> SpaceType Atom Expression Expression %Undefined%))
+;; (= (unify $space $pattern $then $else)
+;;   (let $results (collapse (match $space $pattern $pattern))
+;;     (case $results
+;;       ((Empty $else)
+;;        (() $else)
+;;        ($_ $then)))))
+
+;; Fixed version using if - deterministic
 (= (unify $space $pattern $then $else)
   (let $results (collapse (match $space $pattern $pattern))
-    (case $results
-      ((Empty $else)
-       (() $else)
-       ($_ $then)))))
+    (if (== $results ())
+        $else
+        $then)))
 
 (: add-reduct (-> %Undefined% Expression Bool))
 (= (add-reduct $space $f)

@@ -1,0 +1,5 @@
+!(println! "Testing direct use of space without bind")
+!(add-atom &myspace (Item A))
+!(println! "Added to &myspace")
+!(match &myspace (Item A) found)
+!(println! "Matched from &myspace")

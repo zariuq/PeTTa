@@ -1,0 +1,16 @@
+LICENSE
+MANIFEST.in
+README.md
+setup.py
+python/petta.egg-info/PKG-INFO
+python/petta.egg-info/SOURCES.txt
+python/petta.egg-info/dependency_links.txt
+python/petta.egg-info/requires.txt
+python/petta.egg-info/top_level.txt
+src/filereader.pl
+src/main.pl
+src/metta.pl
+src/morkspaces.pl
+src/parser.pl
+src/spaces.pl
+src/translator.pl
