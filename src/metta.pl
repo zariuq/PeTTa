@@ -4,11 +4,6 @@
 
 %%%%%%%%%% Standard Library for MeTTa %%%%%%%%%%
 
-%%% Let bindings: %%%
-'let*'([], B, B).
-'let*'([[V,Val]|Rs], B, Out) :- V = Val, 'let*'(Rs, B, Out).
-let(V, Val, In, Out) :- 'let*'([[V,Val]], In, Out).
-
 %% Representation conversion: %%
 id(X, X).
 repr(Term, R) :- swrite(Term, R).
@@ -73,6 +68,12 @@ exp(Arg,R) :- R is exp(Arg).
 'min-atom'(List, Out) :- min_list(List, Out).
 'max-atom'(List, Out) :- max_list(List, Out).
 
+%%% Random Generators: %%%
+'random-int'(Min, Max, Result) :- random_between(Min, Max, Result).
+'random-int'('&rng', Min, Max, Result) :- random_between(Min, Max, Result).
+'random-float'(Min, Max, Result) :- random(R), Result is Min + R * (Max - Min).
+'random-float'('&rng', Min, Max, Result) :- random(R), Result is Min + R * (Max - Min).
+
 %%% Boolean Logic: %%%
 and(true,  X, X).
 and(false, _, false).
@@ -80,6 +81,8 @@ or( false, X, X).
 or( true,  _, true).
 not(true,  false).
 not(false, true).
+xor(false, A, A).
+xor(true, A, B) :- not(A, B).
 
 %%% Nondeterminism: %%%
 superpose(L,X) :- member(X,L).
@@ -98,6 +101,7 @@ empty(_) :- fail.
 decons([H|T], [H|[T]]).
 cons(H, T, [H|T]).
 'index-atom'(List, Index, Elem) :- nth0(Index, List, Elem).
+member(X, L, _) :- member(X, L).
 'is-member'(X, List, true) :- member(X, List).
 'is-member'(X, List, false) :- \+ member(X, List).
 'exclude-item'(A, L, R) :- exclude(==(A), L, R).
@@ -157,7 +161,9 @@ assert(Goal, true) :- ( call(Goal) -> true
                                       format("Assertion failed: ~w~n", [RG]),
                                       halt(1) ).
 
-%%
+%%% Time Retrieval: %%%
+'current-time'(Time) :- get_time(Time).
+'format-time'(Format, TimeString) :- get_time(Time), format_time(atom(TimeString), Format, Time).
 
 %%% Python bindings: %%%
 'py-call'(SpecList, Result) :- 'py-call'(SpecList, Result, []).
@@ -211,7 +217,7 @@ call_goals([G|Gs]) :- call(G),
 'import!'('&self', File, true) :- atom_string(File, SFile),
                                   working_dir(Base),
                                   atomic_list_concat([Base, '/', SFile, '.metta'], Path),
-                                  load_metta_file(Path, default).
+                                  load_metta_file(Path,_).
 
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
@@ -219,15 +225,15 @@ unregister_fun(N/Arity) :- retractall(fun(N)),
                            abolish(N, Arity).
 
 :- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
-                          '<','>','==', '=', '=?', '<=', '>=', '@<', '@>', '@=<', '@>=', and, or, not, sqrt, exp, log, cos, sin,
+                          '<','>','==', '=', '=?', '<=', '>=', '@<', '@>', '@=<', '@>=', and, or, xor, not, sqrt, exp, log, cos, sin,
                           'first-from-pair', 'second-from-pair', 'car-atom', 'cdr-atom', 'unique-atom',
                           repr, repra, 'println!', 'readln!', 'trace!', test, assert, 'mm2-exec',
-                          foldl, append, length, 'size-atom', sort, msort, 'is-member', 'exclude-item', list_to_set, maplist, eval, reduce, 'import!',
+                          foldl, append, length, 'size-atom', sort, msort, member, 'is-member', 'exclude-item', list_to_set, maplist, eval, reduce, 'import!',
                           'add-atom', 'remove-atom', 'get-atoms', match, 'is-var', 'is-expr', 'get-mettatype',
                           decons, 'decons-atom', 'py-call', 'get-type', 'get-metatype', '=alpha', concat, sread, cons, reverse,
                           '#+','#-','#*','#div','#//','#mod','#min','#max','#<','#>','#=','#\\=',
                           'union-atom', 'cons-atom', 'intersection-atom', 'subtraction-atom', 'index-atom', id,
                           'pow-math', 'sqrt-math', 'sort-atom','abs-math', 'log-math', 'trunc-math', 'ceil-math',
-                          'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math',
+                          'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math','random-int','random-float',
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
-                          'foldl-atom', 'map-atom', 'filter-atom']).
+                          'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time']).
