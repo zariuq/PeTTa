@@ -5,17 +5,22 @@ constrain_args([F|Args], Var, Goals) :- atom(F),
                                         fun(F), !,
                                         translate_expr([F|Args], GoalsExpr, Var),
                                         flatten(GoalsExpr, Goals).
-constrain_args([F|Args], [F|Args1], Goals) :- maplist(constrain_args, Args, Args1, NestedGoalsList),
-                                              flatten(NestedGoalsList, Goals), !.
+constrain_args(In, Out, Goals) :- maplist(constrain_args, In, Out, NestedGoalsList),
+                                  flatten(NestedGoalsList, Goals), !.
 
 %Flatten (= Head Body) MeTTa function into Prolog Clause:
 translate_clause(Input, (Head :- BodyConj)) :- Input = [=, [F|Args0], BodyExpr],
                                                maplist(constrain_args, Args0, Args1, GoalsA),
                                                append(GoalsA, GoalsPrefix),
-                                               append(Args1, [Out], Args),
-                                               compound_name_arguments(Head, F, Args),
-                                               translate_expr(BodyExpr, GoalsB, Out),
-                                               append(GoalsPrefix, GoalsB, Goals),
+                                               translate_expr(BodyExpr, GoalsBody, ExpOut),
+                                               (  nonvar(ExpOut) , ExpOut = partial(Base,Bound)
+                                               -> current_predicate(Base/Arity), length(Bound, N), M is (Arity - N) - 1,
+                                                  length(ExtraArgs, M), append([Bound,ExtraArgs,[Out]],CallArgs), Goal =.. [Base|CallArgs],
+                                                  append(GoalsBody,[Goal],FinalGoals), append(Args1,ExtraArgs,HeadArgs)
+                                               ; FinalGoals= GoalsBody , HeadArgs = Args1, Out = ExpOut ),
+                                               append(HeadArgs, [Out], FinalArgs),
+                                               Head =.. [F|FinalArgs],
+                                               append(GoalsPrefix, FinalGoals, Goals),
                                                goals_list_to_conj(Goals, BodyConj).
 
 %Conjunction builder, turning goals list to a flat conjunction:
@@ -24,11 +29,23 @@ goals_list_to_conj([G], G)        :- !.
 goals_list_to_conj([G|Gs], (G,R)) :- goals_list_to_conj(Gs, R).
 
 % Runtime dispatcher: call F if it's a registered fun/1, else keep as list:
-reduce([F|Args], Out) :- ( nonvar(F), atom(F), fun(F) -> append(Args, [Out], CallArgs),
-                                                         Goal =.. [F|CallArgs],
-                                                         call(Goal)
-                                                       ; Out = [F|Args],
-                                                         \+ cyclic_term(Out) ).
+reduce([F|Args], Out) :- nonvar(F), atom(F), fun(F)
+                         -> % --- Case 1: callable predicate ---
+                            length(Args, N),
+                            Arity is N + 1,
+                            ( current_predicate(F/Arity) -> append(Args,[Out],CallArgs),
+                                                            Goal =.. [F|CallArgs],
+                                                            catch(call(Goal),_,fail)
+                                                          ; Out = partial(F,Args) )
+                          ; % --- Case 2: partial closure ---
+                            compound(F), F = partial(Base, Bound) -> append(Bound, Args, NewArgs),
+                                                                     reduce([Base|NewArgs], Out)
+                          ; % --- Case 3: leave unevaluated ---
+                            Out = [F|Args],
+                            \+ cyclic_term(Out).
+
+% Calling reduce from aggregate function foldall needs this argument wrapping
+agg_reduce(AF, Acc, Val, NewAcc) :- reduce([AF, Acc, Val], NewAcc).
 
 %Combined expr translation to goals list
 translate_expr_to_conj(Input, Conj, Out) :- translate_expr(Input, Goals, Out),
@@ -78,16 +95,20 @@ translate_expr([H0|T0], Goals, Out) :-
                                               build_branch(ConE, Ev, Out, BE),
                                               ( ConC == true -> append(GsH, [ (Cv == true -> BT ; BE) ], Goals)
                                                               ; append(GsH, [ (ConC, (Cv == true -> BT ; BE)) ], Goals) )
-        ; HV == case, T = [KeyExpr, PairsExpr] -> ( has_empty_case(PairsExpr, DefaultExpr, NormalCases)
-                                                  -> translate_expr_to_conj(KeyExpr, GkConj, Kv),
-                                                     translate_case(NormalCases, Kv, Out, CaseGoal, KeyGoal),
-                                                     translate_expr_to_conj(DefaultExpr, ConD, DOut),
-                                                     build_branch(ConD, DOut, Out, DefaultThen),
-                                                     Combined = ( (GkConj, CaseGoal) ; (\+ (GkConj, CaseGoal), DefaultThen) ),
-                                                     append([GsH, KeyGoal, [Combined]], Goals)
-                                                   ; translate_expr(KeyExpr, Gk, Kv),
-                                                     translate_case(PairsExpr, Kv, Out, IfGoal, KeyGoal),
-                                                     append([GsH, Gk, KeyGoal, [IfGoal]], Goals))
+        ; HV == case, T = [KeyExpr, PairsExpr] -> ( select(Found0, PairsExpr, Rest0),
+                                                    subsumes_term(['Empty', _], Found0),
+                                                    Found0 = ['Empty', DefaultExpr],
+                                                    NormalCases = Rest0
+                                                    -> translate_expr_to_conj(KeyExpr, GkConj, Kv),
+                                                       translate_case(NormalCases, Kv, Out, CaseGoal, KeyGoal),
+                                                       translate_expr_to_conj(DefaultExpr, ConD, DOut),
+                                                       build_branch(ConD, DOut, Out, DefaultThen),
+                                                       Combined = ( (GkConj, CaseGoal) ;
+                                                                    \+ (GkConj, CaseGoal), DefaultThen ),
+                                                       append([GsH, KeyGoal, [Combined]], Goals)
+                                                     ; translate_expr(KeyExpr, Gk, Kv),
+                                                       translate_case(PairsExpr, Kv, Out, IfGoal, KeyGoal),
+                                                       append([GsH, Gk, KeyGoal, [IfGoal]], Goals) )
         %--- Unification constructs ---:
         ; (HV == let ; HV == chain), T = [Pat, Val, In] -> translate_expr(Pat, Gp, Pv),
                                            constrain_args(Pv, P, Gc),
@@ -99,34 +120,73 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == sealed, T = [Vars, Expr] -> translate_expr_to_conj(Expr, Con, Out),
                                     Goals = [copy_term(Vars,Con,_,Ncon),Ncon]
         %--- Iterating over non-deterministic generators without reification ---:
-        ; HV == 'forall', T = [[GF], TF] -> GCall =.. [GF, X],
-                                            TCall =.. [TF, X, Truth],
-                                            U = [( forall(GCall, (TCall, Truth==true)) -> Out=true ; Out=false )],
-                                            append(GsH, U, Goals)
-        ; HV == 'foldall', T = [AF, [GF], InitS] -> translate_expr_to_conj(InitS, ConjInit, Init),
-                                                    Agg   =.. [AF, X],
-                                                    GCall =.. [GF, X],
-                                                    append(GsH, [ConjInit, foldall(Agg, GCall, Init, Out)], Goals)
+        ; HV == 'forall', T = [GF, TF]
+          -> ( is_list(GF) -> GF = [GFH|GFA],
+                              translate_expr(GFH, GsGFH, GFHV),
+                              translate_args(GFA, GsGFA, GFAv),
+                              append(GsGFH, GsGFA, GsGF),
+                              GenList = [GFHV|GFAv]
+                            ; translate_expr(GF, GsGF, GFHV),
+                              GenList = [GFHV] ),
+             translate_expr(TF, GsTF, TFHV),
+             TestList = [TFHV, V],
+             goals_list_to_conj(GsGF, GPre),
+             GenGoal = (GPre, reduce(GenList, V)),
+             append(GsH, GsTF, Tmp0),
+             append(Tmp0, [( forall(GenGoal, ( reduce(TestList, Truth), Truth == true )) -> Out = true ; Out = false )], Goals)
+        ; HV == 'foldall', T = [AF, GF, InitS]
+          -> translate_expr_to_conj(InitS, ConjInit, Init),
+             translate_expr(AF, GsAF, AFV),
+             ( is_list(GF) -> GF = [GFH|GFA],
+                              translate_expr(GFH, GsGFH, GFHV),
+                              translate_args(GFA, GsGFA, GFAv),
+                              append(GsGFH, GsGFA, GsGF),
+                              GenList = [GFHV|GFAv]
+                            ; translate_expr(GF, GsGF, GFHV),
+                              GenList = [GFHV] ),
+             append(GsH, GsAF, Tmp1),
+             append(Tmp1, GsGF, Tmp2),
+             append(Tmp2, [ConjInit, foldall(agg_reduce(AFV, V), reduce(GenList, V), Init, Out)], Goals)
         %--- Higher-order functions with pseudo-lambdas ---:
         ; HV == 'foldl-atom', T = [List, Init, AccVar, XVar, Body]
           -> translate_expr_to_conj(List, ConjList, L),
              translate_expr_to_conj(Init, ConjInit, InitV),
-             translate_expr_to_conj(Body, BodyConj, BodyGoal),
+             translate_expr_to_conj(Body, BodyConj, BG),
              exclude(==(true), [ConjList, ConjInit], CleanConjs),
              append(GsH, CleanConjs, GsMid),
-             append(GsMid, [foldl([XVar, AccVar, NewAcc]>>(BodyConj, NewAcc is BodyGoal), L, InitV, Out)], Goals)
+             append(GsMid, [foldl([XVar, AccVar, NewAcc]>>(BodyConj, ( number(BG) -> NewAcc is BG ; NewAcc = BG )), L, InitV, Out)], Goals)
         ; HV == 'map-atom', T = [List, XVar, Body]
           -> translate_expr_to_conj(List, ConjList, L),
              translate_expr_to_conj(Body, BodyCallConj, BodyCall),
              exclude(==(true), [ConjList], CleanConjs),
              append(GsH, CleanConjs, GsMid),
-             append(GsMid, [maplist([XVar, Y]>>(BodyCallConj, Y is BodyCall), L, Out)], Goals)
+             append(GsMid, [maplist([XVar, Y]>>(BodyCallConj, ( number(BodyCall) -> Y is BodyCall ; Y = BodyCall )), L, Out)], Goals)
         ; HV == 'filter-atom', T = [List, XVar, Cond]
           -> translate_expr_to_conj(List, ConjList, L),
              translate_expr_to_conj(Cond, CondConj, CondGoal),
              exclude(==(true), [ConjList], CleanConjs),
              append(GsH, CleanConjs, GsMid),
              append(GsMid, [include([XVar]>>(CondConj, CondGoal), L, Out)], Goals)
+        ; HV == '|->', T = [Args, Body] -> uuid(F),
+                                           % find free (non-argument) variables in Body
+                                           term_variables(Body, AllVars),
+                                           exclude({Args}/[V]>>memberchk_eq(V, Args), AllVars, FreeVars),
+                                           append(FreeVars, Args, FullArgs),
+                                           % compile clause with all bound + free vars
+                                           translate_clause([=, [F|FullArgs], Body], Clause),
+                                           ( silent(true) -> true ; format("\e[33m--> lambda clause -->~n\e[32m", []),
+                                                                    Clause = (CHead :- CBody),
+                                                                    ( CBody == true -> Show = CHead; Show = (CHead :- CBody) ),
+                                                                    portray_clause(current_output, Show),
+                                                                    format("\e[33m^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ),
+                                           register_fun(F),
+                                           assertz(Clause),
+                                           length(FullArgs, N),
+                                           Arity is N + 1,
+                                           assertz(arity(F, Arity)),
+                                           % emit closure capturing the environment (free vars)
+                                           ( FreeVars == [] -> Out = F
+                                                             ; Out = partial(F, FreeVars) )
         %--- Spaces ---:
         ; ( HV == 'add-atom' ; HV == 'remove-atom' ) -> append(T, [Out], RawArgs),
                                                         Goal =.. [HV|RawArgs],
@@ -171,20 +231,29 @@ translate_expr([H0|T0], Goals, Out) :-
         ; translate_args(T, GsT, AVs),
           append(GsH, GsT, Inner),
           %Known function => direct call:
-          ( atom(HV), fun(HV) % Check for type definition [:,HV,TypeChain]
-            -> ( catch(match('&self', [':', HV, TypeChain], TypeChain, TypeChain), _, fail)
+          ( is_list(AVs), 
+            ( atom(HV), fun(HV), Fun = HV, AllAVs = AVs, IsPartial = false
+            ; compound(HV), HV = partial(Fun, Bound), append(Bound,AVs,AllAVs), IsPartial = true
+            ) % Check for type definition [:,HV,TypeChain]
+            -> ( catch(match('&self', [':', Fun, TypeChain], TypeChain, TypeChain), _, fail)
                  -> TypeChain = [->|Xs],
                     append(ArgTypes, [OutType], Xs),
-                    translate_args_by_type(T, ArgTypes, GsT2, AVs2),
-                    append(GsH, GsT2, Inner2),
-                    append(AVs2, [Out], ArgsV),
-                    Goal =.. [HV|ArgsV],
+                    translate_args_by_type(T, ArgTypes, GsT2, AVsTmp0),
+                    (IsPartial -> append(Bound,AVsTmp0,AVsTmp) ; AVsTmp = AVsTmp0),
+                    append(GsH, GsT2, InnerTmp),
                     ( OutType == '%Undefined%'
-                      -> append(Inner2, [Goal], Goals)
-                       ; append(Inner2, [Goal, ('get-type'(Out, OutType) ; 'get-metatype'(Out, OutType))], Goals) )
-                  ; append(AVs, [Out], ArgsV),
-                    Goal =.. [HV|ArgsV],
-                    append(Inner, [Goal], Goals) )
+                      -> Extra = []
+                       ; Extra = [('get-type'(Out, OutType) ; 'get-metatype'(Out, OutType))] )
+                  ; AVsTmp = AllAVs,
+                    InnerTmp = Inner,
+                    Extra = [] ),
+               length(AllAVs,N), Arity is N + 1,
+               ( (((current_predicate(Fun/Arity) ; catch(arity(Fun, Arity),_,fail)), \+ (current_op(_, _, Fun), Arity =< 2)))
+                 -> append(AVsTmp, [Out], ArgsV),
+                    Goal =.. [Fun|ArgsV],
+                    append(InnerTmp, [Goal|Extra], Goals)
+                  ; Out = partial(Fun,AVsTmp),
+                    append(InnerTmp,Extra, Goals) )
           %Literals (numbers, strings, etc.), known non-function atom => data:
           ; ( atomic(HV), \+ atom(HV) ; atom(HV), \+ fun(HV) ) -> Out = [HV|AVs],
                                                                   Goals = Inner
@@ -237,17 +306,10 @@ build_branch(Con, Val, Out, Goal) :- var(Val) -> Val = Out, Goal = Con
 translate_case([[K,VExpr]|Rs], Kv, Out, Goal, KGo) :- translate_expr_to_conj(VExpr, ConV, VOut),
                                                       constrain_args(K, Kc, Gc),
                                                       build_branch(ConV, VOut, Out, Then),
-                                                      ( Rs == [] -> ( K == 'Empty'
-                                                                    -> Goal = ( \+ (Kv = Kc) -> Then )
-                                                                     ; Goal = (Kv = Kc -> Then) )
+                                                      ( Rs == [] -> Goal = ((Kv = Kc) -> Then)
                                                                   ; translate_case(Rs, Kv, Out, Next, KGi),
-                                                                    Goal = ( (Kv = Kc) -> Then ; Next ) ),
+                                                                    Goal = ((Kv = Kc) -> Then ; Next) ),
                                                       append([Gc,KGi], KGo).
-
-%Whether the empty case is there, can be extracted:
-has_empty_case(Pairs, DefaultExpr, NormalCases) :- member([Key, DefaultExpr], Pairs),
-                                                   atom(Key),
-                                                   select(['Empty', DefaultExpr], Pairs, NormalCases).
 
 %Translate arguments recursively:
 translate_args([], [], []).
@@ -269,3 +331,7 @@ build_superpose_branches([E|Es], Out, [B|Bs]) :- translate_expr_to_conj(E, Conj,
 build_hyperpose_branches([], []).
 build_hyperpose_branches([E|Es], [(Goal, Res)|Bs]) :- translate_expr_to_conj(E, Goal, Res),
                                                       build_hyperpose_branches(Es, Bs).
+
+%Like membercheck but with direct equality rather than unification
+memberchk_eq(V, [H|_]) :- V == H, !.
+memberchk_eq(V, [_|T]) :- memberchk_eq(V, T).

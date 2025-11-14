@@ -1,10 +1,23 @@
+%%%%%%%%%% Dependencies %%%%%%%%%%
+
+:- autoload(library(uuid)).
+:- use_module(library(random)).
+:- use_module(library(janus)).
+:- use_module(library(error)).
+:- use_module(library(listing)).
+:- use_module(library(aggregate)).
+:- use_module(library(thread)).
+:- use_module(library(lists)).
+:- use_module(library(yall), except([(/)/3])).
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
 :- current_prolog_flag(argv, Argv),
    ( member(mork, Argv) -> ensure_loaded([parser, translator, filereader, morkspaces, spaces])
                          ; ensure_loaded([parser, translator, filereader, spaces])).
 
 %%%%%%%%%% Standard Library for MeTTa %%%%%%%%%%
 
-%% Representation conversion: %%
+%%% Representation conversion: %%%
 id(X, X).
 repr(Term, R) :- swrite(Term, R).
 repra(Term, R) :- term_to_atom(Term, R).
@@ -138,8 +151,10 @@ get_function_type([F,Arg], T) :- match('&self', [':',F,['->',A,B]], _, _),
 'get-metatype'(X, 'Grounded') :- atom(X), fun(X), !.  % e.g., '+' is a registered fun/1
 'get-metatype'(X, 'Expression') :- is_list(X), !.     % e.g., (+ 1 2), (a b)
 'get-metatype'(X, 'Symbol') :- atom(X), !.            % e.g., a
-'is-var'(A,R) :- (var(A) -> R=true ; R=false).
-'is-expr'(A,R) :- (is_list(A) -> R=true ; R=false).
+
+'is-var'(A,R) :- var(A) -> R=true ; R=false.
+'is-expr'(A,R) :- is_list(A) -> R=true ; R=false.
+'is-space'(A,R) :- atom(A), atom_concat('&', _, A) -> R=true ; R=false.
 
 %%% Diagnostics / Testing: %%%
 'println!'(Arg, true) :- swrite(Arg, RArg),
@@ -201,17 +216,26 @@ call_goals([G|Gs]) :- call(G),
 
 %%% Higher-Order Functions: %%%
 'foldl-atom'([], Acc, _Func, Acc).
-'foldl-atom'([H|T], Acc0, Func, Out) :- call(Func, Acc0, H, Acc1),
+'foldl-atom'([H|T], Acc0, Func, Out) :- reduce([Func,Acc0,H], Acc1),
                                         'foldl-atom'(T, Acc1, Func, Out).
 
 'map-atom'([], _Func, []).
-'map-atom'([H|T], Func, [R|RT]) :- call(Func, H, R),
+'map-atom'([H|T], Func, [R|RT]) :- reduce([Func,H], R),
                                    'map-atom'(T, Func, RT).
 
 'filter-atom'([], _Func, []).
-'filter-atom'([H|T], Func, Out) :- ( call(Func, H, true) -> Out = [H|RT]
-                                                          ; Out = RT ),
+'filter-atom'([H|T], Func, Out) :- ( reduce([Func,H], true) -> Out = [H|RT]
+                                                             ; Out = RT ),
                                    'filter-atom'(T, Func, RT).
+
+%%% Prolog interop: %%%
+import_prolog_function(N, true) :- register_fun(N).
+'Predicate'([F|Args], Term) :- Term =.. [F|Args].
+callPredicate(G, true) :- call(G).
+assertzPredicate(G, true) :- assertz(G).
+assertaPredicate(G, true) :- asserta(G).
+retractPredicate(G, true) :- retract(G), !.
+retractPredicate(_, false).
 
 %%% Registration: %%%
 'import!'('&self', File, true) :- atom_string(File, SFile),
@@ -227,13 +251,14 @@ unregister_fun(N/Arity) :- retractall(fun(N)),
 :- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
                           '<','>','==', '=', '=?', '<=', '>=', '@<', '@>', '@=<', '@>=', and, or, xor, not, sqrt, exp, log, cos, sin,
                           'first-from-pair', 'second-from-pair', 'car-atom', 'cdr-atom', 'unique-atom',
-                          repr, repra, 'println!', 'readln!', 'trace!', test, assert, 'mm2-exec',
+                          repr, repra, 'println!', 'readln!', 'trace!', test, assert, 'mm2-exec', atom_concat, atom_chars, copy_term, term_hash,
                           foldl, append, length, 'size-atom', sort, msort, member, 'is-member', 'exclude-item', list_to_set, maplist, eval, reduce, 'import!',
-                          'add-atom', 'remove-atom', 'get-atoms', match, 'is-var', 'is-expr', 'get-mettatype',
+                          'add-atom', 'remove-atom', 'get-atoms', match, 'is-var', 'is-expr', 'is-space', 'get-mettatype',
                           decons, 'decons-atom', 'py-call', 'get-type', 'get-metatype', '=alpha', concat, sread, cons, reverse,
                           '#+','#-','#*','#div','#//','#mod','#min','#max','#<','#>','#=','#\\=',
                           'union-atom', 'cons-atom', 'intersection-atom', 'subtraction-atom', 'index-atom', id,
                           'pow-math', 'sqrt-math', 'sort-atom','abs-math', 'log-math', 'trunc-math', 'ceil-math',
                           'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math','random-int','random-float',
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
-                          'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time']).
+                          'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time',
+                          import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate]).

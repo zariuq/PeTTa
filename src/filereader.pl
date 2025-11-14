@@ -1,5 +1,7 @@
 :- use_module(library(readutil)). % read_file_to_string/3
 :- use_module(library(pcre)). % re_replace/4
+:- current_prolog_flag(argv, Args), ( (memberchk(silent, Args) ; memberchk('--silent', Args) ; memberchk('-s', Args))
+                                      -> assertz(silent(true)) ; assertz(silent(false)) ).
 
 %Read Filename into string S and process it (S holds MeTTa code):
 load_metta_file(Filename, Results) :- read_file_to_string(Filename, S, []),
@@ -8,30 +10,32 @@ load_metta_file(Filename, Results) :- read_file_to_string(Filename, S, []),
 %Extract function definitions, call invocations, and S-expressions part of &self space:
 process_metta_string(S, Results) :- re_replace("(;[^\n]*)"/g, "", S, Clean),
                                     string_codes(Clean, Codes),
-                                    phrase(top_forms(Entities,1), Codes),
-                                    maplist(parse_form, Entities, ParsedEntities),
-                                    maplist(process_form, ParsedEntities, ResultsList), !,
+                                    phrase(top_forms(Forms, 1), Codes),
+                                    maplist(parse_form, Forms, ParsedForms),
+                                    maplist(process_form, ParsedForms, ResultsList), !,
                                     append(ResultsList, Results).
 
 %First pass to convert MeTTa to Prolog Terms and register functions:
 parse_form(form(S), parsed(T, S, Term)) :- sread(S, Term),
-                                           ( Term = [=, [F|_], _], atom(F) -> register_fun(F), T=function ; T=expression ).
+                                           ( Term = [=, [F|W], _], atom(F) -> register_fun(F), length(W, N), Arity is N + 1, assertz(arity(F,Arity)), T=function
+                                                                            ; T=expression ).
 parse_form(bang(S), parsed(bang, S, Term)) :- sread(S, Term).
 
 %Second pass to compile / run / add the Terms:
 process_form(parsed(expression, _, Term), []) :- 'add-atom'('&self', Term, true).
-process_form(parsed(bang, _, Term), [Result]) :- eval([collapse, Term], Result).
+process_form(parsed(bang, FormStr, Term), Result) :- translate_expr([collapse, Term], Goals, Result),
+                                                     ( silent(true) -> true ; format("\e[33m-->   metta bang  -->~n\e[36m!~w~n\e[33m-->  prolog goal  -->\e[35m ~n", [FormStr]),
+                                                                              forall(member(G, Goals), portray_clause((:- G))),
+                                                                              format("\e[33m^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ),
+                                                     call_goals(Goals).
 process_form(parsed(function, FormStr, Term), []) :- add_sexp('&self', Term),
                                                      translate_clause(Term, Clause),
                                                      assertz(Clause, Ref),
-                                                     current_prolog_flag(argv, Args),
-                                                     ( ( memberchk(silent, Args) ; memberchk('--silent', Args) ; memberchk('-s', Args) )
-                                                       -> true
-                                                        ; format("\e[33m-->  metta S-exp  -->~n\e[36m~w~n\e[33m--> prolog clause -->~n\e[32m", [FormStr]),
-                                                          clause(Head, Body, Ref),
-                                                          ( Body == true -> Show = Head; Show = (Head :- Body) ),
-                                                          portray_clause(current_output, Show),
-                                                          format("\e[33m^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ).
+                                                     ( silent(true) -> true ; format("\e[33m-->  metta func   -->~n\e[36m~w~n\e[33m--> prolog clause -->~n\e[32m", [FormStr]),
+                                                                              clause(Head, Body, Ref),
+                                                                              ( Body == true -> Show = Head; Show = (Head :- Body) ),
+                                                                              portray_clause(current_output, Show),
+                                                                              format("\e[33m^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ).
 process_form(In, _) :- format('Failed to process form: ~w~n', [In]), halt(1).
 
 %Like blanks but counts newlines:
