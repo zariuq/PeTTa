@@ -1,24 +1,10 @@
-!(println! "Testing &self space")
+!(import! &self lib/lib_he)
+
+!(println! "=== Testing match with &self ===")
 !(println! "")
 
-!(println! "Adding to &self:")
-!(add-atom &self (Color red))
-!(add-atom &self (Color blue))
+!(add-atom &self (test-atom value))
+!(println! "Added (test-atom value) to &self")
 
-!(println! "")
-!(println! "Matching from &self:")
-!(match &self (Color $x) $x)
-
-!(println! "")
-!(println! "Testing tagged subspaces in &self:")
-!(add-atom &self (subspace kb (Item A)))
-!(add-atom &self (subspace kb (Item B)))
-!(add-atom &self (subspace other (Item C)))
-
-!(println! "")
-!(println! "Match all kb items:")
-!(match &self (subspace kb (Item $x)) $x)
-
-!(println! "")
-!(println! "Match all other items:")
-!(match &self (subspace other (Item $x)) $x)
+!(println! "Test 1: Match in &self")
+!(test (collapse (match &self (test-atom value) FOUND)) (FOUND))
