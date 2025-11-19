@@ -208,7 +208,7 @@ assert(Goal, true) :- ( call(Goal) -> true
 'get-state'(Var, Value) :- nb_getval(Var, Value).
 
 %%% Eval: %%%
-eval(C, Out) :- translate_expr(C, Goals, Out),
+eval(C, Ctxt, Out) :- translate_expr(C, Ctxt, Goals, Out),
                 call_goals(Goals).
 
 call_goals([]).
@@ -239,10 +239,16 @@ retractPredicate(G, true) :- retract(G), !.
 retractPredicate(_, false).
 
 %%% Registration: %%%
-'import!'('&self', File, true) :- atom_string(File, SFile),
-                                  working_dir(Base),
-                                  atomic_list_concat([Base, '/', SFile, '.metta'], Path),
-                                  load_metta_file(Path,_).
+'import!'('&self', File, Ctxt, true) :-
+    atom_string(File, SFile),
+    ( sub_atom(SFile, 0, 1, _, '/') ->
+        % If SFile is an absolute path, use it directly.
+        atom_concat(SFile, '.metta', Path)
+    ;   % Otherwise, join it with the current context directory.
+        atomic_list_concat([Ctxt, '/', SFile, '.metta'], Path)
+    ),
+    file_directory_name(Path, NewDir),
+    load_metta_file(Path, NewDir, _).
 
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).

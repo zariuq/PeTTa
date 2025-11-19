@@ -550,7 +550,7 @@ The body of `let*` (after all bindings) is the return value:
 
 ### Pattern 6: Side Effects in `let*` and Sequential Execution ✅
 
-**Requires**: `!(import! &self lib/lib_metta4)` for `progn`/`prog1`
+**Note**: `progn` and `prog1` are built-in to PeTTa - no import needed!
 
 #### Side Effects in `let*` Bindings
 
@@ -672,7 +672,7 @@ For multiple sequential operations, use `progn` (return last) or `prog1` (return
 - `(progn a b c)` → executes a, b, c → returns c (last)
 - `(prog1 a b c)` → executes a, b, c → returns a (first)
 - Both work up to 50 arguments
-- Both require `!(import! &self lib/lib_metta4)`
+- Both are built-in to PeTTa - no import needed
 
 **When to use which:**
 - Use `progn` when the return value is computed last (e.g., accumulation)
@@ -1300,11 +1300,12 @@ Import Prolog predicates as MeTTa functions.
 - `import_prolog_function` - Import single predicate
 - `import_prolog_functions_from_file` - Import multiple from file
 
-### lib/lib_metta4.metta - Procedural Extensions
+### ~~lib/lib_metta4.metta~~ - Procedural Extensions (OBSOLETE)
 
-**Import**: `!(import! &self lib/lib_metta4)`
+**Status**: Obsolete - `progn` and `prog1` are now built-in to PeTTa.
 
-Adds `progn` and `prog1` for procedural execution (auto-generated for 1-50 arguments).
+Previously provided `progn` and `prog1` for procedural execution (auto-generated for 1-50 arguments).
+These functions are now implemented directly in PeTTa's translator (`src/translator.pl`).
 
 ### lib/lib_llm.metta - LLM Integration
 
