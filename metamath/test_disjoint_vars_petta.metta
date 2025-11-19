@@ -2,78 +2,7 @@
 ; Testing DV checking, variable lookups, and constraint validation
 
 !(import! &self ../lib/lib_he)
-; Note: NOT importing helpers_petta to avoid test pollution
-
-; ===== Function Definitions (Inline for Testing) =====
-
-; map-pairs: Map function over all pairs from two lists
-(= (map-pairs $list1 $list2 $fn)
-   (map-atom $list1 $v1
-     (map-atom $list2 $v2
-       ($fn $v1 $v2))))
-
-; is_var: Check if token is a variable
-; PeTTa adaptation: use tagged match with collapse+case
-(= (is_var $kb-tag $tok)
-  (case (collapse (match &self ($kb-tag (Var $tok $_ (Type "$v"))) found))
-    (((found) True)
-     (() False))))
-
-; find_vars: Find all tokens in statement that are variables
-; PeTTa adaptation: use filter-atom with is_var
-(= (find_vars $kb-tag $stmt)
-  (filter-atom $stmt $tok (is_var $kb-tag $tok)))
-
-; string<: String comparison for ordering
-; PeTTa version: use @< instead of py-dot
-(= (string< $x $y)
-  (let ($str_x $str_y) ((repr $x) (repr $y))
-    (@< $str_x $str_y)))
-
-; orient_pair: Order two variables alphabetically for canonical DV storage
-(= (orient_pair $x $y)
-   (let ($str_x $str_y) ((repr $x) (repr $y))
-     (if (string< $str_x $str_y)
-         ($x $y)
-         ($y $x))))
-
-; lookup_d: Look up if two variables are disjoint
-; PeTTa adaptation: use tagged match
-(= (lookup_d $kb-tag $x $y)
-  (let ($x' $y') (orient_pair $x $y)
-    (case (collapse (match &self ($kb-tag (DVar ($x' $y') $_ (Type "$d"))) found))
-      (((found) True)
-       (() False)))))
-
-; dv_check: Check disjoint variable constraint
-; Returns Error if constraint violated, () if ok
-(= (dv_check $kb-tag $x $y)
-  (if (or
-        (== $x $y)
-        (not (lookup_d $kb-tag $x $y)))
-      (Error ($x $y) "Disjoint variable violation.")
-      ()))
-
-; check_dv_pairs: Check all pairs from two lists of variables
-(= (check_dv_pairs $kb-tag $x_vars $y_vars)
-  (map-atom $x_vars $x
-    (map-atom $y_vars $y
-      (dv_check $kb-tag $x $y))))
-
-; lookup_subst: Look up token in substitution list
-(= (lookup_subst $token $subst)
-  (collapse (match-atom $subst ($token $val) $val)))
-
-; check_dvs: Check DV constraints for substitution
-; PeTTa adaptation: use lookup_subst helper and let* for readability
-(= (check_dvs $kb-tag $subst $dvs0)
-    (map-atom $dvs0 $d
-      (let* ((($d1 $d2) $d)
-             ($sub1 (lookup_subst $d1 $subst))
-             ($sub2 (lookup_subst $d2 $subst))
-             ($x_vars (find_vars $kb-tag $sub1))
-             ($y_vars (find_vars $kb-tag $sub2)))
-        (check_dv_pairs $kb-tag $x_vars $y_vars))))
+!(import! &self mmverify-utils_petta)
 
 ; ===== Tests =====
 
