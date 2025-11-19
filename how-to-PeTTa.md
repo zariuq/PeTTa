@@ -116,7 +116,27 @@ This is fundamentally different from languages like Haskell, OCaml, or Prolog wh
 
 ## The Fundamental Anti-Pattern: Catch-All Wildcards
 
-### NEVER Do This
+### Using `$_` for "Don't Care" Values
+
+**`$_` is just a variable name** - it works like any other variable (`$x`, `$y`), but signals you don't care about the value.
+
+```metta
+;; ✅ Use $_ for single "don't care" values
+(= (fol-is-var (Var $_)) true)           ; Works fine - one variable
+(= (get-first (Cons $x $_)) $x)          ; Ignore tail
+
+;; ❌ BROKEN - reusing same variable name twice means "must be equal"!
+(= (occurs (Var $_) (Const $_)) false)   ; FAILS - requires both $_ equal!
+(= (mgu $_ $_) None)                     ; FAILS - requires both args equal!
+
+;; ✅ CORRECT - use different names for different values
+(= (occurs (Var $_x) (Const $_c)) false) ; Each $_ unique
+(= (mgu $_1 $_2) None)                   ; $_1 and $_2 are different
+```
+
+**The rule:** Using the same variable name twice (whether `$_`, `$x`, or anything) creates an **equality constraint**. Use `$_1`, `$_2`, `$_3` when you have multiple "don't care" values.
+
+### NEVER Do This (Catch-All Patterns)
 
 ```metta
 ;; ❌ BROKEN - creates non-determinism!
@@ -355,6 +375,17 @@ Based on optimizing a resolution prover from 30s to 17.5s (43% improvement), her
 !(>= 10 5)    ; Returns: [(>= 10 5)]  ❌ UNEVALUATED!
 ```
 
+### Boolean Values: Lowercase Only
+
+**Use `true`/`false` (lowercase), not `True`/`False`:**
+```metta
+;; ❌ Capitals are just symbols, not booleans
+(if (== $x True) ...)    ; Won't match comparison results
+
+;; ✅ Lowercase works
+(if (== $x true) ...)    ; Matches (< 5 10) → true
+```
+
 ### Workaround: Use `<=` with Inverted Logic
 
 Instead of count-up with `>=`, use **countdown with `<=`**:
@@ -554,17 +585,63 @@ The body of `let*` (after all bindings) is the return value:
 - `$_` is a variable that CAN bind, forcing PeTTa to evaluate the expression
 - **Both HE and PeTTa support `$_`**, making it the portable solution!
 
-**Alternative variable names:**
+**⚠️ CRITICAL: Cannot Reuse `$_` in the Same `let*` Block!**
+
+In PeTTa, you **MUST use unique variable names** for each binding. Reusing `$_` will cause the function to return `()` instead of the expected result!
+
 ```metta
-($_ (println! ...))           ; ✅ Underscore (conventional for "ignore")
-($ignore (println! ...))      ; ✅ Explicit name
-($_temp (println! ...))       ; ✅ Any variable name works
+;; ❌ BROKEN IN PETTA - reusing $_ causes failure!
+(= (broken-function $kb $stmt)
+  (let* (
+    ($result1 (computation-1))
+    ($_ (side-effect-1))        ; First use of $_
+    ($_ (side-effect-2))        ; ❌ Reusing $_ breaks everything!
+    ($final (computation-2))
+  )
+  $final))  ; Returns () instead of $final value!
+
+;; ✅ CORRECT - use unique variable names
+(= (working-function $kb $stmt)
+  (let* (
+    ($result1 (computation-1))
+    ($_1 (side-effect-1))       ; ✅ Unique name
+    ($_2 (side-effect-2))       ; ✅ Different name
+    ($final (computation-2))
+  )
+  $final))  ; Returns $final correctly!
 ```
 
-**Porting HE code to PeTTa:** Simply replace `(() ` with `($_ ` in all `let*` bindings:
+**Real-world example that failed:**
+```metta
+;; This pattern from make_assertion returned () due to $_ reuse:
+($_ (map-atom $e_hyps_toks $tok (add-mand-var $kb $tok)))
+($_ (map-atom $stmt $tok (add-mand-var $kb $tok)))        ; ❌ Reused $_
+($_ (collapse (match &self ($kb (MandVar $var)) ...)))    ; ❌ Third reuse!
+
+;; Fix: Use $_1, $_2, $_3
+($_1 (map-atom $e_hyps_toks $tok (add-mand-var $kb $tok)))
+($_2 (map-atom $stmt $tok (add-mand-var $kb $tok)))       ; ✅ Unique
+($_3 (collapse (match &self ($kb (MandVar $var)) ...)))   ; ✅ Unique
+```
+
+**Alternative variable names:**
+```metta
+($_1 (println! ...))          ; ✅ Numbered underscores (recommended)
+($_2 (println! ...))          ; ✅ Clear sequence
+($ignore1 (println! ...))     ; ✅ Explicit numbered names
+($_temp (println! ...))       ; ✅ Any unique variable name works
+```
+
+**Porting HE code to PeTTa:**
+1. Replace `(() ` with `($_N ` where N is a unique number for each binding
+2. Manual inspection required - automatic replacement is not safe due to numbering requirement
+
 ```bash
-# Quick fix for porting
-sed -i 's/(() /(($_  /g' your_file.metta
+# Step 1: Find all (() patterns (for manual review)
+grep -n '(() ' your_file.metta
+
+# Step 2: Manually replace with $_1, $_2, $_3, etc.
+# No safe automated solution - each must be uniquely numbered!
 ```
 
 #### Sequential Execution with `progn` and `prog1`
@@ -1103,14 +1180,15 @@ These are different!
 ## Summary: The Golden Rules
 
 1. **⚠️ CRITICAL: `>=` does NOT exist in PeTTa!** Use `<=` with countdown instead
-2. **Avoid catch-all wildcard patterns** like `$_ $_` or `(= (func $_) ...)`
-3. **Prefer single-clause definitions** with `if-then-else` for control flow
-4. **Use explicit `==` comparisons** instead of pattern matching for equality
-5. **Multiple pattern clauses are OK** if they are completely non-overlapping and you omit the catch-all
-6. **Use sentinel values** to distinguish "no result" from "empty result"
-7. **Remember: ALL matching clauses execute in parallel**, not sequentially
-8. **Test with `!(test actual expected)`** to verify behavior
-9. **In PeTTa, use `car-atom`/`cdr-atom`** for list operations on regular `()` lists
+2. **⚠️ CRITICAL: Cannot reuse `$_` in the same `let*` block!** Use `$_1`, `$_2`, `$_3`, etc. for unique bindings
+3. **Avoid catch-all wildcard patterns** like `$_ $_` or `(= (func $_) ...)`
+4. **Prefer single-clause definitions** with `if-then-else` for control flow
+5. **Use explicit `==` comparisons** instead of pattern matching for equality
+6. **Multiple pattern clauses are OK** if they are completely non-overlapping and you omit the catch-all
+7. **Use sentinel values** to distinguish "no result" from "empty result"
+8. **Remember: ALL matching clauses execute in parallel**, not sequentially
+9. **Test with `!(test actual expected)`** to verify behavior
+10. **In PeTTa, use `car-atom`/`cdr-atom`** for list operations on regular `()` lists
 
 ### Available Comparison Operators (Quick Reference)
 - ✅ `==`, `<`, `>`, `<=` - All work correctly
@@ -1256,6 +1334,7 @@ Integration with OpenAI GPT API (requires Python and openai package).
 
 When your MeTTa/PeTTa code fails mysteriously:
 
+- [ ] **Are you reusing `$_` in the same `let*` block?** (PeTTa-specific - causes return value to become `()`)
 - [ ] Do you have ANY catch-all wildcard patterns like `$_ $_`?
 - [ ] Are any of your pattern-matching clauses overlapping?
 - [ ] Did you assume "first match wins" behavior?

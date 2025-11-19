@@ -42,10 +42,73 @@ process_form(In, _) :- format('Failed to process form: ~w~n', [In]), halt(1).
 newlines(C0, C2) --> blanks_to_nl, !, {C1 is C0+1}, newlines(C1,C2).
 newlines(C, C) --> blanks.
 
-%Collect characters until all parentheses are balanced (depth 0), accumulating codes also count newlines:
-grab_until_balanced(D,Acc,Cs,LC0,LC2) --> [C], { ( C=0'( -> D1 is D+1 ; C=0') -> D1 is D-1 ; D1=D ), Acc1=[C|Acc],
-                                                 ( C=10 -> LC1 is LC0+1 ; LC1 = LC0) },
-                                          ( { D1=:=0 } -> { reverse(Acc1,Cs) , LC2 = LC1 } ; grab_until_balanced(D1,Acc1,Cs,LC1,LC2) ).
+% =====================================================================
+% FIXED VERSION: String-aware balanced parenthesis collector
+% Fixes bug where parentheses inside strings were counted for balance
+% =====================================================================
+
+% Main entry point - starts with InString=false, Escaped=false
+grab_until_balanced(D, Acc, Cs, LC0, LC2) -->
+    grab_until_balanced_state(D, Acc, false, false, Cs, LC0, LC2).
+
+% State-tracking version:
+%   D = depth counter for parentheses
+%   Acc = accumulator for characters
+%   InString = true if currently inside a string literal
+%   Escaped = true if previous char was backslash (inside string)
+grab_until_balanced_state(D, Acc, InString, Escaped, Cs, LC0, LC2) -->
+    [C],
+    {
+        % Update line counter if newline
+        ( C=10 -> LC1 is LC0+1 ; LC1 = LC0 ),
+
+        % Handle string state transitions and paren counting
+        (
+            % Case 1: We're escaped - consume char and clear escape flag
+            Escaped = true
+        ->  InString1 = InString,
+            Escaped1 = false,
+            D1 = D
+
+        % Case 2: Escape sequence starting (only matters in strings)
+        ;   C = 0'\\, InString = true
+        ->  InString1 = InString,
+            Escaped1 = true,
+            D1 = D
+
+        % Case 3: Quote character - toggle string state (if not escaped)
+        ;   C = 0'"
+        ->  ( InString = true -> InString1 = false ; InString1 = true ),
+            Escaped1 = false,
+            D1 = D
+
+        % Case 4: Opening paren (only count if not in string)
+        ;   C = 0'(, InString = false
+        ->  D1 is D + 1,
+            InString1 = InString,
+            Escaped1 = false
+
+        % Case 5: Closing paren (only count if not in string)
+        ;   C = 0'), InString = false
+        ->  D1 is D - 1,
+            InString1 = InString,
+            Escaped1 = false
+
+        % Case 6: Any other character
+        ;   D1 = D,
+            InString1 = InString,
+            Escaped1 = false
+        ),
+
+        % Add character to accumulator
+        Acc1 = [C|Acc]
+    },
+
+    % Check if we're done (depth = 0 and not in string)
+    (   { D1 =:= 0, InString1 = false }
+    ->  { reverse(Acc1, Cs), LC2 = LC1 }
+    ;   grab_until_balanced_state(D1, Acc1, InString1, Escaped1, Cs, LC1, LC2)
+    ).
 
 %Read a balanced (...) block if available, turn into string, then continue with rest, ignoring comments:
 top_forms([],_) --> blanks, eos.
