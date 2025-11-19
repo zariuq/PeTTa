@@ -2,41 +2,7 @@
 ; Testing push-frame and pop-frame with realistic scenarios
 
 !(import! &self ../lib/lib_he)
-; Note: NOT importing helpers_petta to avoid test pollution
-
-
-; ===== Function Definitions (Inline for Testing) =====
-
-; adjust-state-additive: Add to state
-(= (adjust-state-additive $state $delta)
-  (let $current (get-state $state)
-    (change-state! $state (+ $current $delta))))
-
-; adjust-state-subtractive: Subtract from state
-(= (adjust-state-subtractive $state $delta)
-  (let $current (get-state $state)
-    (change-state! $state (- $current $delta))))
-
-; push-frame: Increment frame depth
-(= (push-frame $fd)
-  (adjust-state-additive $fd 1))
-
-; pop-frame: Pop frame and remove all data at current level
-; PeTTa adaptation: uses &self with KB tag instead of separate $kb parameter
-(= (pop-frame $kb-tag $fd)
-  (let $level (get-state $fd)
-    (progn
-      ; Remove EList at current level
-      (collapse (match &self ($kb-tag (EList (FSDepth $level) $elist))
-                  (remove-atom &self ($kb-tag (EList (FSDepth $level) $elist)))))
-      ; Remove FList at current level
-      (collapse (match &self ($kb-tag (FList (FSDepth $level) $flist))
-                  (remove-atom &self ($kb-tag (FList (FSDepth $level) $flist)))))
-      ; Remove all other data at current level (Var, DVar, etc.)
-      (collapse (match &self ($kb-tag ($any1 $any2 (FSDepth $level) $data))
-                  (remove-atom &self ($kb-tag ($any1 $any2 (FSDepth $level) $data)))))
-      ; Decrement frame depth
-      (adjust-state-subtractive $fd 1))))
+!(import! &self mmverify-utils_petta)
 
 ; ===== Tests =====
 
