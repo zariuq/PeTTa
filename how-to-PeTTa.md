@@ -12,8 +12,9 @@
 5. [Available Operators in PeTTa](#available-operators-in-petta)
 6. [Correct Patterns for Control Flow](#correct-patterns-for-control-flow)
 7. [PeTTa-Specific Features](#petta-specific-features)
-8. [Working Examples](#working-examples)
-9. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+8. [Testing and Project Conventions](#testing-and-project-conventions)
+9. [Working Examples](#working-examples)
+10. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
 
 ---
 
@@ -703,6 +704,109 @@ From `atomops.metta:15`, tests can use various list operations:
 ```
 
 **Note:** `case` is an alternative to nested `if` statements, but the same rule applies: avoid overlapping patterns.
+
+---
+
+## Testing and Project Conventions
+
+### PeTTa's Native Test Function
+
+**PeTTa has a built-in `!(test <actual> <expected>)` function - use it!**
+
+```metta
+;; ✅ Use PeTTa's native test - clean and simple
+!(test (+ 1 2) 3)
+!(test (collapse (map-pairs (a b) (x y) make-pair))
+       ((((a x) (a y)) ((b x) (b y)))))
+
+;; Returns: true (on success)
+;; Fails with error message if values don't match
+```
+
+**DON'T redefine your own test function:**
+```metta
+;; ❌ Unnecessary - PeTTa already has this!
+(= (test $name $actual $expected)
+  (if (== $actual $expected)
+    (progn (println! (✅ $name passed)) True)
+    (progn (println! (❌ $name failed)) False)))
+```
+
+**When to use PeTTa's native test:**
+- ✅ For unit tests in test files
+- ✅ For inline verification during development
+- ✅ When you want automatic pass/fail checking
+- ✅ In examples and documentation
+
+**Comparison with HE MeTTa:**
+- **HE MeTTa**: Uses `assertEqual` which passes silently `[()]`
+- **PeTTa**: Uses `!(test ...)` which returns `true` on success
+- Both are built-in, no imports needed
+
+### File Naming Conventions
+
+**Use `_petta` suffix when maintaining both PeTTa and HE MeTTa versions:**
+
+```bash
+# ✅ Clear which implementation
+my_module_petta.metta        # PeTTa version
+my_module.metta              # HE MeTTa version
+
+# When both versions coexist in same directory
+test_utils_petta.metta       # PeTTa tests
+test_utils.metta             # HE tests
+```
+
+**Why use `_petta` suffix?**
+- Makes implementation choice explicit
+- Allows both versions to coexist
+- Makes PeTTa-specific code easy to find via grep
+- Prevents confusion about which runtime to use
+
+### `let*` Best Practices
+
+**`let*` works great for regular sequential bindings! ✅**
+
+```metta
+;; ✅ Clean, readable, works perfectly
+(= (process-data $input)
+  (let* (($parsed (parse $input))
+         ($validated (validate $parsed))
+         ($transformed (transform $validated))
+         ($result (finalize $transformed)))
+    (output $result)))
+
+;; Much better than nested let:
+;; ❌ Ugly nested let version:
+(= (process-data $input)
+  (let $parsed (parse $input)
+    (let $validated (validate $parsed)
+      (let $transformed (transform $validated)
+        (let $result (finalize $transformed)
+          (output $result))))))
+```
+
+**Only ONE pattern is broken:** The `(() side-effect)` pattern for ignored bindings.
+
+```metta
+;; ❌ BROKEN in PeTTa (but works in HE)
+(let* (($a 1)
+       (() (println! $a))    ; ❌ Won't execute!
+       ($b 2))
+  (+ $a $b))
+
+;; ✅ WORKS in both PeTTa and HE
+(let* (($a 1)
+       ($_ (println! $a))    ; ✅ Executes correctly
+       ($b 2))
+  (+ $a $b))
+```
+
+**Guidelines:**
+- ✅ **Use `let*`** for clean sequential bindings (much better than nested `let`)
+- ✅ **Use `$_`** (not `()`) for side effects in bindings
+- ✅ **Use `progn`/`prog1`** when you have multiple statements without intermediate bindings
+- ❌ **Avoid deeply nested `let`** - use `let*` instead!
 
 ---
 
