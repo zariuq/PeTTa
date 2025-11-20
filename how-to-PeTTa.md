@@ -9,12 +9,13 @@
 2. [Critical Rule: Non-Deterministic Evaluation](#critical-rule-non-deterministic-evaluation)
 3. [The Fundamental Anti-Pattern: Catch-All Wildcards](#the-fundamental-anti-pattern-catch-all-wildcards)
 4. [Performance Patterns (NEW)](#performance-patterns-avoiding-exponential-slowdown)
-5. [Available Operators in PeTTa](#available-operators-in-petta)
+5. [Available Operators in PeTTa](#available-operators-in-petta) - Including soft cut `*->` (NEW)
 6. [Correct Patterns for Control Flow](#correct-patterns-for-control-flow)
-7. [PeTTa-Specific Features](#petta-specific-features)
+7. [PeTTa-Specific Features](#petta-specific-features) - Including lambdas `|->` (NEW)
 8. [Testing and Project Conventions](#testing-and-project-conventions)
-9. [Working Examples](#working-examples)
-10. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+9. [Verified PeTTa Features](#verified-petta-features) - Including operator checking (NEW)
+10. [Working Examples](#working-examples)
+11. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
 
 ---
 
@@ -386,6 +387,28 @@ Based on optimizing a resolution prover from 30s to 17.5s (43% improvement), her
 (if (== $x true) ...)    ; Matches (< 5 10) → true
 ```
 
+### Soft Cut Operator `*->` (NEW)
+
+**PeTTa now has a soft cut operator** `*->` for conditional execution with committed choice:
+
+```metta
+;; ✅ Use soft cut for type checking with fallback
+(= (process-value $val $type)
+   ('get-type'($val, $type) *->
+       (process-typed $val $type)
+     ; (else-branch)))
+
+;; Equivalent to: "if the goal succeeds, commit to this branch"
+;; Used in translate_args_by_type for type validation
+```
+
+**When to use:**
+- Conditional execution where success should commit to a branch
+- Type checking with fallback behavior
+- Pattern matching with conditional continuation
+
+**Implementation:** `*->` is Prolog's soft cut (if-then-else without full commitment), integrated into PeTTa's translator for use in type system operations.
+
 ### Workaround: Use `<=` with Inverted Logic
 
 Instead of count-up with `>=`, use **countdown with `<=`**:
@@ -713,6 +736,39 @@ When you need to distinguish between "no result" and "empty result", use a senti
 
 ## PeTTa-Specific Features
 
+### Lambda Expressions (NEW)
+
+**PeTTa now supports lambda expressions** using the `|->` syntax for anonymous functions with closure support:
+
+```metta
+;; ✅ Lambda syntax with closure
+(= (make-adder $n)
+   (|-> ($x) (+ $n $x)))  ; Captures $n from environment
+
+!(let $add5 (make-adder 5)
+  ($add5 3))  ; Returns: 8
+
+;; ✅ Lambda with multiple arguments
+(= (make-calculator $op)
+   (|-> ($a $b) ($op $a $b)))
+
+!(let $multiply (make-calculator *)
+  ($multiply 6 7))  ; Returns: 42
+```
+
+**Key features:**
+- Syntax: `(|-> (args...) body)`
+- Supports closure over variables from outer scope
+- Generates readable names (`lambda_1`, `lambda_2`, etc.) via `next_lambda_name/1`
+- Implemented in `src/translator.pl`
+
+**When to use lambdas:**
+- Passing functions as arguments
+- Creating function factories (closures)
+- Callbacks and higher-order functions
+
+**Current code patterns work well without lambdas** - use them only when closures or function factories are needed. For simple transformations like `map-atom`, the existing variable pattern syntax (`$x`, `$tok`) remains clearer.
+
 ### List Operations: `car-atom` and `cdr-atom`
 
 PeTTa uses **regular S-expression lists** `()` with special operations, NOT `Cons/Nil`:
@@ -799,6 +855,8 @@ From `atomops.metta:15`, tests can use various list operations:
 ;; Returns: true (on success)
 ;; Fails with error message if values don't match
 ```
+
+**Note:** PeTTa's `test` function is implemented as a special form in the translator (`src/translator.pl`), providing proper Context parameter handling for file-relative imports. It evaluates the expression, collects all results via `findall`, and compares against the expected value using `test/3`.
 
 **DON'T redefine your own test function:**
 ```metta
@@ -905,6 +963,37 @@ test_utils.metta             # HE tests
 ✅ **Types**: Type annotations, `get-type`, function types
 ✅ **Aggregation**: `foldall`, `forall`
 ✅ **Advanced**: `superpose`, `empty`, `cut`, `repr`, `=alpha`
+
+### Operator Checking in `reduce` (NEW)
+
+**PeTTa now prevents operators from being called as regular predicates** in `reduce/2`:
+
+```prolog
+% In src/translator.pl - prevents misuse of operators
+reduce([F|Args], Out) :-
+    nonvar(F), atom(F), fun(F)
+    -> length(Args, N),
+       Arity is N + 1,
+       ( current_predicate(F/Arity),
+         \+ (current_op(_, _, F), Arity =< 2)  % ✅ Operator check!
+         -> append(Args,[Out],CallArgs),
+            Goal =.. [F|CallArgs],
+            catch(call(Goal),_,fail)
+          ; Out = partial(F,Args) )
+```
+
+**What this does:**
+- Checks if `F` is both a registered predicate AND an operator
+- Prevents operators (`+`, `-`, `*`, `/`, etc.) from being called via `reduce`
+- Ensures operators are only used in their proper syntactic position
+- Avoids confusion between function application and operator usage
+
+**Why it matters:**
+- Type safety - operators must be used correctly
+- Better error messages - catches misuse early
+- Consistent semantics - operators behave as expected
+
+This feature was integrated from the main branch during the merge with mmverify.
 
 ## Working Examples
 
