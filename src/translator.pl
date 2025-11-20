@@ -31,24 +31,24 @@ goals_list_to_conj([G], G)        :- !.
 goals_list_to_conj([G|Gs], (G,R)) :- goals_list_to_conj(Gs, R).
 
 % Runtime dispatcher: call F if it's a registered fun/1, else keep as list:
-reduce([F|Args], Ctxt, Out) :- nonvar(F), atom(F), fun(F)
+reduce([F|Args], Out) :- nonvar(F), atom(F), fun(F)
                          -> % --- Case 1: callable predicate ---
                             length(Args, N),
                             Arity is N + 1,
-                            ( F == 'import!' -> Arity_Check is Arity + 1, append(Args, [Ctxt, Out], CallArgs) ; Arity_Check = Arity, append(Args,[Out],CallArgs)),
-                            ( current_predicate(F/Arity_Check) ->
+                            append(Args,[Out],CallArgs),
+                            ( current_predicate(F/Arity) ->
                                                             Goal =.. [F|CallArgs],
                                                             catch(call(Goal),_,fail)
                                                           ; Out = partial(F,Args) )
                           ; % --- Case 2: partial closure ---
                             compound(F), F = partial(Base, Bound) -> append(Bound, Args, NewArgs),
-                                                                     reduce([Base|NewArgs], Ctxt, Out)
+                                                                     reduce([Base|NewArgs], Out)
                           ; % --- Case 3: leave unevaluated ---
                             Out = [F|Args],
                             \+ cyclic_term(Out).
 
 % Calling reduce from aggregate function foldall needs this argument wrapping
-agg_reduce(Ctxt, AF, Acc, Val, NewAcc) :- reduce([AF, Acc, Val], Ctxt, NewAcc).
+agg_reduce(AF, Acc, Val, NewAcc) :- reduce([AF, Acc, Val], NewAcc).
 
 %Combined expr translation to goals list
 translate_expr_to_conj(Input, Ctxt, Conj, Out) :- translate_expr(Input, Ctxt, Goals, Out),
@@ -143,9 +143,9 @@ translate_expr([H0|T0], Ctxt, Goals, Out) :-
              translate_expr(TF, Ctxt, GsTF, TFHV),
              TestList = [TFHV, V],
              goals_list_to_conj(GsGF, GPre),
-             GenGoal = (GPre, reduce(GenList, Ctxt, V)),
+             GenGoal = (GPre, reduce(GenList, V)),
              append(GsH, GsTF, Tmp0),
-             append(Tmp0, [( forall(GenGoal, ( reduce(TestList, Ctxt, Truth), Truth == true )) -> Out = true ; Out = false )], Goals)
+             append(Tmp0, [( forall(GenGoal, ( reduce(TestList, Truth), Truth == true )) -> Out = true ; Out = false )], Goals)
         ; HV == 'foldall', T = [AF, GF, InitS]
           -> translate_expr_to_conj(InitS, Ctxt, ConjInit, Init),
              translate_expr(AF, Ctxt, GsAF, AFV),
@@ -158,7 +158,7 @@ translate_expr([H0|T0], Ctxt, Goals, Out) :-
                               GenList = [GFHV] ),
              append(GsH, GsAF, Tmp1),
              append(Tmp1, GsGF, Tmp2),
-             append(Tmp2, [ConjInit, foldall(agg_reduce(Ctxt, AFV, V), reduce(GenList, Ctxt, V), Init, Out)], Goals)
+             append(Tmp2, [ConjInit, foldall(agg_reduce(AFV, V), reduce(GenList, V), Init, Out)], Goals)
         %--- Higher-order functions with pseudo-lambdas and lambdas ---:
         ; HV == 'foldl-atom', T = [List, Init, AccVar, XVar, Body]
           -> translate_expr_to_conj(List, Ctxt, ConjList, L),
@@ -226,7 +226,7 @@ translate_expr([H0|T0], Ctxt, Goals, Out) :-
                                       translate_args(Args, Ctxt, GsArgs, ArgsOut),
                                       append(GsH, GsArgs, Inner),
                                       ExprOut = [F|ArgsOut],
-                                      Goal = reduce(ExprOut, Ctxt, Out),
+                                      Goal = reduce(ExprOut, Out),
                                       append(Inner, [Goal], Goals)
         %Invoke translator to evaluate MeTTa code as data/list:
         ; HV == eval, T = [Arg] -> append(GsH, [], Inner),
@@ -280,7 +280,7 @@ translate_expr([H0|T0], Ctxt, Goals, Out) :-
                            append(Inner, Gd, Goals),
                            Out = [HV1|AVs]
           %Unknown head (var/compound) => runtime dispatch:
-          ; append(Inner, [reduce([HV|AVs], Ctxt, Out)], Goals) )).
+          ; append(Inner, [reduce([HV|AVs], Out)], Goals) )).
 
 %Selectively apply translate_args for non-Expression args while Expression args stay as data input:
 translate_args_by_type([], _, _, [], []) :- !.

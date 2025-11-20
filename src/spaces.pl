@@ -8,16 +8,6 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
                                Term =.. [Space, Rel | Args],
                                assertz(Term).
 
-% Convert user spaces to tagged subspaces in &self
-'add-atom'(Space, Atom, Result) :-
-    atom(Space),
-    Space \== '&self',
-    Space \== '&mork',
-    atom_chars(Space, ['&'|Rest]),
-    Rest \== [], !,
-    atom_chars(SpaceName, Rest),
-    'add-atom'('&self', [subspace, SpaceName, Atom], Result).
-
 %Add a function atom:
 'add-atom'(Space, Term, true) :- Term = [=,[FAtom|W],_], !,
                                  add_sexp(Space, Term),
@@ -25,8 +15,7 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
                                  length(W, N),
                                  Arity is N + 1,
                                  assertz(arity(FAtom,Arity)),
-                                 working_directory(CWD, CWD),
-                                 translate_clause(Term, CWD, Clause),
+                                 translate_clause(Term, '.', Clause),
                                  assertz(Clause),
                                  ( silent(true) -> true ; format("\e[33m--> added clause -->~n\e[32m", []),
                                                           Clause = (CHead :- CBody),
@@ -40,8 +29,7 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
 %%Remove a function atom:
 'remove-atom'('&self', Term, Removed) :- Term = [=,[F|Ins],_], !,
                                          retractall(Term),
-                                         working_directory(CWD, CWD),
-                                         translate_clause(Term, CWD, Cl),
+                                         translate_clause(Term, '.', Cl),
                                          ( retract(Cl) -> length(Ins, K),
                                                           unregister_fun(F/K),
                                                           Removed=true
@@ -52,17 +40,6 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
                                           ensure_dynamic_arity(Space, Arity),
                                           Term =.. [Space, Rel | Args],
                                           retractall(Term).
-
-% Elegant fix: Convert user spaces to tagged subspaces in &self
-match(Space, Pattern, OutPattern, Result) :-
-    atom(Space),
-    Space \== '&self',
-    Space \== '&mork',
-    atom_chars(Space, ['&'|Rest]),
-    Rest \== [], !,
-    atom_chars(SpaceName, Rest),
-    % Match the wrapped pattern and extract the result
-    match('&self', [subspace, SpaceName, Pattern], [subspace, SpaceName, OutPattern], Result).
 
 %Match for conjunctive pattern
 match(_, LComma, OutPattern, Result) :- LComma == [','], !,
