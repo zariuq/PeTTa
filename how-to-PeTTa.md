@@ -1200,6 +1200,45 @@ These are different!
 
 PeTTa includes several powerful libraries for specialized tasks. See `LIBRARY_REFERENCE.md` for complete documentation.
 
+### Import Resolution (File-Relative Paths)
+
+**As of November 2025**, PeTTa imports are **file-relative**, resolving paths relative to the importing file's directory (not the main script).
+
+**How it works:**
+```metta
+; File: demos/my_prover/main.metta
+!(import! &self ../lib/lib_he)        ; Resolves relative to demos/my_prover/
+!(import! &self helpers/util)         ; Resolves to demos/my_prover/helpers/util.metta
+```
+
+**Rules:**
+1. **Relative paths** (no leading `/`) resolve relative to the importing file's directory
+2. **Absolute paths** (leading `/`) resolve from filesystem root
+3. **File extension** `.metta` is added automatically
+
+**Example Project Structure:**
+```
+PeTTa/
+├── lib/
+│   ├── lib_he.metta          # Base libraries
+│   └── lib_resolution.metta
+├── demos/
+│   ├── tptp/
+│   │   ├── solver.metta      # Can import ../../lib/lib_he
+│   │   └── helpers/
+│   │       └── cnf.metta     # Can import ../../../lib/lib_he
+│   └── examples/
+│       └── test.metta        # Can import ../../lib/lib_he
+```
+
+**Benefits:**
+- Nested projects can organize imports cleanly
+- Libraries can be placed anywhere in the directory tree
+- Import statements remain valid when moving file groups together
+
+**Backward Compatibility:**
+All existing import patterns work unchanged - imports from `lib/` to `examples/` continue to work as before.
+
 ### lib/lib_he.metta - HE MeTTa Compatibility ✅
 
 **Import**: `!(import! &self lib/lib_he)`
