@@ -4,10 +4,16 @@
                                       -> assertz(silent(true)) ; assertz(silent(false)) ).
 
 %Read Filename into string S and process it (S holds MeTTa code):
+% Backward compatibility: default to CWD
+load_metta_file(Filename, Results) :- working_directory(CWD, CWD),
+                                      load_metta_file(Filename, CWD, Results).
 load_metta_file(Filename, CurrentDir, Results) :- read_file_to_string(Filename, S, []),
                                       process_metta_string(S, CurrentDir, Results).
 
 %Extract function definitions, call invocations, and S-expressions part of &self space:
+% Backward compatibility: default to CWD
+process_metta_string(S, Results) :- working_directory(CWD, CWD),
+                                     process_metta_string(S, CWD, Results).
 process_metta_string(S, CurrentDir, Results) :- re_replace("(;[^\n]*)"/g, "", S, Clean),
                                     string_codes(Clean, Codes),
                                     phrase(top_forms(Forms, 1), Codes),

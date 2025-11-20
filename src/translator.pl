@@ -11,6 +11,9 @@ constrain_args_c(Ctxt, In, Out, Goals) :- constrain_args(In, Ctxt, Out, Goals).
 
 
 %Flatten (= Head Body) MeTTa function into Prolog Clause:
+% Backward compatibility: default to CWD for runtime-added functions
+translate_clause(Input, Clause) :- working_directory(CWD, CWD),
+                                    translate_clause(Input, CWD, Clause).
 translate_clause(Input, Ctxt, (Head :- BodyConj)) :- Input = [=, [F|Args0], BodyExpr],
                                                maplist(constrain_args_c(Ctxt), Args0, Args1, GoalsA),
                                                append(GoalsA, GoalsPrefix),
