@@ -1,6 +1,6 @@
 # How to Program in PeTTa (and MeTTa)
 
-> ⚠️ **CRITICAL:** PeTTa's `match` does NOT work with `new-space`! You MUST use &self with tagged atoms. See [Spaces and Match](#spaces-and-match-critical) for details.
+> ⚠️ **CRITICAL:** PeTTa's `match` does NOT work with `new-space`! You MUST use &self with tagged atoms. **However**, `bind!` with `new-state` works fine! See [Spaces and Match](#spaces-and-match-critical) for details.
 
 > ⚠️ **CRITICAL:** PeTTa does NOT have a `>=` operator! Use `<=` with countdown instead. See [Available Operators](#available-operators-in-petta) for details.
 
@@ -48,13 +48,30 @@ Instead of creating separate spaces, tag all atoms in `&self` with a space ident
 !(collapse (match &self (kb (foo bar)) FOUND))  ; Returns: (FOUND) ✅
 ```
 
+**⚠️ IMPORTANT: States Work Fine with `bind!`**
+
+Unlike spaces, **states DO work with `bind!` in PeTTa**:
+
+```metta
+;; ✅ THIS WORKS IN PETTA!
+!(bind! &fd (new-state 0))       ; States work with bind!
+!(get-state &fd)                  ; Returns: 0
+!(change-state! &fd 42)
+!(get-state &fd)                  ; Returns: 42
+```
+
+**Summary:**
+- ❌ `!(bind! &space (new-space))` - **BROKEN** - use tagged atoms in &self instead
+- ✅ `!(bind! &state (new-state value))` - **WORKS** - use freely!
+
 ### The Tagged Atom Pattern
 
 **Key Rules:**
-1. **Use `&self` only** - Don't use `new-space` or `bind!`
+1. **Use `&self` only for spaces** - Don't use `new-space` or `bind!` with spaces
 2. **Tag all atoms** with a space identifier as the first element
 3. **Wrap `match` with `collapse`** to get proper list results
 4. **Pattern match returns** `(result)` on success, `()` on failure
+5. **States are fine** - `bind!` with `new-state` works normally
 
 **Complete Example:**
 
