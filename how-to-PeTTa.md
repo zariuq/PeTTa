@@ -4,6 +4,8 @@
 
 > ⚠️ **CRITICAL:** PeTTa does NOT have a `>=` operator! Use `<=` with countdown instead. See [Available Operators](#available-operators-in-petta) for details.
 
+> ⚠️ **DEBUG TIP:** "Timeout" might be silent failure, not hanging! Add `!(println! "DEBUG: checkpoint")` BEFORE suspect code to verify it runs. See [DEBUGGING_GUIDE.md](./DEBUGGING_GUIDE.md) for full details.
+
 ## Table of Contents
 1. [Spaces and Match (CRITICAL)](#spaces-and-match-critical)
 2. [Critical Rule: Non-Deterministic Evaluation](#critical-rule-non-deterministic-evaluation)
@@ -785,6 +787,8 @@ PeTTa uses **regular S-expression lists** `()` with special operations, NOT `Con
 !(test (cdr-atom (a b c)) (b c))
 ```
 
+**⚠️ Warning:** The `.` dot notation (e.g., `($h . $t)`) is Lisp/Scheme syntax and does NOT work reliably in PeTTa. Use `car-atom`/`cdr-atom` for expression atom lists, or `Cons/Nil` for proper list data structures.
+
 For prover code using `Cons/Nil`, that's a custom data structure, not built-in lists.
 
 ### Testing: HE MeTTa (Current Standard)
@@ -1191,7 +1195,110 @@ This feature was integrated from the main branch during the merge with mmverify.
 
 See [Spaces and Match (CRITICAL)](#spaces-and-match-critical) for complete details.
 
-### Pitfall 2: "It Times Out"
+### Pitfall 2: Pattern Definitions Don't Auto-Evaluate ⚠️
+
+**Problem:** You define data with `=` and expect it to evaluate automatically, but it remains an unevaluated symbol.
+
+```metta
+;; ❌ WRONG EXPECTATION - Pattern doesn't evaluate
+(= my-data (Data ABC))
+
+!(process my-data)
+;; Passes the SYMBOL my-data, not (Data ABC)!
+;; Output: (Processed my-data)  <-- symbol, not data!
+```
+
+**Cause:** **Atom types in MeTTa DO NOT get evaluated automatically.** This is standard MeTTa semantics in both HE MeTTa and PeTTa. When you write `(= name value)`, you're defining a pattern/atom type, not a variable.
+
+**Solution 1:** Use inline data
+
+```metta
+!(process (Data ABC))  ; ✅ Direct data works!
+```
+
+**Solution 2:** Define as a zero-argument function (recommended for reusable data)
+
+```metta
+;; ✅ CORRECT - Zero-argument function
+(= (my-data) (Data ABC))
+
+!(process (my-data))  ; Function call evaluates to (Data ABC)
+```
+
+**Solution 3:** Define data inline within your function
+
+```metta
+;; ✅ RECOMMENDED PATTERN for complex workflows
+(= (test-with-data)
+   (let $data (cons-atom (A) (cons-atom (B) ()))  ; Inline definition
+     (let $result (process $data)
+        (println! (:: "Result:" $result)))))
+
+!(test-with-data)
+```
+
+**Comparison: Patterns vs Functions vs Inline**
+
+| Syntax | Evaluates? | Use Case |
+|--------|-----------|----------|
+| `(= name value)` | ❌ No (atom type) | Pattern matching, types |
+| `(= (name) value)` | ✅ Yes (when called) | Reusable evaluated data |
+| `(inline value)` | ✅ Always | Direct immediate data |
+
+**Verified behavior (both HE MeTTa and PeTTa):**
+
+```metta
+(= test-pattern (Data ABC))
+(= (test-function) (Data ABC))
+
+!(println! test-pattern)           ; Prints: test-pattern (symbol!)
+!(println! (test-function))        ; Prints: (Data ABC) ✅
+!(println! (Data ABC))             ; Prints: (Data ABC) ✅
+```
+
+**Direct function calls: `!(function-name)` behavior differs between implementations**
+
+**HE MeTTa 0.2.8**: Direct calls work and return the value in bracket notation:
+
+```metta
+(= (get-data) (Data ABC))
+
+!(get-data)                    ; ✅ Returns: [(Data ABC)]
+!(println! (get-data))         ; ✅ Prints: (Data ABC)
+```
+
+**PeTTa**: Use explicit `println!` for clear output:
+
+```metta
+(= (get-data) (Data ABC))
+
+!(get-data)                    ; ⚠️ Output unclear/mixed
+!(println! (get-data))         ; ✅ Clean: (Data ABC)
+```
+
+**Recommendation**: For code that works in both implementations, use `println!` explicitly for clear, consistent output formatting.
+
+**Real example from PeTTaRes superposition prover:**
+
+```metta
+;; ✅ Data defined inline - works correctly!
+(= (test-contradiction)
+   (let $axioms (cons-atom
+                  (Clause (((⩳ (Fun P ((Fun a ()))) true) true)))  ; Inline
+                  (cons-atom
+                    (Clause (((⩳ (Fun P ((Fun a ()))) true) false)))  ; Inline
+                    ()))
+     (let $result (prove $axioms (FIFO))
+       (if (== $result (UNSAT))
+           (println! "✅ Detected contradiction!")
+           (println! (:: "❌ Expected UNSAT, got:" $result))))))
+
+!(test-contradiction)  ; Works! Prints success message
+```
+
+**Key takeaway:** This is NOT a bug - it's standard MeTTa semantics! Use functions `(= (name) ...)` or inline data, not patterns `(= name ...)`.
+
+### Pitfall 3: "It Times Out"
 
 **Reality:** Programs often don't time out - they terminate early due to non-deterministic evaluation creating multiple solution paths.
 
@@ -1264,20 +1371,71 @@ These are different!
    (if (== $a $b) yes no))
 ```
 
+### Pitfall 6: Using `(list ...)` Syntax
+
+**⚠️ CRITICAL:** PeTTa does NOT have a `list` function! The syntax `(list 1 2 3)` returns **unevaluated** `(list 1 2 3)`, not a proper list `(1 2 3)`.
+
+**Problem:**
+```metta
+;; ❌ BROKEN - list is not a function in PeTTa!
+!(let $my-list (list 1 2 3)
+  (println! $my-list))
+; Output: (list 1 2 3)  ← Unevaluated! Not a proper list!
+
+;; This will fail mysteriously:
+!(let $my-list (list (Clause ...) (Clause ...))
+  (car-atom $my-list))    ; Returns: list  ← Wrong!
+```
+
+**Solution: Use `cons-atom` chains**
+```metta
+;; ✅ CORRECT - explicit cons-atom chains
+!(let $my-list (cons-atom 1 (cons-atom 2 (cons-atom 3 ())))
+  (println! $my-list))
+; Output: (1 2 3)  ← Proper list! ✅
+
+;; For clause sets:
+!(let $clause-set (cons-atom (Clause (((⩳ (Fun P ((Fun a ()))) true) true)))
+                   (cons-atom (Clause (((⩳ (Fun Q ((Fun b ()))) true) true)))
+                              ()))
+  (car-atom $clause-set))    ; Returns: (Clause ...) ✅
+```
+
+**Why This Matters:**
+- List operations like `car-atom`, `cdr-atom`, and custom recursion will fail
+- Tests will hang or produce no output when operating on unevaluated `(list ...)` expressions
+- PeTTa's list pattern matching expects proper cons structures `(head . tail)` notation
+
+**Real-World Example (PeTTaRes Phase 4):**
+```metta
+;; This caused 6 tests to fail with "no output" (hanging):
+!(let $clause-set (list (Clause ...) (Clause ...))  ; ❌ BROKEN
+  (forward-subsume $new-clause $clause-set))         ; Hangs!
+
+;; Fixed by using cons-atom:
+!(let $clause-set (cons-atom (Clause ...)          ; ✅ CORRECT
+                   (cons-atom (Clause ...)
+                              ()))
+  (forward-subsume $new-clause $clause-set))        ; Works! ✅
+```
+
+**Note:** Unlike HE MeTTa which may have built-in `list`, PeTTa requires explicit construction using `cons-atom`.
+
 ---
 
 ## Summary: The Golden Rules
 
 1. **⚠️ CRITICAL: `>=` does NOT exist in PeTTa!** Use `<=` with countdown instead
 2. **⚠️ CRITICAL: Cannot reuse `$_` in the same `let*` block!** Use `$_1`, `$_2`, `$_3`, etc. for unique bindings
-3. **Avoid catch-all wildcard patterns** like `$_ $_` or `(= (func $_) ...)`
-4. **Prefer single-clause definitions** with `if-then-else` for control flow
-5. **Use explicit `==` comparisons** instead of pattern matching for equality
-6. **Multiple pattern clauses are OK** if they are completely non-overlapping and you omit the catch-all
-7. **Use sentinel values** to distinguish "no result" from "empty result"
-8. **Remember: ALL matching clauses execute in parallel**, not sequentially
-9. **Test with `!(test actual expected)`** to verify behavior
-10. **In PeTTa, use `car-atom`/`cdr-atom`** for list operations on regular `()` lists
+3. **⚠️ CRITICAL: `(list ...)` is NOT a function in PeTTa!** Use `cons-atom` chains to build proper lists
+4. **Avoid catch-all wildcard patterns** like `$_ $_` or `(= (func $_) ...)`
+5. **Prefer single-clause definitions** with `if-then-else` for control flow
+6. **Use explicit `==` comparisons** instead of pattern matching for equality
+7. **Multiple pattern clauses are OK** if they are completely non-overlapping and you omit the catch-all
+8. **Use sentinel values** to distinguish "no result" from "empty result"
+9. **Remember: ALL matching clauses execute in parallel**, not sequentially
+10. **Test with `!(test actual expected)`** to verify behavior
+11. **In PeTTa, use `car-atom`/`cdr-atom`** for list operations on regular `()` lists
 
 ### Available Comparison Operators (Quick Reference)
 - ✅ `==`, `<`, `>`, `<=` - All work correctly
@@ -1371,6 +1529,82 @@ Binary resolution for propositional logic in CNF format.
 ; Returns: (((lit q) (lit r)))
 ```
 
+### lib/lib_prolog.metta - Prolog Integration ✅
+
+**Import**: `!(import! &self lib/lib_prolog)`
+
+Import Prolog predicates as MeTTa functions for powerful term manipulation and comparison.
+
+**Key Functions**:
+- `import_prolog_function` - Import single Prolog predicate
+- `import_prolog_functions_from_file` - Import multiple predicates from file
+- `import_prolog_functions_from_module` - Import all from Prolog module
+
+**Critical Use Case: Term Ordering with `@<`**
+
+Prolog's `@<` operator provides **standard term ordering** - a total ordering on all terms that is:
+- **Deterministic**: Same terms always compare the same way
+- **Lexicographic**: Follows standard dictionary ordering
+- **Complete**: Works on any Prolog terms (atoms, numbers, compounds)
+
+**Example: Using `@<` for Sorting**
+```metta
+!(import! &self lib/lib_prolog)
+!(import_prolog_function @<)
+
+;; Use @< for term comparison
+!(println! (@< a b))          ; true (a comes before b)
+!(println! (@< b a))          ; false
+!(println! (@< P Q))          ; true (P comes before Q)
+!(println! (@< 1 2))          ; true (numbers ordered numerically)
+
+;; Perfect for implementing sort/comparison functions
+(= (symbol-less-than $s1 $s2)
+   (@< $s1 $s2))
+
+;; Now you have deterministic ordering!
+!(println! (symbol-less-than foo bar))  ; false (foo > bar lexicographically)
+!(println! (symbol-less-than bar foo))  ; true (bar < foo)
+```
+
+**Real-World Example: PeTTaRes Superposition Prover**
+
+Problem: Needed deterministic literal sorting for clause normalization in theorem prover.
+
+Solution:
+```metta
+!(import! &self lib/lib_prolog)
+!(import_prolog_function @<)
+
+;; Replace stub comparison with Prolog's standard ordering
+(= (symbol-less-than $s1 $s2)
+   (@< $s1 $s2))
+
+;; Now normalization is deterministic:
+;; normalize(P(a) | Q(b)) = normalize(Q(b) | P(a))  ✅
+```
+
+**Result**: Fixed non-deterministic sorting, all tests passing!
+
+**Other Useful Prolog Predicates**:
+- `@>` - Greater than in standard ordering
+- `@=<` - Less than or equal
+- `@>=` - Greater than or equal
+- `compare` - Three-way comparison (returns <, =, or >)
+
+**When to Use `@<`**:
+- ✅ Sorting terms for canonical representation
+- ✅ Implementing total orderings (KBO, LPO, etc.)
+- ✅ Building discrimination trees or indices
+- ✅ Comparing complex structured terms
+- ✅ Any time you need deterministic, stable comparison
+
+**Why Not Implement Your Own?**
+- Prolog's `@<` is **battle-tested** (decades of use)
+- **Optimized** in C for performance
+- **Handles all edge cases** (variables, numbers, atoms, compounds)
+- **Standard** - matches behavior across Prolog systems
+
 ### lib/lib_pln.metta - Probabilistic Logic Networks
 
 **Import**: `!(import! &self lib/lib_pln)`
@@ -1459,11 +1693,135 @@ Integration with OpenAI GPT API (requires Python and openai package).
 
 ---
 
+## Constants and Special Symbols in PeTTa
+
+### Boolean Constants: `true` vs `$true`
+
+**⚠️ CRITICAL:** In PeTTa, `$true` and `$false` are **logic variables**, NOT constants!
+
+```metta
+;; ❌ WRONG - $true is a logic variable
+!(println! (:: "$true =" $true))    ; Output: (:: $true = $_39086) ← Variable!
+
+;; ✅ CORRECT - Use lowercase without $
+!(println! (:: "true =" true))      ; Output: (:: true = true) ✅
+```
+
+**The Problem:**
+When you use `$true` in clauses, PeTTa binds it to internal variable identifiers like `$_XXXX`:
+
+```metta
+;; ❌ This will fail mysteriously
+(= (my-function)
+   (Clause (((⩳ (Var X) (Var X)) false) ((⩳ (Fun P ()) $true) $true))))
+
+;; What actually gets stored:
+;; (Clause (((⩳ (Var X) (Var X)) false) ((⩳ (Fun P ())) $_1032) $_1032))
+```
+
+**The Solution:**
+Always use lowercase `true` and `false` without the `$` prefix:
+
+```metta
+;; ✅ Correct boolean constants
+(= (my-function)
+   (Clause (((⩳ (Var X) (Var X)) false) ((⩳ (Fun P ()) true) true))))
+
+;; Comparison tests
+!(== true true)        ; → true  ✅
+!(== $true $true)      ; → false ❌ (different variables each time!)
+```
+
+**Why This Matters:**
+- Clauses with `$true` won't match expected patterns
+- Tests comparing boolean values will fail
+- Substitutions applied to clauses will produce unexpected results
+
+**Example from PeTTaRes Superposition Prover:**
+```metta
+;; Using $true caused 5 tests to fail with mysterious silent errors
+;; Changing to true fixed all of them immediately
+
+;; Before (broken):
+(Clause (((⩳ (Var X) (Var Y)) $true)))    ; Becomes (... $_1234)
+
+;; After (working):
+(Clause (((⩳ (Var X) (Var Y)) true)))     ; Stays as intended
+```
+
+### Unicode Symbols for Domain Separation
+
+When building theorem provers or systems with rich syntax, avoid collision between meta-level operators (MeTTa's `=`) and object-level operators (your logic's equality).
+
+**Problem: Symbol Collision**
+```metta
+;; ❌ Using = for both MeTTa definitions AND equality atoms
+(= (equal-atom $x $y) (= $x $y))    ; AMBIGUOUS! Which = is which?
+
+;; MeTTa evaluates the inner = before you can use it
+!(let $lit (= (Var X) (Var Y))
+  (println! $lit))                  ; Output: false ← Evaluated! Not what we want!
+```
+
+**Solution: Unicode Operators**
+Use Unicode symbols for object-level syntax to avoid collision:
+
+```metta
+;; ✅ Clear separation
+;; MeTTa meta-level: =, if, let, case
+;; Logic object-level: ⩳ (U+2A73) for equality atoms
+
+(= (superposition-into-literal $s $t $lit)
+   (case $lit
+     ((((⩳ $lhs $rhs) true)           ; ← ⩳ is data, not evaluation!
+       (let $subst (mgu $s $lhs)
+         ...)))))
+
+;; Now we can build/manipulate equality atoms as data:
+!(let $atom ((⩳ (Var X) (Fun a ())))  ; Create equality atom
+  (println! $atom))                    ; Output: ((⩳ (Var X) (Fun a ()))) ✅
+```
+
+**Recommended Unicode Operators:**
+- `⩳` (U+2A73) - Equals sign above tilde - for equality atoms
+- `≠` (U+2260) - Not equal - for disequality
+- `→` (U+2192) - Rightwards arrow - for implications
+- `∀` (U+2200) - For all - for universal quantification
+- `∃` (U+2203) - There exists - for existential quantification
+
+**How to Type Unicode in Editors:**
+- **Emacs**: `C-x 8 RET` then type the hex code or name
+- **Vim**: Insert mode, `Ctrl-V u` then type hex code
+- **VS Code**: Install "Unicode Math Input" extension
+- **Copy-paste**: Keep a reference file with commonly used symbols
+
+**Example: Full ATP Implementation**
+```metta
+;; Term representation
+(= (my-term) (Fun f ((Var X))))
+
+;; Atoms using Unicode
+(= (my-atom) (⩳ (Fun f ((Var X))) (Fun g ((Var Y)))))
+
+;; Rules using Unicode
+(= (my-rule) (∀ X (→ (⩳ X X) true)))
+
+;; No collision with MeTTa's = operator!
+(= (process-atom $atom)    ; MeTTa definition
+   (case $atom
+     (((⩳ $lhs $rhs)        ; Pattern match on object-level equality
+       (apply-superposition $lhs $rhs)))))
+```
+
+---
+
 ## Debugging Checklist
 
 When your MeTTa/PeTTa code fails mysteriously:
 
+- [ ] **Are you using `$true`/`$false` instead of `true`/`false`?** (PeTTa treats `$X` as logic variables!)
 - [ ] **Are you reusing `$_` in the same `let*` block?** (PeTTa-specific - causes return value to become `()`)
+- [ ] **Are you using `(list ...)` syntax?** (PeTTa doesn't have a `list` function - use `cons-atom` chains!)
 - [ ] Do you have ANY catch-all wildcard patterns like `$_ $_`?
 - [ ] Are any of your pattern-matching clauses overlapping?
 - [ ] Did you assume "first match wins" behavior?
@@ -1471,5 +1829,6 @@ When your MeTTa/PeTTa code fails mysteriously:
 - [ ] Did you test with `!(test ...)` to verify actual behavior?
 - [ ] If using sentinel values, are you checking for them consistently?
 - [ ] Are you mixing up `Cons/Nil` (custom structure) with `()` lists (PeTTa built-in)?
+- [ ] **Are meta-level and object-level operators colliding?** (Consider Unicode separation)
 
 **When in doubt: use a single clause with explicit `if (== ...) then else`!**
