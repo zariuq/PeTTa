@@ -242,16 +242,19 @@ retractPredicate(G, true) :- retract(G), !.
 retractPredicate(_, false).
 
 %%% Registration: %%%
-'import!'('&self', File, Ctxt, true) :-
+% Combined version: supports both Space parameter and relative paths with CurrentDir
+'import!'(Space, File, true) :- working_directory(CWD, CWD),
+                                'import!'(Space, File, CWD, true).
+'import!'(Space, File, CurrentDir, true) :-
     atom_string(File, SFile),
     ( sub_atom(SFile, 0, 1, _, '/') ->
         % If SFile is an absolute path, use it directly.
         atom_concat(SFile, '.metta', Path)
     ;   % Otherwise, join it with the current context directory.
-        atomic_list_concat([Ctxt, '/', SFile, '.metta'], Path)
+        atomic_list_concat([CurrentDir, '/', SFile, '.metta'], Path)
     ),
     file_directory_name(Path, NewDir),
-    load_metta_file(Path, NewDir, _).
+    load_metta_file(Path, _, Space, NewDir).
 
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).

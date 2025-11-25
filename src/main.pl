@@ -13,7 +13,7 @@ main :- current_prolog_flag(argv, Args),
         ; Args = [mork] -> prolog_interop_example,
                            mork_test
         ; Args = [File|_] -> file_directory_name(File, Dir),
-                             load_metta_file(File, Dir, Results),
+                             load_metta_file(File, Results, '&self', Dir),
                              maplist(swrite,Results,ResultsR),
                              maplist(format("~w~n"), ResultsR)
         ),
