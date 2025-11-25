@@ -18,9 +18,9 @@ process_metta_string(S, Results) :- working_directory(CWD, CWD),
                                      process_metta_string(S, Results, '&self', CWD).
 process_metta_string(S, Results, Space) :- working_directory(CWD, CWD),
                                            process_metta_string(S, Results, Space, CWD).
-process_metta_string(S, Results, Space, CurrentDir) :- re_replace("(;[^\n]*)"/g, "", S, Clean),
-                                                       string_codes(Clean, Codes),
-                                                       phrase(top_forms(Forms, 1), Codes),
+process_metta_string(S, Results, Space, CurrentDir) :- string_codes(S, SCodes),
+                                                       strip_comments_string_aware(SCodes, CleanCodes),
+                                                       phrase(top_forms(Forms, 1), CleanCodes),
                                                        maplist(parse_form, Forms, ParsedForms),
                                                        maplist(process_form(Space, CurrentDir), ParsedForms, ResultsList), !,
                                                        append(ResultsList, Results).
@@ -51,6 +51,57 @@ process_form(_, _, In, _) :- format('Failed to process form: ~w~n', [In]), halt(
 %Like blanks but counts newlines:
 newlines(C0, C2) --> blanks_to_nl, !, {C1 is C0+1}, newlines(C1,C2).
 newlines(C, C) --> blanks.
+
+%String-aware comment stripping (removes ; comments only when not in strings)
+%
+% State machine with two flags:
+%   InString: true when between unescaped double quotes, false otherwise
+%   Escaped:  true when previous char was backslash (only inside strings)
+%
+% State transitions:
+%   Outside string + `;`  -> strip to end of line (comment)
+%   Outside string + `"`  -> toggle InString to true
+%   Inside string  + `\`  -> set Escaped flag
+%   Inside string (escaped) + any char -> keep char, clear Escaped
+%   Inside string  + `"`  -> toggle InString to false
+%   Any other char        -> keep it
+%
+strip_comments_string_aware(Codes, Clean) :-
+    strip_comments_state(Codes, false, false, Clean).
+
+%Base case: end of input
+strip_comments_state([], _, _, []).
+
+%Inside string, escaped character - keep it
+strip_comments_state([C|Rest], true, true, [C|Clean]) :-
+    !,  % Deterministic: don't try catch-all clause
+    strip_comments_state(Rest, true, false, Clean).
+
+%Escape character while in string
+strip_comments_state([0'\\|Rest], true, false, [0'\\|Clean]) :-
+    !,  % Deterministic: don't try catch-all clause
+    strip_comments_state(Rest, true, true, Clean).
+
+%Quote - toggle string state
+strip_comments_state([0'"|Rest], InString, false, [0'"|Clean]) :-
+    !,  % Deterministic: don't try catch-all clause
+    (InString == true -> InString1 = false ; InString1 = true),
+    strip_comments_state(Rest, InString1, false, Clean).
+
+%Semicolon while NOT in string - skip to end of line
+strip_comments_state([0';|Rest], false, false, Clean) :-
+    !,  % Deterministic: don't try catch-all clause
+    skip_to_newline(Rest, AfterComment),
+    strip_comments_state(AfterComment, false, false, Clean).
+
+%Any other character - keep it (catch-all)
+strip_comments_state([C|Rest], InString, _Escaped, [C|Clean]) :-
+    strip_comments_state(Rest, InString, false, Clean).
+
+%Skip to newline helper:
+skip_to_newline([], []).
+skip_to_newline([10|Rest], [10|Rest]) :- !.  %Keep the newline
+skip_to_newline([_|Rest], After) :- skip_to_newline(Rest, After).
 
 % =====================================================================
 % FIXED VERSION: String-aware balanced parenthesis collector
