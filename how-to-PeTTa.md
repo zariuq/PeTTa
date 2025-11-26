@@ -18,6 +18,7 @@
 9. [Verified PeTTa Features](#verified-petta-features) - Including operator checking (NEW)
 10. [Working Examples](#working-examples)
 11. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+12. [lib_prolog Bridge Limitations (CRITICAL - NEW)](#lib_prolog-bridge-limitations-critical)
 
 ---
 
@@ -672,7 +673,32 @@ In PeTTa, you **MUST use unique variable names** for each binding. Reusing `$_` 
 ($_2 (println! ...))          ; ✅ Clear sequence
 ($ignore1 (println! ...))     ; ✅ Explicit numbered names
 ($_temp (println! ...))       ; ✅ Any unique variable name works
+(true (println! ...))         ; ✅ Match on true (portable, clean!)
 ```
+
+**Using `true` as a binding variable (NEW):**
+```metta
+;; ✅ Clean and portable - matches the return value from println!
+!(let true (println! "Step 1")
+  (let true (println! "Step 2")
+    (let true (println! "Step 3")
+      (println! "Done"))))
+
+;; Works in let* too
+(= (process-with-logging $data)
+  (let* ((true (println! "Starting processing..."))
+         ($result (complex-computation $data))
+         (true (println! "Processing complete"))
+         (true (println! (concat "Result: " (show-expr $result)))))
+    $result))
+```
+
+**Why `true` works:**
+- `println!` returns `true` in PeTTa
+- Matching on `true` forces evaluation (like `$_`)
+- More semantic than `$_1`, `$_2` numbering
+- Clearly indicates "this binding is just for the side effect"
+- Portable across both HE MeTTa and PeTTa
 
 **Porting HE code to PeTTa:**
 1. Replace `(() ` with `($_N ` where N is a unique number for each binding
@@ -1849,3 +1875,114 @@ When your MeTTa/PeTTa code fails mysteriously:
 - [ ] **Are meta-level and object-level operators colliding?** (Consider Unicode separation)
 
 **When in doubt: use a single clause with explicit `if (== ...) then else`!**
+
+---
+
+## lib_prolog Bridge Limitations (CRITICAL)
+
+### What lib_prolog CAN'T Do
+
+The Prolog bridge via `import_prolog_functions_from_file` has fundamental limitations discovered through extensive testing (Nov 2025):
+
+#### 1. Can't Create Native MeTTa Structures ❌
+
+**Problem:** Prolog compound terms are passed as opaque foreign objects, not native MeTTa expressions.
+
+```metta
+;; ❌ Prolog returns 'Cons'(a, 'Cons'(b, 'Empty'))
+!(import_prolog_functions_from_file "bridge.pl" (get_cons_list))
+!(println! (get_cons_list))  ; Displays: (Cons a (Cons b Empty)) ✅
+;; BUT pattern matching FAILS:
+(= (process-list (Cons $h $t)) ...)  ; Never matches! ❌
+```
+
+**Why:** Prolog's `'Cons'(...)` creates a Prolog compound, not MeTTa's native `Cons` constructor.
+
+#### 2. Can't Bind Large Structures to Variables ❌
+
+```metta
+;; ❌ Binding Prolog-returned structures causes errors
+!(let $data (prolog_function)  ; ERROR: Type error: atom expected
+  (process $data))
+```
+
+**What DOES work:**
+```metta
+;; ✅ Direct function arguments work
+(= (process-data)
+   (my-function (prolog_function)))  ; OK - passed directly
+```
+
+#### 3. Recursive MeTTa Calling Prolog Triggers Bugs ❌
+
+```metta
+;; ❌ This causes length/2 domain errors
+(= (process-recursive $state)
+   (let $item (next_prolog_item $state)  ; Bug here!
+     (if (== $item done)
+       Empty
+       (process-recursive $state))))
+```
+
+**Error:** `length/2: Domain error: not_less_than_zero expected, found '-1'`
+
+**Why:** PeTTa's Prolog bridge miscalculates argument arity in recursive contexts.
+
+#### 4. Prolog Lists Become Opaque Tuples ❌
+
+```prolog
+% Prolog returns: [a, b, c]
+return_list([a, b, c]).
+```
+
+```metta
+;; MeTTa receives: (a b c) - NOT iterable!
+!(let $list (return_list)
+  (match $list
+    ((Cons $h $t) ...)  ; Never matches - it's a tuple, not Cons
+    ($other ...)))      ; Matches as opaque (a b c)
+```
+
+### What lib_prolog CAN Do ✅
+
+1. **Single calls** (no recursion from MeTTa side)
+2. **Simple data** (atoms, numbers, small tuples)
+3. **Display/printing** (structures show correctly even if not matchable)
+4. **Direct arguments** (not variable binding)
+
+### Solution: Pure PeTTa for Complex Data
+
+For parsers, data structures, and iterative processing, implement in **pure PeTTa** instead:
+
+```metta
+;; ✅ Pure PeTTa - fully portable, all features work
+(= (cons-append Empty $list) $list)
+(= (cons-append (Cons $h $t) $list)
+   (Cons $h (cons-append $t $list)))
+
+(= (process-tokens Empty)
+   (println! "Done"))
+
+(= (process-tokens (Cons $first $rest))
+   (if True
+     (progn
+       (println! (Token: $first))
+       (process-tokens $rest))
+     Empty))
+
+;; Works perfectly - native Cons, full recursion
+!(process-tokens (Cons a (Cons b (Cons c Empty))))
+```
+
+### Key Insights
+
+- **Portability:** Pure PeTTa code moves to other MeTTa implementations
+- **Simplicity:** Avoid foreign function interface complexity
+- **Reliability:** No bridge bugs or limitations
+- **Trade-off:** PeTTa parsing slower than Prolog DCGs, but correctness matters more
+
+**Use Prolog only for:** Simple utilities that return atoms/numbers and don't need recursion.
+
+**Use pure PeTTa for:** Anything involving data structures, iteration, or complex control flow.
+
+---
