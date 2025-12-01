@@ -24,27 +24,42 @@
 
 ## Spaces and Match (CRITICAL)
 
-### ⚠️ PeTTa's `match` Does NOT Work with `new-space`!
+### ⚠️ PeTTa: `bind!` Does NOT Work with Spaces!
 
 **THE PROBLEM:**
-In PeTTa, `match` completely fails to find atoms in spaces created with `new-space` and populated with `add-atom`. This is a fundamental PeTTa limitation.
+In PeTTa, `bind!` does NOT work with spaces. However, `new-space` itself works fine with `let` bindings!
 
 ```metta
 ;; ❌ THIS DOES NOT WORK IN PETTA!
-!(bind! &kb (new-space))
+!(bind! &kb (new-space))         ; bind! doesn't work with spaces
 !(add-atom &kb (foo bar))
-!(match &kb (foo bar) FOUND)  ; Returns nothing! Match is broken!
+!(match &kb (foo bar) FOUND)     ; Returns nothing! &kb is broken!
 ```
 
-**THE SOLUTION: Use &self with Tagged Atoms**
+**SOLUTION 1: Use `let` with `new-space` ✅**
 
-Instead of creating separate spaces, tag all atoms in `&self` with a space identifier:
+`new-space` works perfectly in `let` bindings:
 
 ```metta
 ;; ✅ THIS WORKS IN PETTA!
-;; Instead of: !(bind! &kb (new-space))
-;; Just use &self and tag atoms:
+(let $kb (new-space)
+  (let $_ (add-atom $kb (foo bar))
+    (collapse (match $kb (foo bar) FOUND))))  ; Returns: (FOUND) ✅
 
+;; Example from examples/spaces4.metta:
+(let* (
+  ($s1 (new-space))
+  ($_1 (add-atom $s1 (data 1)))
+  ($result (collapse (match $s1 $x $x)))
+) $result)  ; Returns: ((data 1)) ✅
+```
+
+**SOLUTION 2: Use &self with Tagged Atoms** (for global spaces)
+
+For spaces that need to persist across function calls, use tagged atoms in `&self`:
+
+```metta
+;; ✅ THIS ALSO WORKS IN PETTA!
 !(add-atom &self (kb (foo bar)))
 !(collapse (match &self (kb (foo bar)) FOUND))  ; Returns: (FOUND) ✅
 ```
@@ -62,17 +77,29 @@ Unlike spaces, **states DO work with `bind!` in PeTTa**:
 ```
 
 **Summary:**
-- ❌ `!(bind! &space (new-space))` - **BROKEN** - use tagged atoms in &self instead
-- ✅ `!(bind! &state (new-state value))` - **WORKS** - use freely!
+- ❌ `!(bind! &space (new-space))` - **BROKEN** - bind! doesn't work with spaces
+- ✅ `(let $space (new-space) ...)` - **WORKS** - use let bindings for local spaces
+- ✅ `!(add-atom &self (tag ...))` - **WORKS** - use tagged atoms for global spaces
+- ✅ `!(bind! &state (new-state value))` - **WORKS** - use freely for states!
 
-### The Tagged Atom Pattern
+### When to Use Each Approach
+
+**Use `let` with `new-space` when:**
+- Space is local to a function
+- Space doesn't need to persist across function calls
+- You want clean, scoped space management
+
+**Use tagged atoms in `&self` when:**
+- Space needs to be global/persistent
+- Multiple functions need to access the same logical space
+- You need space-like organization without actual space references
 
 **Key Rules:**
-1. **Use `&self` only for spaces** - Don't use `new-space` or `bind!` with spaces
-2. **Tag all atoms** with a space identifier as the first element
-3. **Wrap `match` with `collapse`** to get proper list results
+1. **For local spaces** - Use `(let $space (new-space) ...)` with `collapse(match ...)`
+2. **For global spaces** - Use `!(add-atom &self (tag ...))` with `collapse(match &self ...)`
+3. **Always wrap `match` with `collapse`** to get proper list results
 4. **Pattern match returns** `(result)` on success, `()` on failure
-5. **States are fine** - `bind!` with `new-state` works normally
+5. **States work with `bind!`** - `!(bind! &state (new-state value))` works normally
 
 **Complete Example:**
 
