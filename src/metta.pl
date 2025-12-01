@@ -230,14 +230,21 @@ call_goals([G|Gs]) :- call(G),
 % foldall/4: Aggregate over all solutions of a goal using an accumulator function
 % foldall(AggFunc, Goal, InitialValue, Result)
 % AggFunc is typically agg_reduce(F, V) where V is shared with Goal
-% The aggregation happens incrementally over all solutions of Goal
+% Uses explicit backtracking pattern: iterate over Goal solutions, update state, fail to continue
+% Uses nb_linkarg for O(1) updates (falls back to nb_setarg if unavailable)
+:- meta_predicate foldall(2, 0, ?, ?).
 foldall(AggFunc, Goal, Init, Result) :-
     State = state(Init),
-    forall(Goal,
-           (arg(1, State, Acc),
-            call(AggFunc, Acc, NewAcc),
-            nb_setarg(1, State, NewAcc))),
-    arg(1, State, Result).
+    (   call(Goal),
+        arg(1, State, Acc),
+        call(AggFunc, Acc, NewAcc),
+        (   current_predicate(nb_linkarg/3)
+        ->  nb_linkarg(1, State, NewAcc)
+        ;   nb_setarg(1, State, NewAcc)
+        ),
+        fail
+    ;   arg(1, State, Result)
+    ).
 
 %%% Prolog interop: %%%
 import_prolog_function(N, true) :- register_fun(N).
@@ -249,11 +256,11 @@ retractPredicate(G, true) :- retract(G), !.
 retractPredicate(_, false).
 
 %%% Registration: %%%
-<<<<<<< HEAD
-% File-relative import: uses metta_current_dir set by filereader.pl
+% File-relative import: resolves paths relative to the importing file's directory
+% Uses metta_current_dir set by filereader.pl via setup_call_cleanup for proper nesting
+% Falls back to working_directory for top-level imports from REPL/command-line
 'import!'(Space, File, true) :-
     atom_string(File, SFile),
-    % Use metta_current_dir if available, otherwise working directory
     ( nb_current(metta_current_dir, CurrentDir) -> true ; working_directory(CurrentDir, CurrentDir) ),
     ( file_name_extension(_, 'py', SFile) ->
         % Python import
@@ -265,18 +272,6 @@ retractPredicate(_, false).
       absolute_file_name(SFile, AbsPath, [relative_to(CurrentDir), extensions(['.metta', '']), access(read)]),
       load_metta_file(AbsPath, _, Space)
     ).
-=======
-'import!'(Space, File, true) :- atom_string(File, SFile),
-                                working_dir(Base),
-                                ( file_name_extension(ModPath, 'py', SFile)
-                                  -> absolute_file_name(SFile, Path, [relative_to(Base)]),
-                                     file_directory_name(Path, Dir),
-                                     file_base_name(ModPath, ModuleName),
-                                     py_call(sys:path:append(Dir), _),
-                                     py_call(builtins:'__import__'(ModuleName), _)
-                                   ; atomic_list_concat([Base, '/', SFile, '.metta'], Path),
-                                     load_metta_file(Path, _, Space) ).
->>>>>>> upstream/main
 
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
