@@ -38,11 +38,6 @@ repra(Term, R) :- term_to_atom(Term, R).
 '=@='(A,B,R) :- (A =@= B -> R=true ; R=false).
 '<='(A,B,R) :- (A =< B -> R=true ; R=false).
 '>='(A,B,R) :- (A >= B -> R=true ; R=false).
-% Lexicographic (alphabetic) comparison for strings/atoms
-'@<'(A,B,R) :- (A @< B -> R=true ; R=false).
-'@>'(A,B,R) :- (A @> B -> R=true ; R=false).
-'@=<'(A,B,R) :- (A @=< B -> R=true ; R=false).
-'@>='(A,B,R) :- (A @>= B -> R=true ; R=false).
 min(A,B,R)  :- R is min(A,B).
 max(A,B,R)  :- R is max(A,B).
 exp(Arg,R) :- R is exp(Arg).
@@ -211,7 +206,7 @@ assert(Goal, true) :- ( call(Goal) -> true
 'get-state'(Var, Value) :- nb_getval(Var, Value).
 
 %%% Eval: %%%
-eval(C, Ctxt, Out) :- translate_expr(C, Ctxt, Goals, Out),
+eval(C, Out) :- translate_expr(C, Goals, Out),
                 call_goals(Goals).
 
 call_goals([]).
@@ -242,34 +237,33 @@ retractPredicate(G, true) :- retract(G), !.
 retractPredicate(_, false).
 
 %%% Registration: %%%
-% Combined version: supports both Space parameter and relative paths with CurrentDir
-'import!'(Space, File, true) :- working_directory(CWD, CWD),
-                                'import!'(Space, File, CWD, true).
-'import!'(Space, File, CurrentDir, true) :-
+% File-relative import: uses metta_current_dir set by filereader.pl
+'import!'(Space, File, true) :-
     atom_string(File, SFile),
-    ( sub_atom(SFile, 0, 1, _, '/') ->
-        % If SFile is an absolute path, use it directly.
-        atom_concat(SFile, '.metta', Path)
-    ;   % Otherwise, join it with the current context directory.
-        atomic_list_concat([CurrentDir, '/', SFile, '.metta'], Path)
-    ),
-    file_directory_name(Path, NewDir),
-    load_metta_file(Path, _, Space, NewDir).
+    % Use metta_current_dir if available, otherwise working directory
+    ( nb_current(metta_current_dir, CurrentDir) -> true ; working_directory(CurrentDir, CurrentDir) ),
+    ( file_name_extension(_, 'py', SFile) ->
+        % Python import
+        absolute_file_name(SFile, AbsPath, [relative_to(CurrentDir)]),
+        file_directory_name(AbsPath, Dir), file_base_name(AbsPath, ModuleFile),
+        file_name_extension(ModuleName, _, ModuleFile),
+        py_call(sys:path:append(Dir), _), py_call(builtins:'__import__'(ModuleName), _)
+    ; % MeTTa import - use absolute_file_name for clean path resolution
+      absolute_file_name(SFile, AbsPath, [relative_to(CurrentDir), extensions(['.metta', '']), access(read)]),
+      load_metta_file(AbsPath, _, Space)
+    ).
 
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
 unregister_fun(N/Arity) :- retractall(fun(N)),
                            abolish(N, Arity).
 
-%%% new-space: Generate unique space atoms %%%
-'new-space'(SpaceAtom) :- gensym('&space_', SpaceAtom).
-
-:- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!', 'new-space',
-                          '<','>','==', '!=', '=', '=?', '<=', '>=', '@<', '@>', '@=<', '@>=', and, or, xor, not, sqrt, exp, log, cos, sin,
+:- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
+                          '<','>','==', '!=', '=', '=?', '<=', '>=', and, or, xor, not, sqrt, exp, log, cos, sin,
                           'first-from-pair', 'second-from-pair', 'car-atom', 'cdr-atom', 'unique-atom',
                           repr, repra, 'println!', 'readln!', 'trace!', test, assert, 'mm2-exec', atom_concat, atom_chars, copy_term, term_hash,
                           foldl, append, length, 'size-atom', sort, msort, member, 'is-member', 'exclude-item', list_to_set, maplist, eval, reduce, 'import!',
-                          'add-atom', 'remove-atom', 'delete-space', 'get-atoms', match, 'is-var', 'is-expr', 'is-space', 'get-mettatype',
+                          'add-atom', 'remove-atom', 'get-atoms', match, 'is-var', 'is-expr', 'is-space', 'get-mettatype',
                           decons, 'decons-atom', 'py-call', 'get-type', 'get-metatype', '=alpha', concat, sread, cons, reverse,
                           '#+','#-','#*','#div','#//','#mod','#min','#max','#<','#>','#=','#\\=',
                           'union-atom', 'cons-atom', 'intersection-atom', 'subtraction-atom', 'index-atom', id,

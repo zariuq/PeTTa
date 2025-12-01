@@ -41,15 +41,6 @@ add_sexp(Space, [Rel|Args]) :- length(Args, N), Arity is N + 2,
                                           Term =.. [Space, Rel | Args],
                                           retractall(Term).
 
-%Delete entire space and free all memory:
-'delete-space'(Space, true) :-
-    atom(Space),
-    % Find all arities for this space and abolish them
-    forall(
-        current_predicate(Space/Arity),
-        abolish(Space/Arity)
-    ).
-
 %Match for conjunctive pattern
 match(_, LComma, OutPattern, Result) :- LComma == [','], !,
                                         Result = OutPattern.
