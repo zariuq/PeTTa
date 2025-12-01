@@ -38,6 +38,11 @@ repra(Term, R) :- term_to_atom(Term, R).
 '=@='(A,B,R) :- (A =@= B -> R=true ; R=false).
 '<='(A,B,R) :- (A =< B -> R=true ; R=false).
 '>='(A,B,R) :- (A >= B -> R=true ; R=false).
+% Lexicographic (alphabetic) comparison for strings/atoms
+'@<'(A,B,R) :- (A @< B -> R=true ; R=false).
+'@>'(A,B,R) :- (A @> B -> R=true ; R=false).
+'@=<'(A,B,R) :- (A @=< B -> R=true ; R=false).
+'@>='(A,B,R) :- (A @>= B -> R=true ; R=false).
 min(A,B,R)  :- R is min(A,B).
 max(A,B,R)  :- R is max(A,B).
 exp(Arg,R) :- R is exp(Arg).
@@ -278,12 +283,15 @@ register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
 unregister_fun(N/Arity) :- retractall(fun(N)),
                            abolish(N, Arity).
 
-:- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
-                          '<','>','==', '!=', '=', '=?', '<=', '>=', and, or, xor, not, sqrt, exp, log, cos, sin,
+%%% new-space: Generate unique space atoms %%%
+'new-space'(SpaceAtom) :- gensym('&space_', SpaceAtom).
+
+:- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!', 'new-space',
+                          '<','>','==', '!=', '=', '=?', '<=', '>=', '@<', '@>', '@=<', '@>=', and, or, xor, not, sqrt, exp, log, cos, sin,
                           'first-from-pair', 'second-from-pair', 'car-atom', 'cdr-atom', 'unique-atom',
                           repr, repra, 'println!', 'readln!', 'trace!', test, assert, 'mm2-exec', atom_concat, atom_chars, copy_term, term_hash,
                           foldl, append, length, 'size-atom', sort, msort, member, 'is-member', 'exclude-item', list_to_set, maplist, eval, reduce, 'import!',
-                          'add-atom', 'remove-atom', 'get-atoms', match, 'is-var', 'is-expr', 'is-space', 'get-mettatype',
+                          'add-atom', 'remove-atom', 'delete-space', 'get-atoms', match, 'is-var', 'is-expr', 'is-space', 'get-mettatype',
                           decons, 'decons-atom', 'py-call', 'get-type', 'get-metatype', '=alpha', concat, sread, cons, reverse,
                           '#+','#-','#*','#div','#//','#mod','#min','#max','#<','#>','#=','#\\=',
                           'union-atom', 'cons-atom', 'intersection-atom', 'subtraction-atom', 'index-atom', id,
