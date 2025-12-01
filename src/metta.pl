@@ -237,6 +237,7 @@ retractPredicate(G, true) :- retract(G), !.
 retractPredicate(_, false).
 
 %%% Registration: %%%
+<<<<<<< HEAD
 % File-relative import: uses metta_current_dir set by filereader.pl
 'import!'(Space, File, true) :-
     atom_string(File, SFile),
@@ -252,6 +253,18 @@ retractPredicate(_, false).
       absolute_file_name(SFile, AbsPath, [relative_to(CurrentDir), extensions(['.metta', '']), access(read)]),
       load_metta_file(AbsPath, _, Space)
     ).
+=======
+'import!'(Space, File, true) :- atom_string(File, SFile),
+                                working_dir(Base),
+                                ( file_name_extension(ModPath, 'py', SFile)
+                                  -> absolute_file_name(SFile, Path, [relative_to(Base)]),
+                                     file_directory_name(Path, Dir),
+                                     file_base_name(ModPath, ModuleName),
+                                     py_call(sys:path:append(Dir), _),
+                                     py_call(builtins:'__import__'(ModuleName), _)
+                                   ; atomic_list_concat([Base, '/', SFile, '.metta'], Path),
+                                     load_metta_file(Path, _, Space) ).
+>>>>>>> upstream/main
 
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
