@@ -45,18 +45,38 @@ filter_internal_args([Arg|Rest], Filtered) :-
        Filtered = [Arg|RestFiltered]
     ).
 
-main :- current_prolog_flag(argv, Args),
-        ( Args = [] -> prolog_interop_example
-        ; Args = [mork] -> prolog_interop_example,
-                           mork_test
-        ; Args = [File|RestArgs] ->
-                             filter_internal_args(RestArgs, UserArgs),
-                             retractall(cmdline_args(_)),
-                             assert(cmdline_args(UserArgs)),
-                             load_metta_file(File,Results),
-                             maplist(swrite,Results,ResultsR),
-                             maplist(format("~w~n"), ResultsR)
-        ),
-        halt.
+% Helper to safely convert term to string
+safe_swrite(Term, String) :-
+    catch(swrite(Term, String), _, format(atom(String), '~p', [Term])).
 
-:- initialization(main, main).
+main :-
+    catch(
+        main_impl,
+        Error,
+        (format('ERROR in main: ~w~n', [Error]), halt(1))
+    ).
+
+main_impl :-
+    current_prolog_flag(argv, Args),
+    ( Args = [] -> prolog_interop_example
+    ; Args = [mork] -> prolog_interop_example,
+                       mork_test
+    ; Args = [File|RestArgs] ->
+                         filter_internal_args(RestArgs, UserArgs),
+                         retractall(cmdline_args(_)),
+                         assert(cmdline_args(UserArgs)),
+                         catch(
+                             load_metta_file(File,Results),
+                             LoadError,
+                             (format('ERROR in load_metta_file: ~w~n', [LoadError]), fail)
+                         ),
+                         catch(
+                             maplist(safe_swrite,Results,ResultsR),
+                             MapError,
+                             (format('ERROR in maplist: ~w~n', [MapError]), fail)
+                         ),
+                         forall(member(R, ResultsR), format("~w~n", [R]))
+    ),
+    halt.
+
+:- initialization(main).
