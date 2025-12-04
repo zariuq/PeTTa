@@ -68,7 +68,7 @@ main_impl :-
                          catch(
                              load_metta_file(File,Results),
                              LoadError,
-                             (format('ERROR in load_metta_file: ~w~n', [LoadError]), fail)
+                             (format('ERROR in load_metta_file: ~w~n', [LoadError]), halt(1))
                          ),
                          catch(
                              maplist(safe_swrite,Results,ResultsR),
