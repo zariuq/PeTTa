@@ -109,7 +109,12 @@ empty(_) :- fail.
 'second-from-pair'([_, A], A).
 'unique-atom'(A, B) :- list_to_set(A, B).
 'sort-atom'(List, Sorted) :- msort(List, Sorted).
-'size-atom'(List, Size) :- length(List, Size).
+% size-atom: Handle both expressions (lists) and bare atoms
+% Bare atoms (including Nil, Empty, etc.) have size 1
+'size-atom'(Term, Size) :-
+    ( is_list(Term) -> length(Term, Size)  % List: count elements
+    ; Size = 1                              % Atom: size is 1
+    ).
 'car-atom'([H|_], H).
 'cdr-atom'([_|T], T).
 decons([H|T], [H|[T]]).
