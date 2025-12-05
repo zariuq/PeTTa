@@ -30,7 +30,7 @@ replace_all(P, R, S, O) :- split_string(S, P, "", Parts),
 %The static import function that allows loading static data files fast:
 'static-import!'(Space, File, true) :- style_check(-discontiguous),
                                        atom_string(File, SFile),
-                                       working_dir(Base),
+                                       working_directory(Base, Base),
                                        atomic_list_concat([Base, '/', SFile, '.qlf'], QlfFile),
                                        atomic_list_concat([Base, '/', SFile, '.pl'], PlFile),
                                        atomic_list_concat([Base, '/', SFile, '.metta'], MettaFile),
