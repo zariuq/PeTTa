@@ -1,0 +1,8 @@
+c Simple SAT with disjunctions
+c {p∨q}, {¬p∨r}, {q∨¬r}
+c Expected: SAT
+c Model: p=T, q=T, r=T (or others)
+p cnf 3 3
+1 2 0
+-1 3 0
+2 -3 0

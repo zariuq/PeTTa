@@ -14,8 +14,8 @@
 !(import_prolog_functions_from_file "demos/cnf_parser.pl"
   (parse_cnf_file))
 
-;;; Import prover AFTER Prolog parser
-!(import! &self resolution_prover_with_model_step1)
+;;; Import redundancy-based prover AFTER Prolog parser
+!(import! &self resolution_prover_with_redundancy)
 
 ;;; Get command line argument (skip flags starting with --)
 (= (get-first-non-flag-arg $idx)
@@ -34,7 +34,6 @@
       ($_ False))))
 
 ;;; Convert Prolog integer to MeTTa literal
-;;; Prolog now returns raw integers - we convert here
 (= (int-to-metta-lit $n)
    (let $metta-n (+ $n 0)  ; Force MeTTa number type
      (if (> $metta-n 0)
@@ -61,8 +60,16 @@
    (let $tail-list (from-list $tail)
      (cons-atom $head $tail-list)))
 
+;;; Convert literal to variable assignment string
+(= (lit-to-assignment (lit $n)) ($n = true))
+(= (lit-to-assignment (nlit $n)) ($n = false))
+
+;;; Convert model to assignments
+(= (model-to-assignments Nil) Nil)
+(= (model-to-assignments (Cons $lit $rest))
+   (Cons (lit-to-assignment $lit) (model-to-assignments $rest)))
+
 ;;; Check if ID is an axiom
-;;; Note: collapse returns (true) with lowercase in PeTTa
 (= (is-axiom? $id)
    (case (collapse (match &self (deriv $id axiom axiom) true))
      (((true) true)
@@ -89,15 +96,6 @@
        (remove-dups $rest)
        (Cons $x (remove-dups $rest))))
 
-;;; Convert literal to variable assignment string
-(= (lit-to-assignment (lit $n)) ($n = true))
-(= (lit-to-assignment (nlit $n)) ($n = false))
-
-;;; Convert model to assignments
-(= (model-to-assignments Nil) Nil)
-(= (model-to-assignments (Cons $lit $rest))
-   (Cons (lit-to-assignment $lit) (model-to-assignments $rest)))
-
 ;;; Get clause literals by ID
 (= (get-clause-lits $id)
    (match &self (clause-lits $id $lits) $lits))
@@ -119,16 +117,17 @@
        (let $_ (println! (Clause $id : $formatted))
          (print-axiom-clauses $rest)))))
 
-;;; Print derivation step with formatting
+;;; Print derivation step with clause content
 (= (print-deriv-step $id)
-   (let $parents (car-atom (collapse (match &self (deriv $id $p1 $p2) ($p1 $p2))))
-     (if (== $parents (axiom axiom))
-         (let $lits (get-clause-lits $id)
-           (let $formatted (format-clause-lits $lits)
-             (println! ($id : $formatted [input]))))
-         (println! ($id : $parents)))))
+   (let $lits (get-clause-lits $id)
+     (let $formatted (format-clause-lits $lits)
+       (let $parents (car-atom (collapse (match &self (deriv $id $p1 $p2) ($p1 $p2))))
+         (if (== $parents (axiom axiom))
+             (println! ($id . $formatted [input]))
+             (let $output (cons-atom resolve $parents)
+               (println! ($id . $formatted $output))))))))
 
-;;; Print derivation trace (reverse order, from empty clause back)
+;;; Print derivation trace (reverse order)
 (= (print-derivation Nil) done)
 (= (print-derivation (Cons $id $rest))
    (let $_ (print-deriv-step $id)
@@ -162,7 +161,7 @@
      (((unsat $empty-id $steps) (display-unsat $empty-id))
       ((sat $model) (display-sat $model))
       ((max-iterations $n) (println! "UNKNOWN - max iterations reached"))
-      ((size-limit-exceeded $n) (println! (SIZE-LIMIT-EXCEEDED $n)))
+      ((size-limit-exceeded $n) (println! ("SIZE-LIMIT-EXCEEDED:" $n "clauses")))
       ($other (println! ("Unknown result:" $other))))))
 
 ;;; Main entry point
@@ -172,9 +171,9 @@
          (println! "Usage: ./run.sh demos/resprover.metta problem.cnf")
          (let $prolog-clauses (collapse (parse_cnf_file $filename))
            (let $clauses (convert-clauses (car-atom $prolog-clauses))
-             (let $result (car-atom (collapse (prove-once $clauses 200)))
+             (let $result (car-atom (collapse (prove-once $clauses 100)))
                (display-result $result)))))))
 
 ;;; Run main
-!(println! "Resolution Prover")
+!(println! "Resolution Prover with Redundancy Elimination")
 !(main)

@@ -5,3 +5,14 @@ mork_ffi/morklib.so
 mork_ffi/Cargo.lock
 python/tests/__pycache__
 all_texts
+# Resolution prover - exclude non-essential files
+demos/archive/
+*.md.backup
+BENCHMARK_RESULTS.md
+COMMIT_GUIDE.md
+PROVER_*.md
+README_RESOLUTION_PROVER.md
+SCALING_RESULTS.md
+generate_random_cnf.py
+scaling_benchmark.sh
+benchmark_prover.sh

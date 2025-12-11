@@ -1,0 +1,6 @@
+c PHP(2,2): 2 pigeons, 2 holes - SAT
+p cnf 4 6
+1 2 0
+3 4 0
+-1 -3 0
+-2 -4 0

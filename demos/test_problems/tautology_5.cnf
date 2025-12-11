@@ -1,0 +1,10 @@
+c Contains tautologies (should be removed)
+c {p∨¬p}, {q∨¬q}, {r}, {¬r∨s}, {¬s}
+c After tautology removal: {r}, {¬r∨s}, {¬s} → UNSAT
+c Expected: UNSAT
+p cnf 4 5
+1 -1 0
+2 -2 0
+3 0
+-3 4 0
+-4 0

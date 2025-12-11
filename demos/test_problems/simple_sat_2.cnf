@@ -1,0 +1,7 @@
+c Trivial SAT
+c {p}, {q}
+c Expected: SAT
+c Model: p=T, q=T
+p cnf 2 2
+1 0
+2 0
