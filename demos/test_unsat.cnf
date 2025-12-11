@@ -1,0 +1,7 @@
+c Simple UNSAT problem
+c p implies q, q implies r, p, not r
+p cnf 3 4
+-1 2 0
+-2 3 0
+1 0
+-3 0

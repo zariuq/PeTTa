@@ -1,0 +1,14 @@
+c Larger UNSAT problem with redundant clauses
+c UNSAT core should NOT include all clauses
+c
+c Core contradiction: 1, -1 2, -2 forms the minimal unsat
+c Clauses 3-6 are irrelevant "noise"
+p cnf 5 8
+1 2 0
+-1 2 0
+-2 0
+3 4 0
+-3 5 0
+4 5 0
+-4 -5 0
+1 3 0
