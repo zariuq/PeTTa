@@ -1,0 +1,8 @@
+c Random 3-SAT: 3 variables, 5 clauses
+c Expected: SAT (under threshold)
+p cnf 3 5
+1 2 3 0
+-1 2 -3 0
+1 -2 3 0
+-1 -2 -3 0
+1 2 -3 0

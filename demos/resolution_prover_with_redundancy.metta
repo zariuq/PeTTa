@@ -1,4 +1,4 @@
-!(import! &self ../lib/lib_prolog)
+!(import! &self ../lib/lib_import)
 !(import! &self ../lib/lib_he)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -9,47 +9,52 @@
 ;;; - Backward subsumption (remove subsumed existing clauses)
 ;;; - Set-based clause comparison
 ;;; - Clause size limits
+;;;
+;;; OPTIMIZED: Uses separate spaces for better Prolog indexing:
+;;; - &counter: ID counter (hot path, frequently updated)
+;;; - &deriv: Derivation records (write-once, read for proof reconstruction)
+;;; - &clauses: Clause literals storage (write-once, rarely read)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; ID Counter using &self tagged atoms
+;;; ID Counter using &counter space (optimized for hot path)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (= (init-id-counter)
    (let $_ (once (clear-id-counter))
-     (add-atom &self (id-counter 0))))
+     (add-atom &counter (id-counter 0))))
 
 (= (clear-id-counter)
-   (unify (match &self (id-counter $n) $n)
+   (unify (match &counter (id-counter $n) $n)
           $val
-          (remove-atom &self (id-counter $val))
+          (remove-atom &counter (id-counter $val))
           True))
 
 (= (next-id!)
-   (match &self (id-counter $current)
+   (match &counter (id-counter $current)
      (let $next (+ $current 1)
-       (let $_ (remove-atom &self (id-counter $current))
-         (let $_ (add-atom &self (id-counter $next))
+       (let $_ (remove-atom &counter (id-counter $current))
+         (let $_ (add-atom &counter (id-counter $next))
            $current)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Derivation Recording
+;;; Derivation Recording using &deriv and &clauses spaces
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (= (record-deriv! $id $lits $parent1-id $parent2-id)
-   (let $_ (add-atom &self (deriv $id $parent1-id $parent2-id))
-     (add-atom &self (clause-lits $id $lits))))
+   (let $_ (add-atom &deriv (deriv $id $parent1-id $parent2-id))
+     (add-atom &clauses (clause-lits $id $lits))))
 
 (= (record-axiom! $id $lits)
-   (let $_ (add-atom &self (deriv $id axiom axiom))
-     (add-atom &self (clause-lits $id $lits))))
+   (let $_ (add-atom &deriv (deriv $id axiom axiom))
+     (add-atom &clauses (clause-lits $id $lits))))
 
 (= (get-deriv $id)
-   (match &self (deriv $id $p1 $p2)
+   (match &deriv (deriv $id $p1 $p2)
      (deriv $id $p1 $p2)))
 
 (= (collect-proof-ids $id)
-   (match &self (deriv $id $p1 $p2)
+   (match &deriv (deriv $id $p1 $p2)
      (collect-proof-ids-inner $id $p1 $p2)))
 
 (= (collect-proof-ids-inner $id axiom axiom)
@@ -273,14 +278,6 @@
 (= (wrap-clauses (Cons $lits $rest))
    (Cons (wrap-clause-with-id $lits) (wrap-clauses $rest)))
 
-;;; Extract unit clauses for model
-(= (extract-units Nil) Nil)
-(= (extract-units (Cons $clause $rest))
-   (let $lits (get-lits $clause)
-     (if (== (list-length $lits) 1)
-         (Cons (car-atom $lits) (extract-units $rest))
-         (extract-units $rest))))
-
 (= (my-car (Cons $x $rest)) $x)
 (= (my-cdr (Cons $x $rest)) $rest)
 
@@ -302,8 +299,7 @@
                    (let $kept (my-car $result)
                      (let $updated (my-cdr $result)
                        (if (== $kept Nil)
-                           (sat (extract-units $clauses))  ; Saturated
+                           sat  ; Saturated - no new clauses
                            (prove-loop
                              (append-lits $updated $kept)
                              (- $remaining 1)))))))))))
-

@@ -1,0 +1,4 @@
+c Single unit clause: {p}
+c Expected: SAT with p=true
+p cnf 1 1
+1 0

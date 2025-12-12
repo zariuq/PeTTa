@@ -1,0 +1,6 @@
+c Pure literal: {p∨q}, {p∨¬q}
+c p is pure positive literal
+c Expected: SAT with p=true
+p cnf 2 2
+1 2 0
+1 -2 0

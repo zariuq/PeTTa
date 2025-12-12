@@ -1,0 +1,7 @@
+c Horn clauses (UNSAT): {¬p∨q}, {¬q∨r}, {p}, {¬r}
+c Expected: UNSAT
+p cnf 3 4
+-1 2 0
+-2 3 0
+1 0
+-3 0

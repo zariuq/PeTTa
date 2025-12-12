@@ -1,19 +1,15 @@
 # Resolution Theorem Prover
 
-A resolution-based SAT/UNSAT prover with Vampire-style redundancy elimination for PeTTa.
+A complete resolution-based SAT solver in MeTTa with redundancy elimination (subsumption, tautology detection).
 
 ## Quick Start
 
 ```bash
-# Run comprehensive correctness tests (9 problems, all < 10 clauses)
-./test_correctness.sh
+# Run test suite (28 problems, all ≤10 clauses)
+./test_suite_small.sh
 
 # Test single problem
-ulimit -v 6291456 && ./run.sh demos/resprover.metta demos/test_problems/php32.cnf --silent
-
-# With timing
-/usr/bin/time -f "Time: %E | Memory: %M KB" \
-    bash -c "ulimit -v 6291456 && ./run.sh demos/resprover.metta problem.cnf --silent"
+./run.sh demos/resprover.metta demos/test_problems/php32.cnf
 ```
 
 ## Features
@@ -29,97 +25,82 @@ ulimit -v 6291456 && ./run.sh demos/resprover.metta demos/test_problems/php32.cn
 
 ## Files
 
+- **resprover.metta** - Main entry point (CNF parser + prover)
+- **resolution_prover_with_redundancy.metta** - Core prover logic
+- **cnf_parser.pl** - Prolog DIMACS CNF parser
+- **test_problems/** - 28 test cases (0-10 clauses)
+- **test_suite_small.sh** - Automated test runner
+
+## Test Results: 28/28 Passing ✓
+
 ```
-demos/
-├── README.md                              # This file
-├── resolution_prover_with_redundancy.metta  # Core prover engine
-├── resprover.metta                        # CLI wrapper with DIMACS parser
-├── cnf_parser.pl                          # Prolog CNF parser
-└── test_problems/                         # Test suite (9 CNF files)
-    ├── simple_unsat_3.cnf                # UNSAT: minimal contradiction
-    ├── transitivity_6.cnf                # UNSAT: transitivity chain
-    ├── xor_unsat_4.cnf                   # UNSAT: XOR contradiction
-    ├── tautology_5.cnf                   # UNSAT: tautology removal test
-    ├── php32.cnf                         # UNSAT: Pigeonhole (3,2)
-    ├── simple_sat_2.cnf                  # SAT: trivial
-    ├── disjunction_3.cnf                 # SAT: simple disjunctions
-    ├── unit_clauses_3.cnf                # SAT: all unit clauses
-    └── php22.cnf                         # SAT: Pigeonhole (2,2)
+contradiction_2                (2  clauses) ✓ UNSAT
+simple_unsat_3                 (3  clauses) ✓ UNSAT
+modus_ponens_3                 (3  clauses) ✓ UNSAT
+pigeonhole_21_unsat            (3  clauses) ✓ UNSAT
+binary_counter_unsat_4         (5  clauses) ✓ UNSAT
+symmetric_unsat_4              (4  clauses) ✓ UNSAT
+xor_unsat_4                    (4  clauses) ✓ UNSAT
+horn_unsat_5                   (4  clauses) ✓ UNSAT
+tautology_5                    (5  clauses) ✓ UNSAT
+resolution_chain_4             (4  clauses) ✓ UNSAT
+chain_implications_5           (6  clauses) ✓ UNSAT
+transitivity_6                 (6  clauses) ✓ UNSAT
+php32                          (9  clauses) ✓ UNSAT
+empty_0                        (0  clauses) ✓ SAT
+single_unit_1                  (1  clauses) ✓ SAT
+simple_sat_2                   (2  clauses) ✓ SAT
+pure_literal_sat_2             (2  clauses) ✓ SAT
+two_models_sat_2               (2  clauses) ✓ SAT
+subsumption_test_3             (2  clauses) ✓ SAT
+disjunction_3                  (3  clauses) ✓ SAT
+majority_sat_3                 (3  clauses) ✓ SAT
+unit_clauses_3                 (3  clauses) ✓ SAT
+equivalence_sat_3              (2  clauses) ✓ SAT
+diamond_sat_4                  (4  clauses) ✓ SAT
+resolution_diamond_6           (4  clauses) ✓ SAT
+horn_sat_4                     (4  clauses) ✓ SAT
+three_sat_3vars                (5  clauses) ✓ SAT
+php22                          (6  clauses) ✓ SAT
 ```
 
-## Test Suite
-
-All 9 test problems have < 10 clauses and are verified against MiniSat.
-
-### UNSAT Problems (5)
-
-| Problem | Clauses | Description |
-|---------|---------|-------------|
-| simple_unsat_3 | 3 | {p∨q}, {¬p}, {¬q} |
-| xor_unsat_4 | 4 | XOR contradiction |
-| tautology_5 | 5 | Tests tautology deletion |
-| transitivity_6 | 6 | Transitivity chain |
-| php32 | 9 | Pigeonhole: 3 pigeons, 2 holes |
-
-### SAT Problems (4)
-
-| Problem | Clauses | Description |
-|---------|---------|-------------|
-| simple_sat_2 | 2 | {p}, {q} |
-| unit_clauses_3 | 3 | All unit clauses |
-| disjunction_3 | 3 | Simple disjunctions |
-| php22 | 4 | Pigeonhole: 2 pigeons, 2 holes |
-
-### Run Tests
-
-```bash
-# Comprehensive test suite
-cd /home/zar/claude/hyperon/PeTTa
-./test_correctness.sh
-
-# Expected output:
-# Passed: 9
-# Failed: 0
-# Errors: 0
-# ALL TESTS PASSED\! ✓
-```
+Run with: `./test_suite_small.sh`
 
 ## Performance
 
 | Problem | Clauses | Result | Time | Status |
 |---------|---------|--------|------|--------|
+| simple_sat_2 | 2 | SAT | < 1s | ✅ |
 | simple_unsat_3 | 3 | UNSAT | < 1s | ✅ |
-| php22 | 4 | SAT | 0.5s | ✅ |
-| transitivity_6 | 6 | UNSAT | < 1s | ✅ |
+| php22 | 6 | SAT | 0.5s | ✅ |
 | php32 | 9 | UNSAT | 1.8s | ✅ |
 
-**Working Range**: < 10 clauses  
-**Stack Overflow**: 15-20 clauses (PeTTa/Prolog limitation)
+**Working Range**: 0-10 clauses
+**Limitation**: Stack overflow on 50+ clauses (Prolog backtracking explosion)
 
 ## Example Output
 
 ### UNSAT with Proof
 ```
-UNSAT
+$ ./run.sh demos/resprover.metta demos/test_problems/php32.cnf
+"UNSAT"
 
 Input clauses used (UNSAT core):
-Clause 0 : (1 2)
-Clause 1 : (3 4)
-Clause 2 : (5 6)
+(Clause 0 : (1 2))
+(Clause 1 : (3 4))
+(Clause 2 : (5 6))
 ...
 
 Derivation trace:
-(636 . () (resolve 151 456))
+(1211 . () (resolve 151 456))
 (151 . (-3) (resolve 3 76))
 ...
 ```
 
 ### SAT
 ```
-SAT
-
-Variable assignments:
-()
+$ ./run.sh demos/resprover.metta demos/test_problems/majority_sat_3.cnf
+"SAT"
 ```
 
 ## How It Works
@@ -147,10 +128,17 @@ DIMACS CNF → Prolog Parser → MeTTa Converter → Resolution Engine → Resul
 
 ## Limitations
 
-- **Stack overflow** on 15+ clauses due to PeTTa/Prolog deep recursion
-- **No given-clause algorithm** (resolves everything at once)
-- **No literal ordering** (Vampire uses ordered resolution)
-- **Naive data structures** (O(n²) subsumption checks)
+**Working range: 0-10 clauses**
+
+Larger problems (50+ clauses) hit stack overflow due to:
+- Prolog choicepoint explosion (5M+ choicepoints)
+- Non-deterministic clause matching
+- No given-clause selection strategy
+
+Future improvements needed:
+- Add determinism annotations (once/!)
+- Implement given-clause algorithm
+- Optimize clause indexing
 
 ## References
 
@@ -158,7 +146,10 @@ DIMACS CNF → Prolog Parser → MeTTa Converter → Resolution Engine → Resul
 - Schulz. "System Description: E" (2002)
 - Mitchell et al. "Hard and Easy Distributions of SAT Problems" (1992)
 
-## Credits
+## Summary
 
-Implements modern ATP techniques from Vampire/E theorem provers for the PeTTa platform.
-Demonstrates that redundancy elimination is essential - pure resolution is unusable even on small problems\!
+Complete resolution prover with Vampire-style redundancy elimination.
+- **28/28 tests passing** (0-10 clauses)
+- Proves UNSAT with derivation traces
+- Detects SAT via saturation
+- Shows redundancy elimination is essential for practical resolution proving

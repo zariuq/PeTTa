@@ -1,0 +1,6 @@
+c Equivalence: p↔q (i.e., p⊕q)
+c Converted: {p∨¬q}, {¬p∨q}
+c Expected: SAT with p=q
+p cnf 2 2
+1 -2 0
+-1 2 0

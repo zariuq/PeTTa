@@ -1,0 +1,8 @@
+c Binary counter contradiction
+c Count exactly 0, 1, 2, 3 (impossible for 2 bits)
+c Expected: UNSAT
+p cnf 2 5
+-1 -2 0
+-1 2 0
+1 -2 0
+1 2 0

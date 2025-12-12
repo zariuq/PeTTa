@@ -1,0 +1,7 @@
+c Symmetric UNSAT: {p∨q}, {¬p∨q}, {p∨¬q}, {¬p∨¬q}
+c Expected: UNSAT (all possibilities blocked)
+p cnf 2 4
+1 2 0
+-1 2 0
+1 -2 0
+-1 -2 0

@@ -7,7 +7,7 @@
 ;;;   UNSAT - Shows UNSAT core (input clauses used in derivation)
 ;;;   SAT   - Shows variable assignments
 
-!(import! &self ../lib/lib_prolog)
+!(import! &self ../lib/lib_import)
 !(import! &self ../lib/lib_he)
 
 ;;; Import CNF parser from Prolog FIRST
@@ -60,18 +60,9 @@
    (let $tail-list (from-list $tail)
      (cons-atom $head $tail-list)))
 
-;;; Convert literal to variable assignment string
-(= (lit-to-assignment (lit $n)) ($n = true))
-(= (lit-to-assignment (nlit $n)) ($n = false))
-
-;;; Convert model to assignments
-(= (model-to-assignments Nil) Nil)
-(= (model-to-assignments (Cons $lit $rest))
-   (Cons (lit-to-assignment $lit) (model-to-assignments $rest)))
-
 ;;; Check if ID is an axiom
 (= (is-axiom? $id)
-   (case (collapse (match &self (deriv $id axiom axiom) true))
+   (case (collapse (match &deriv (deriv $id axiom axiom) true))
      (((true) true)
       ($_ false))))
 
@@ -98,7 +89,7 @@
 
 ;;; Get clause literals by ID
 (= (get-clause-lits $id)
-   (match &self (clause-lits $id $lits) $lits))
+   (match &clauses (clause-lits $id $lits) $lits))
 
 ;;; Format a single literal for display
 (= (format-lit (lit $n)) $n)
@@ -121,7 +112,7 @@
 (= (print-deriv-step $id)
    (let $lits (get-clause-lits $id)
      (let $formatted (format-clause-lits $lits)
-       (let $parents (car-atom (collapse (match &self (deriv $id $p1 $p2) ($p1 $p2))))
+       (let $parents (car-atom (collapse (match &deriv (deriv $id $p1 $p2) ($p1 $p2))))
          (if (== $parents (axiom axiom))
              (println! ($id . $formatted [input]))
              (let $output (cons-atom resolve $parents)
@@ -147,19 +138,15 @@
            (println! "Derivation trace:")
            (print-derivation $all-ids))))))
 
-;;; Display SAT result with model
-(= (display-sat $model)
-   (progn
-     (println! "SAT")
-     (println! "")
-     (println! "Variable assignments:")
-     (println! (from-list (model-to-assignments $model)))))
+;;; Display SAT result
+(= (display-sat)
+   (println! "SAT"))
 
 ;;; Display result - use case to avoid non-determinism
 (= (display-result $result)
    (case $result
      (((unsat $empty-id $steps) (display-unsat $empty-id))
-      ((sat $model) (display-sat $model))
+      (sat (display-sat))
       ((max-iterations $n) (println! "UNKNOWN - max iterations reached"))
       ((size-limit-exceeded $n) (println! ("SIZE-LIMIT-EXCEEDED:" $n "clauses")))
       ($other (println! ("Unknown result:" $other))))))

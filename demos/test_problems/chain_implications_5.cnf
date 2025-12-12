@@ -1,0 +1,10 @@
+c Chain: p→q, q→r, r→s, s→t, p, ¬t
+c Converted: {¬p∨q}, {¬q∨r}, {¬r∨s}, {¬s∨t}, {p}, {¬t}
+c Expected: UNSAT
+p cnf 5 6
+-1 2 0
+-2 3 0
+-3 4 0
+-4 5 0
+1 0
+-5 0

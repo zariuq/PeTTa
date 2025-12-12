@@ -1,0 +1,9 @@
+c PHP(2,1): 2 pigeons, 1 hole - UNSAT
+c Variables: 1=p1h1, 2=p2h1
+c Each pigeon needs a hole: {p1h1}, {p2h1}
+c At most one pigeon per hole: {¬p1h1 ∨ ¬p2h1}
+c Expected: UNSAT
+p cnf 2 3
+1 0
+2 0
+-1 -2 0

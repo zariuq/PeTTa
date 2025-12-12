@@ -1,0 +1,6 @@
+c Exactly 2 models: {p∨q}, {¬p∨¬q}
+c Models: (p=T,q=F) or (p=F,q=T)
+c Expected: SAT
+p cnf 2 2
+1 2 0
+-1 -2 0
