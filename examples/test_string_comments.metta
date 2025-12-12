@@ -1,6 +1,11 @@
 ; Test that semicolons inside strings are NOT treated as comments
 ; This was broken before the string-aware comment stripper fix
 
+; Test 0: comment separator and parentheses in strings:
+!(test ")" ")")
+!(test "(" "(")
+!(test ";" ";")
+
 ; Test 1: Semicolon constant (from set.mm)
 !(test (quote ";") ";")
 

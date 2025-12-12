@@ -97,6 +97,10 @@ translate_expr([H0|T0], Goals, Out) :-
                                  append(GsH, [once(Conj)], Goals)
         ; HV == hyperpose, T = [L] -> build_hyperpose_branches(L, Branches),
                                       append(GsH, [concurrent_and(member((Goal,Res), Branches), (call(Goal), Out = Res))], Goals)
+        ; HV == with_mutex, T = [M,X] -> translate_expr_to_conj(X, Conj, Out),
+                                         append(GsH, [with_mutex(M,Conj)], Goals)
+        ; HV == transaction, T = [X] -> translate_expr_to_conj(X, Conj, Out),
+                                        append(GsH, [transaction(Conj)], Goals)
         %--- Sequential execution ---:
         ; HV == progn, T = Exprs -> translate_args(Exprs, GsList, Outs),
                                     append(GsH, GsList, Tmp),

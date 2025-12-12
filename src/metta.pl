@@ -11,6 +11,8 @@
 :- use_module(library(yall), except([(/)/3])).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(process)).
+:- use_module(library(filesex)).
 :- current_prolog_flag(argv, Argv),
    ( member(mork, Argv) -> ensure_loaded([parser, translator, filereader, '../mork_ffi/morkspaces', spaces])
                          ; ensure_loaded([parser, translator, filereader, spaces])).
@@ -283,6 +285,7 @@ retractPredicate(_, false).
       load_metta_file(AbsPath, _, Space)
     ).
 
+%%% Registration: %%%
 :- dynamic fun/1.
 register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
 unregister_fun(N/Arity) :- retractall(fun(N)),
@@ -303,5 +306,5 @@ unregister_fun(N/Arity) :- retractall(fun(N)),
                           'pow-math', 'sqrt-math', 'sort-atom','abs-math', 'log-math', 'trunc-math', 'ceil-math',
                           'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math','random-int','random-float',
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
-                          'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time',
+                          'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time', library, exists_file,
                           import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate]).
