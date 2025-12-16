@@ -1,0 +1,10 @@
+c Transitivity chain UNSAT
+c a→c, b→c, c→d, ¬d, a
+c Expected: UNSAT
+p cnf 4 6
+1 2 0
+-1 3 0
+-2 3 0
+-3 4 0
+-4 0
+1 0

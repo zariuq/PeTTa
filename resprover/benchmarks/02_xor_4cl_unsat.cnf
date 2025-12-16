@@ -1,0 +1,8 @@
+c XOR contradiction
+c (p⊕q) ∧ p ∧ ¬p
+c Expected: UNSAT
+p cnf 2 4
+1 2 0
+-1 -2 0
+1 0
+-1 0

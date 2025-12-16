@@ -5,6 +5,8 @@
 > ⚠️ **CRITICAL:** PeTTa does NOT have a `>=` operator! Use `<=` with countdown instead. See [Available Operators](#available-operators-in-petta) for details.
 
 > ⚠️ **DEBUG TIP:** "Timeout" might be silent failure, not hanging! Add `!(println! "DEBUG: checkpoint")` BEFORE suspect code to verify it runs. See [DEBUGGING_GUIDE.md](./DEBUGGING_GUIDE.md) for full details.
+>
+> ⚠️ **PATTERN BUG:** Patterns with repeated variables like `(= (foo $x $x) ...)` can hang when values don't match! Use explicit patterns instead. Example: `(= (comp (lit $n) (nlit $n)) true)` hangs on `(lit 1) (nlit 2)`. See [Pattern Matching Pitfalls](#pattern-matching-pitfalls-critical) for details.
 
 ## Table of Contents
 1. [Spaces and Match (CRITICAL)](#spaces-and-match-critical)
@@ -17,7 +19,7 @@
 8. [Testing and Project Conventions](#testing-and-project-conventions)
 9. [Verified PeTTa Features](#verified-petta-features) - Including operator checking (NEW)
 10. [Working Examples](#working-examples)
-11. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+11. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions) - **Pattern matching bug documented**
 12. [lib_prolog Bridge Limitations (CRITICAL - NEW)](#lib_prolog-bridge-limitations-critical)
 
 ---
@@ -2011,5 +2013,168 @@ For parsers, data structures, and iterative processing, implement in **pure PeTT
 **Use Prolog only for:** Simple utilities that return atoms/numbers and don't need recursion.
 
 **Use pure PeTTa for:** Anything involving data structures, iteration, or complex control flow.
+
+---
+
+## State Management with `bind!` and `new-state`
+
+PeTTa provides efficient global state management through `bind!` with `new-state`, which directly uses Prolog's non-backtrackable global variables (`nb_setval`/`nb_getval`):
+
+### Implementation Details
+
+From `src/metta.pl`:
+```prolog
+'bind!'(A, ['new-state', B], C) :- 'change-state!'(A, B, C).
+'change-state!'(Var, Value, true) :- nb_setval(Var, Value).
+'get-state'(Var, Value) :- nb_getval(Var, Value).
+```
+
+This is **more efficient** than using spaces for counters or small state:
+
+```metta
+;; ✅ EFFICIENT - Direct Prolog global variable
+!(bind! &counter (new-state 0))
+
+(= (next-id!)
+   (let $current (get-state &counter)
+     (let $_ (change-state! &counter (+ $current 1))
+       $current)))
+
+;; Reset counter for determinism
+(= (reset-counter!)
+   (change-state! &counter 0))
+```
+
+### Key Points
+
+- **Performance:** O(1) access via Prolog's `nb_getval`/`nb_setval`
+- **Deterministic:** State persists across non-deterministic evaluation
+- **Global scope:** Available throughout the program
+- **Reset important:** Must reset counters between runs for deterministic behavior
+
+## Pattern Matching Limitations
+
+PeTTa has specific limitations with pattern matching that differ from standard MeTTa:
+
+### The `(Cons $_ $_)` Problem
+
+```metta
+;; ❌ BROKEN - Pattern doesn't match correctly
+(= (is-empty (c $_ Nil)) True)
+(= (is-empty (c $_ (Cons $_ $_))) False)
+
+;; ✅ WORKS - Use explicit equality check
+(= (is-empty $clause)
+   (== (get-lits $clause) Nil))
+
+(= (get-lits (c $_ $lits)) $lits)
+```
+
+**Why it fails:** PeTTa's pattern matching for nested `Cons` with wildcards is unreliable. The pattern `(Cons $_ $_)` may not match a non-empty list as expected.
+
+### Variable Names and `$_`
+
+In PeTTa, `$_` is **just a variable name**, not a special wildcard:
+
+```metta
+;; All equivalent - $_ has no special meaning
+(= (foo $_) True)
+(= (foo $x) True)
+(= (foo $ignored) True)
+```
+
+## Performance Testing with `/usr/bin/time`
+
+Use `/usr/bin/time -v` for accurate performance measurements including memory usage:
+
+```bash
+# Test with 6GB memory limit
+ulimit -v 6291456 && /usr/bin/time -v ./run.sh script.metta --silent 2>&1 | \
+  grep -E "(User time|System time|Maximum resident)"
+```
+
+Example benchmark results:
+```
+User time (seconds): 0.93
+System time (seconds): 0.05
+Maximum resident set size (kbytes): 16512
+```
+
+### Memory Limits
+
+Always use memory limits to prevent runaway processes:
+
+```bash
+# 6GB limit (in KB)
+ulimit -v 6291456 && ./run.sh script.metta --silent
+
+# With timeout
+ulimit -v 6291456 && timeout 30 ./run.sh script.metta --silent
+```
+
+## Non-Deterministic Evaluation Pitfall
+
+PeTTa evaluates expressions non-deterministically, which can cause unexpected repeated execution:
+
+```metta
+;; ⚠️ WARNING: This executes MANY times!
+!(let $test (make-problem)
+   (let $r1 (prove $test)
+     (let $r2 (prove $test)
+       (println! ("Results:" $r1 $r2)))))
+
+;; Output: Hundreds of thousands of lines!
+;; ("Results:" (unsat 2) (unsat 2))
+;; ("Results:" (unsat 2) (unsat 30))
+;; ("Results:" (unsat 2) (unsat 142730))
+;; ... repeated 330,000+ times
+```
+
+**Why:** Each `let` binding can create choice points, and PeTTa explores all branches.
+
+### Solutions
+
+1. **Use `progn`/`prog1` for sequential execution**
+2. **Store results in state** to avoid recomputation
+3. **Design for idempotency** - make operations safe to repeat
+
+## Prolog Built-in Optimizations
+
+PeTTa can leverage Prolog's efficient built-ins for optimizations:
+
+### O(n log n) Sorting with `msort`
+
+```metta
+(: msort (-> Function Expression Expression))
+;; Sorts a tuple using a key function
+
+(= (sort-lits $lits)
+   (let $tuple (cons-to-tuple $lits)
+     (let $sorted (msort lit-value $tuple)
+       (tuple-to-cons $sorted))))
+```
+
+### O(1) Atom Table with `repra`
+
+```metta
+(: repra (-> Expression Atom))
+;; Creates unique atom from term - O(1) equality checking
+
+(= (already-seen? $clause)
+   (let $key (repra $clause)
+     (member? $key $seen-set)))  ; O(n) member check, but O(1) equality
+```
+
+## Performance Characteristics
+
+Based on benchmarks with 20-chain resolution problems (6GB limit):
+
+| Prover | Time | Memory | Notes |
+|--------|------|--------|-------|
+| Baseline | 0.93s | 16MB | Simple, no optimizations |
+| MSORT | 1.20s | 16MB | Overhead from sorting |
+| REPRA | 1.07s | 16MB | Overhead from atom creation |
+
+**Key insight:** Optimizations have overhead. They help with problems generating many duplicates but can slow down simple problems.
 
 ---
