@@ -117,11 +117,17 @@
 
 (: Truth_c2w (-> Number Number))
 (= (Truth_c2w $c)
-   (/safe $c (- 1 $c)))
+   ;; Safe confidence→weight transform:
+   ;; - floor at 0.0 (avoid negative weights)
+   ;; - cap below 1.0 (avoid division-by-zero at c=1)
+   (let* (($cc (max 0.0 (min $c 0.9999))))
+     (/safe $cc (- 1 $cc))))
 
 (: Truth_w2c (-> Number Number))
 (= (Truth_w2c $w)
-   (/safe $w (+ $w 1)))
+   ;; Safe weight→confidence transform (negative weights treated as 0).
+   (let* (($ww (max 0.0 $w)))
+     (/safe $ww (+ $ww 1))))
 
 ; Deduction formula: PLN book "1.4 Truth-value Formulas", page 15:
 ; borrowed from https://github.com/trueagi-io/hyperon-pln/blob/main/metta/pln/dependent-types/DeductionDTL.metta
@@ -148,10 +154,11 @@
                     (stv $sC $cC)
                     (stv $sBA $cBA)
                     (stv $sBC $cBC))
-   (stv (+ (/safe (* (* $sBA $sBC) $sB) $sA)
+        (stv (+ (/safe (* (* $sBA $sBC) $sB) $sA)
            (* (- 1 (/safe (* $sBA $sB) $sA))
               (/safe (- $sC (* $sB $sBC)) (- 1 $sB))))
-        (Truth_w2c (min $cBA $cBC)))) ;confidence TODO check
+        ;; Confidence: take min in weight-space (fixes the historical "double-damping" bug).
+        (Truth_w2c (min (Truth_c2w $cBA) (Truth_c2w $cBC)))))
 
 ; Abduction formula: PLN book "Appendix A: Comparison of PLN Rules with NARS Rules", page 307
 (= (Truth_Abduction (stv $sA $cA)
@@ -163,7 +170,8 @@
                   $sB)
            (/safe (* $sC (* (- 1 $sAB) (- 1 $sCB)))
                   (- 1 $sB)))
-        (Truth_w2c (min $cAB $cCB)))) ;confidence TODO check
+        ;; Confidence: take min in weight-space (fixes the historical "double-damping" bug).
+        (Truth_w2c (min (Truth_c2w $cAB) (Truth_c2w $cCB)))))
 
 ;Modus Ponens: PLN book "5.7.1 Modus Ponens", page 111:
 (= (Truth_ModusPonens (stv $f1 $c1) (stv $f2 $c2)) 
@@ -185,7 +193,8 @@
           ($f (/safe (+ (* $w1 $f1) (* $w2 $f2)) $w))
           ($c (Truth_w2c $w)))
          (stv (min 1.0 $f)
-              (min 1.0 (max (max $c $c1) $c2)))))
+              ;; With consistent evidence semantics, combined confidence is already ≥ inputs.
+              (min 1.0 $c))))
 
 ; negation, see https://github.com/opencog/pln/blob/master/opencog/pln/rules/wip/negation-introduction.scm#L41
 ; negation elimination, see https://github.com/opencog/pln/blob/master/opencog/pln/rules/wip/not-elimination.scm#L34
@@ -463,4 +472,3 @@
 
 (= (PLN.Query $kb $term)
    (PLN.Query $kb $term (PLN.Config.MaxSteps))) ;default steps bound
-
