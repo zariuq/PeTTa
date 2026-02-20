@@ -19,3 +19,7 @@
    (let* (($ok (use_module_file $prologfile))
           ($function (superpose $importfunctions)))
          (import_prolog_function $function)))
+
+; Load Prolog helpers from lib_zar.pl (cmdline args, new-space, delete-space)
+!(import_prolog_functions_from_file_pred "lib/lib_zar.pl"
+  (get_cmdline_arg get_cmdline_args cmdline_arg_count has_cmdline_args new-space delete-space))

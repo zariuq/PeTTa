@@ -19,3 +19,14 @@ has_cmdline_args(true) :-
     get_cmdline_args(Args),
     Args \= [], !.
 has_cmdline_args(false).
+
+% new-space / delete-space: dynamic space creation via gensym
+% Workaround for PeTTa compiler not handling new-space inside function bodies
+'new-space'(SpaceAtom) :- gensym('&zar_space_', SpaceAtom).
+
+'delete-space'(Space, true) :-
+    atom(Space),
+    forall(
+        current_predicate(Space/Arity),
+        abolish(Space/Arity)
+    ).
