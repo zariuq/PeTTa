@@ -1,7 +1,7 @@
 (= (myf $M)
    (and (and (member a $M)
              (member b $M))
-        (== (size-atom $M) 3)))
+        (== (size-atom $M) 2)))
 
-!(test (let $constraint (once (myf $M)) $M)
+!(test (if (once (myf $M)) $M)
        (a b))

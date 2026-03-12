@@ -25,6 +25,10 @@ The following projects are cloned and built by build.sh:
 
 **Repository:** [faiss_ffi](https://github.com/patham9/faiss_ffi) dependent on [facebookresearch/faiss](https://github.com/facebookresearch/faiss)
 
+### Extension libraries
+
+Please check out [Extension libraries](https://github.com/trueagi-io/PeTTa/wiki/Extension-libraries) for a set of extension libraries that can be invoked from MeTTa files directly from the git repository.
+
 ## Notebooks, Servers, Browser
 
 ### Jupyter Notebook Support
