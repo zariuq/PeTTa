@@ -43,7 +43,12 @@
    ffi_counter_init ffi_counter_init_off ffi_counter_dump
    zar_logistic_site_hyper_batch_flat
    zar_logistic_site_evidence_batch
-   zar_logistic_posterior_params_batch_flat))
+   zar_logistic_posterior_params_batch_flat
+   is_ground))
+
+;; is-ground: check if a MeTTa expression has no unbound variables
+;; Wraps Prolog's ground/1 via is_ground/2 in lib_zar.pl
+(= (is-ground $x) (is_ground $x))
 
 ;;; CLI helper: true when argument begins with "--"
 (= (starts-with-dash $str)

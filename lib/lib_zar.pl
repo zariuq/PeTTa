@@ -674,3 +674,8 @@ zar_logistic_posterior_params_batch_flat_([PriorMean|PriorMeans], [PriorPrecisio
     PosteriorPrecision is PriorPrecision + WeightSum,
     PosteriorMean is (PriorPrecision * PriorMean + WeightedSum) / PosteriorPrecision,
     zar_logistic_posterior_params_batch_flat_(PriorMeans, PriorPrecisions, EvidenceFlat, FlatPosterior).
+
+%% ======================================================================
+%% is-ground — needed by ProbMeTTa (lib_prob uses is-ground for BDD variable creation)
+%% ======================================================================
+is_ground(A, R) :- ground(A) -> R = true ; R = false.
