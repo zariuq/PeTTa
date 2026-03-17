@@ -2,7 +2,7 @@
 ;;;
 ;;; Design goals:
 ;;;   1. Keep nuPLN exact evidence algebra for binary/Beta-Bernoulli carriers.
-;;;   2. Expose explicit calibration knobs (kappa, global regraduation weight).
+;;;   2. Separate exact semantic bridges from operational calibration layers.
 ;;;   3. Add a first-class continuous carrier interface (Normal sufficient stats).
 ;;;
 ;;; This is the "xiPLN" evolution path while preserving nuPLN compatibility.
@@ -13,9 +13,10 @@
 
 ;;; ============================================================================
 ;;; Shared calibration defaults (tunable per task)
+;;; Exact evidence operations should still prefer explicit parameters when possible.
 ;;; ============================================================================
 
-;;; Conservative defaults for ranking tasks with many features.
+;;; Conservative defaults for projections and control-layer policies.
 (= (xiPLN.defaultKappa) 10.0)
 (= (xiPLN.defaultGlobalWeight) 0.05)
 
@@ -46,26 +47,47 @@
 (= (xiPLN.discrete.Revision $tv1 $tv2 $kappa)
    (nuPLN.RevisionWithKappa $tv1 $tv2 $kappa))
 
-;;; Evidence-product NB posterior with explicit PLN regraduation + projection.
+;;; Exact tensor-strength NB posterior bridge.
+;;; This is the canonical xiPLN default and matches the current theoremic story.
+(= (xiPLN.discrete.NBPosteriorSTVExact $priorFactor $factors)
+   (nuPLN.NBPosteriorSTVWithKappa
+     $priorFactor
+     $factors
+     (xiPLN.defaultKappa)))
+
+(= (xiPLN.discrete.NBPosteriorSTVExact $priorFactor $factors $kappa)
+   (nuPLN.NBPosteriorSTVWithKappa $priorFactor $factors $kappa))
+
 (= (xiPLN.discrete.NBPosteriorSTV $priorFactor $factors)
-   (nuPLN.NBPosteriorSTVRegraded
+   (xiPLN.discrete.NBPosteriorSTVExact $priorFactor $factors))
+
+(= (xiPLN.discrete.NBPosteriorSTV $priorFactor $factors $kappa)
+   (xiPLN.discrete.NBPosteriorSTVExact $priorFactor $factors $kappa))
+
+;;; Explicit operational layer: globally regraded evidence product before STV
+;;; projection. Useful for selector/control policies, not the exact NB bridge.
+(= (xiPLN.operational.NBPosteriorSTVRegraded $priorFactor $factors)
+   (xiPLN.operational.NBPosteriorSTVRegraded
      $priorFactor
      $factors
      (xiPLN.defaultGlobalWeight)
      (xiPLN.defaultKappa)))
 
-(= (xiPLN.discrete.NBPosteriorSTV $priorFactor $factors $globalWeight $kappa)
+(= (xiPLN.operational.NBPosteriorSTVRegraded $priorFactor $factors $globalWeight $kappa)
    (nuPLN.NBPosteriorSTVRegraded $priorFactor $factors $globalWeight $kappa))
 
+;;; Discoverability alias mirroring the discrete namespace.
+(= (xiPLN.discrete.NBPosteriorSTVRegraded $priorFactor $factors)
+   (xiPLN.operational.NBPosteriorSTVRegraded $priorFactor $factors))
+
+(= (xiPLN.discrete.NBPosteriorSTVRegraded $priorFactor $factors $globalWeight $kappa)
+   (xiPLN.operational.NBPosteriorSTVRegraded $priorFactor $factors $globalWeight $kappa))
+
 ;;; ============================================================================
-;;; PLN-named selector rule aliases (book-aligned semantics)
+;;; Exact rule aliases
 ;;; ============================================================================
 ;;;
-;;; Alignment to PLN book philosophy:
-;;; - Revision (`hplus`) accumulates evidence mass from independent sources.
-;;; - Tensor composes prior and likelihood evidence sequentially.
-;;; - Power performs evidence regraduation (informativeness weighting), not ad-hoc
-;;;   score hacking.
+;;; These stay close to the exact evidence/state story.
 
 ;;; Contextual prior revision: global prior revised with local/contextual prior.
 (= (xiPLN.Rule.ContextualPriorRevision $tvGlobal $tvLocal)
@@ -82,16 +104,34 @@
      (xiPLN.discrete.tensor $priorEvidence $likelihoodEvidence)
      $kappa))
 
+;;; Preferred exact namespace.
+(= (xiPLN.Rule.Exact.ContextualPriorRevision $tvGlobal $tvLocal)
+   (xiPLN.Rule.ContextualPriorRevision $tvGlobal $tvLocal))
+(= (xiPLN.Rule.Exact.ContextualPriorRevision $tvGlobal $tvLocal $kappa)
+   (xiPLN.Rule.ContextualPriorRevision $tvGlobal $tvLocal $kappa))
+
+(= (xiPLN.Rule.Exact.PriorLikelihoodTensorSTV $priorEvidence $likelihoodEvidence)
+   (xiPLN.Rule.PriorLikelihoodTensorSTV $priorEvidence $likelihoodEvidence))
+(= (xiPLN.Rule.Exact.PriorLikelihoodTensorSTV $priorEvidence $likelihoodEvidence $kappa)
+   (xiPLN.Rule.PriorLikelihoodTensorSTV $priorEvidence $likelihoodEvidence $kappa))
+
+;;; ============================================================================
+;;; Operational / selector aliases
+;;; ============================================================================
+;;;
+;;; These are useful control-layer helpers, but they are not the exact NB bridge
+;;; or the canonical exact rewrite story from the current book.
+
 ;;; Normalized/regraduated prior-likelihood tensor:
 ;;; scale prior and likelihood evidence by explicit weights, then tensor-compose.
-(= (xiPLN.Rule.NormalizedPriorLikelihoodTensor $priorEvidence $likelihoodEvidence
-                                               $priorWeight $likelihoodWeight)
+(= (xiPLN.Rule.Operational.NormalizedPriorLikelihoodTensor $priorEvidence $likelihoodEvidence
+                                                           $priorWeight $likelihoodWeight)
    (xiPLN.discrete.toSTV
      (xiPLN.discrete.tensor
        (xiPLN.discrete.power $priorEvidence $priorWeight)
        (xiPLN.discrete.power $likelihoodEvidence $likelihoodWeight))))
-(= (xiPLN.Rule.NormalizedPriorLikelihoodTensor $priorEvidence $likelihoodEvidence
-                                               $priorWeight $likelihoodWeight $kappa)
+(= (xiPLN.Rule.Operational.NormalizedPriorLikelihoodTensor $priorEvidence $likelihoodEvidence
+                                                           $priorWeight $likelihoodWeight $kappa)
    (xiPLN.discrete.toSTV
      (xiPLN.discrete.tensor
        (xiPLN.discrete.power $priorEvidence $priorWeight)
@@ -99,23 +139,73 @@
      $kappa))
 
 ;;; Weak-negative safe update: add epsilon negative evidence via revision.
-(= (xiPLN.Rule.WeakNegativeSafeUpdate $evidence $epsilon)
+(= (xiPLN.Rule.Operational.WeakNegativeSafeUpdate $evidence $epsilon)
    (xiPLN.discrete.hplus $evidence (xiPLN.discrete.Evidence 0 $epsilon)))
 
 ;;; Regraduated evidence rule alias.
-(= (xiPLN.Rule.RegraduatedEvidence $evidence $weight)
+(= (xiPLN.Rule.Operational.RegraduatedEvidence $evidence $weight)
    (xiPLN.discrete.power $evidence $weight))
 
-;;; Alias layer removed in cleanup — use canonical names above directly:
-;;;   xiPLN.Rule.ContextualPriorRevision
-;;;   xiPLN.Rule.NormalizedPriorLikelihoodTensor
-;;;   xiPLN.Rule.RegraduatedEvidence
+;;; Backward-compatible aliases for existing demos/tests.
+(= (xiPLN.Rule.NormalizedPriorLikelihoodTensor $priorEvidence $likelihoodEvidence
+                                               $priorWeight $likelihoodWeight)
+   (xiPLN.Rule.Operational.NormalizedPriorLikelihoodTensor
+     $priorEvidence
+     $likelihoodEvidence
+     $priorWeight
+     $likelihoodWeight))
+(= (xiPLN.Rule.NormalizedPriorLikelihoodTensor $priorEvidence $likelihoodEvidence
+                                               $priorWeight $likelihoodWeight $kappa)
+   (xiPLN.Rule.Operational.NormalizedPriorLikelihoodTensor
+     $priorEvidence
+     $likelihoodEvidence
+     $priorWeight
+     $likelihoodWeight
+     $kappa))
+
+(= (xiPLN.Rule.WeakNegativeSafeUpdate $evidence $epsilon)
+   (xiPLN.Rule.Operational.WeakNegativeSafeUpdate $evidence $epsilon))
+
+(= (xiPLN.Rule.RegraduatedEvidence $evidence $weight)
+   (xiPLN.Rule.Operational.RegraduatedEvidence $evidence $weight))
+
+(= (xiPLN.Rule.LocalEvidenceRevision $tvGlobal $tvLocal)
+   (xiPLN.Rule.ContextualPriorRevision $tvGlobal $tvLocal))
+
+(= (xiPLN.Rule.LocalEvidenceRevision $tvGlobal $tvLocal $kappa)
+   (xiPLN.Rule.ContextualPriorRevision $tvGlobal $tvLocal $kappa))
+
+(= (xiPLN.Rule.NormalizedSequentialComposition $priorEvidence $likelihoodEvidence
+                                               $priorWeight $likelihoodWeight)
+   (xiPLN.Rule.NormalizedPriorLikelihoodTensor
+     $priorEvidence
+     $likelihoodEvidence
+     $priorWeight
+     $likelihoodWeight))
+
+(= (xiPLN.Rule.NormalizedSequentialComposition $priorEvidence $likelihoodEvidence
+                                               $priorWeight $likelihoodWeight $kappa)
+   (xiPLN.Rule.NormalizedPriorLikelihoodTensor
+     $priorEvidence
+     $likelihoodEvidence
+     $priorWeight
+     $likelihoodWeight
+     $kappa))
+
+(= (xiPLN.Rule.EvidenceRegraduation $evidence $weight)
+   (xiPLN.Rule.RegraduatedEvidence $evidence $weight))
 
 ;;; Bridge naming for tensor-strength NB equivalence (STV-level wrapper).
+;;; The plain bridge is exact; the operational bridge is explicit.
 (= (xiPLN.Bridge.TensorStrengthEqNBPosterior $priorFactor $factors)
    (xiPLN.discrete.NBPosteriorSTV $priorFactor $factors))
-(= (xiPLN.Bridge.TensorStrengthEqNBPosterior $priorFactor $factors $globalWeight $kappa)
-   (xiPLN.discrete.NBPosteriorSTV $priorFactor $factors $globalWeight $kappa))
+(= (xiPLN.Bridge.TensorStrengthEqNBPosterior $priorFactor $factors $kappa)
+   (xiPLN.discrete.NBPosteriorSTV $priorFactor $factors $kappa))
+
+(= (xiPLN.Bridge.TensorStrengthEqNBPosteriorOperational $priorFactor $factors)
+   (xiPLN.operational.NBPosteriorSTVRegraded $priorFactor $factors))
+(= (xiPLN.Bridge.TensorStrengthEqNBPosteriorOperational $priorFactor $factors $globalWeight $kappa)
+   (xiPLN.operational.NBPosteriorSTVRegraded $priorFactor $factors $globalWeight $kappa))
 
 ;;; ============================================================================
 ;;; Continuous (Normal sufficient statistics carrier)
@@ -140,6 +230,7 @@
 
 ;;; Probability-space STV view for downstream rules that assume strength in [0, 1].
 ;;; This keeps Normal evidence/context semantics and only changes the projection.
+;;; Treat it as an operational view/projection, not a new carrier semantics.
 (= (xiPLN.cont.toProbSTV $ev $ctx)
    (xiPLN.cont.toProbSTV $ev $ctx (xiPLN.defaultKappa)))
 

@@ -24,6 +24,7 @@ class PeTTa:
                         janus.query_once("set_prolog_flag(argv, ['mork'])")
                     else:
                         janus = importlib.import_module("janus_swi")
+                    janus.query_once("set_prolog_flag(stack_limit, 4_294_967_296)")
                     main_file = os.path.join(petta_path, "src", "main.pl")
                     helper_file = os.path.join(petta_path, "python", "helper.pl")
                     janus.consult(main_file)
@@ -33,6 +34,9 @@ class PeTTa:
     def _run_helper(self, helper_name, argument):
         query = f"run_metta_helper({self.verbose},{helper_name},'{argument}', Results)"
         result = janus.query_once(query)
+        janus.query_once("trim_stacks")
+        janus.query_once("garbage_collect")   # release atoms, compiled clauses, trail
+        janus.query_once("trim_heap")         # return fragmented heap to OS
         if result is None:
             return []
         return result.get("Results", [])

@@ -40,7 +40,10 @@
    sp_new_set sp_new_set_fast sp_set_add sp_set_has sp_set_del
    sp_set_union sp_set_subtract sp_set_from_list
    sp_delete sp_get_index sp_set_index
-   ffi_counter_init ffi_counter_init_off ffi_counter_dump))
+   ffi_counter_init ffi_counter_init_off ffi_counter_dump
+   zar_logistic_site_hyper_batch_flat
+   zar_logistic_site_evidence_batch
+   zar_logistic_posterior_params_batch_flat))
 
 ;;; CLI helper: true when argument begins with "--"
 (= (starts-with-dash $str)
