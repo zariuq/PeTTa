@@ -679,3 +679,50 @@ zar_logistic_posterior_params_batch_flat_([PriorMean|PriorMeans], [PriorPrecisio
 %% is-ground — needed by ProbMeTTa (lib_prob uses is-ground for BDD variable creation)
 %% ======================================================================
 is_ground(A, R) :- ground(A) -> R = true ; R = false.
+
+%% ======================================================================
+%% structural_rewrite/3 — recursive bottom-up term rewriting
+%% ======================================================================
+%%
+%% structural_rewrite(+Term, +RuleName, -Result)
+%%
+%% Applies a named MeTTa rewrite function bottom-up to every subexpression
+%% of Term. The function is called via reduce/2 (PeTTa's MeTTa evaluator).
+%% If the function returns the input unchanged, the subexpression is kept.
+%% Children are rewritten FIRST (bottom-up), then the rewrite rule is
+%% applied to the reconstructed parent.
+%%
+%% This is the ONE operator PeTTa needs for source-to-source translation
+%% that it can't express natively due to unification-based matching
+%% preventing recursive structural descent with catch-all fallback.
+%%
+%% Usage from MeTTa:
+%%   !(import_prolog_functions_from_file "lib/lib_zar.pl" (structural_rewrite))
+%%   (= (my-rule (chain $e $v $b)) (let $v $e $b))
+%%   (= (my-rule $x) $x)
+%%   !(structural_rewrite (if cond (chain a $x $x) done) my-rule)
+%%   ; → (if cond (let $x a $x) done)
+
+structural_rewrite(Term, RuleName, Result) :-
+    (   is_list(Term)
+    ->  % Rewrite children first (bottom-up)
+        maplist({RuleName}/[T, R]>>(structural_rewrite(T, RuleName, R)),
+                Term, RewrittenChildren),
+        % Then apply rule to the reconstructed parent
+        catch(
+            reduce([RuleName | RewrittenChildren], RuleResult),
+            _,
+            RuleResult = RewrittenChildren
+        ),
+        (   RuleResult == RewrittenChildren
+        ->  Result = RewrittenChildren    % rule returned unchanged
+        ;   Result = RuleResult           % rule rewrote it
+        )
+    ;   % Atom: try rule, fall back to identity
+        catch(
+            reduce([RuleName, Term], RuleResult),
+            _,
+            RuleResult = Term
+        ),
+        Result = RuleResult
+    ).
