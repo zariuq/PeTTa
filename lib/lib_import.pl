@@ -17,11 +17,21 @@ convert_stream(In, Out, Space) :- read_line_to_string(In, Line),
                                        convert_stream(In, Out, Space) ).
 
 %Perform simple transformation from S-Expression to space-rel predicate:
+%Quotes each token so that atoms with hyphens (eqtl-link, co-regulate, etc.)
+%are preserved as Prolog atoms, not parsed as arithmetic expressions.
 convert_line(Line0, Space, Out) :- sub_string(Line0, 1, _, 1, Inner0),
                                    replace_all("(", "[", Inner0, Inner1),
                                    replace_all(")", "]", Inner1, Inner2),
-                                   replace_all(" ", ",", Inner2, Inner3),
-                                   format(Out, "'~w'(~w).~n", [Space, Inner3]).
+                                   split_string(Inner2, " ", " ", Tokens),
+                                   maplist(quote_token, Tokens, Quoted),
+                                   atomic_list_concat(Quoted, ',', Joined),
+                                   format(Out, "'~w'(~w).~n", [Space, Joined]).
+
+%Quote a token: wrap in single quotes, escaping any internal quotes.
+%Brackets [ ] are left unquoted (they represent nested lists).
+quote_token(T, T) :- sub_string(T, 0, 1, _, "["), !.
+quote_token(T, T) :- sub_string(T, _, 1, 0, "]"), !.
+quote_token(T, Q) :- atomic_list_concat(['\'', T, '\''], Q).
 
 %Helper predicate for string repkacement:
 replace_all(P, R, S, O) :- split_string(S, P, "", Parts),
