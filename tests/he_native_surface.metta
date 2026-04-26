@@ -1,0 +1,5 @@
+!(test (assertEqual (+ 1 2) 3) True)
+!(test (assertAlphaEqual (quote (+ $x $y)) (quote (+ $a $b))) True)
+!(test (evalc (+ 5 5) &self) 10)
+!(test (chain (unify True True 11 22) $x $x) 11)
+!(test (chain (unify False True 11 (+ 20 2)) $x $x) 22)

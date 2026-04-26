@@ -18,6 +18,11 @@ library(X, Y, Path) :- library_path(Base), atomic_list_concat([Base, '/../', X, 
 :- use_module(library(apply_macros)).
 :- use_module(library(process)).
 :- use_module(library(filesex)).
+:- ensure_loaded('he/he_boot').
+
+:- current_prolog_flag(argv, Argv),
+   set_metta_profile_from_args(Argv).
+
 :- current_prolog_flag(argv, Argv),
    ( member(mork, Argv) -> ensure_loaded([parser, translator, specializer, filereader, '../mork_ffi/morkspaces', spaces])
                          ; ensure_loaded([parser, translator, specializer, filereader, spaces])).
@@ -38,7 +43,9 @@ parse(Str, R) :- sread(Str, R).
 '%'(A,B,R)  :- R is A mod B.
 '<'(A,B,R)  :- (A<B -> R=true ; R=false).
 '>'(A,B,R)  :- (A>B -> R=true ; R=false).
+'=='(A,B,R) :- he_bridge_compare(eq, A, B, R), !.
 '=='(A,B,R) :- (A==B -> R=true ; R=false).
+'!='(A,B,R) :- he_bridge_compare(ne, A, B, R), !.
 '!='(A,B,R) :- (A==B -> R=false ; R=true).
 '='(A,B,R) :-  (A=B -> R=true ; R=false).
 '=?'(A,B,R) :- (\+ \+ A=B -> R=true ; R=false).
@@ -155,36 +162,6 @@ member(X, L, true) :- member(X, L).
 'union-atom'(A, B, Out) :- append(A, B, Out).
 'intersection-atom'(A, B, Out) :- intersection(A, B, Out).
 
-%%% Type system: %%%
-get_function_type([F|Args], T) :- nonvar(F), match('&self', [':',F,[->|Ts]], _, _),
-                                  append(As,[T],Ts),
-                                  maplist('get-type',Args,As).
-
-:- dynamic 'get-type'/2.
-'get-type'(X, T) :- (get_type_candidate(X, T) *-> true ; T = '%Undefined%' ).
-get_type_candidate(X, 'Number')   :- number(X), !.
-get_type_candidate(X, _) :- var(X), !.
-get_type_candidate(X, 'String')   :- string(X), !.
-get_type_candidate(true, 'Bool')  :- !.
-get_type_candidate(false, 'Bool') :- !.
-get_type_candidate(X, T) :- get_function_type(X,T).
-get_type_candidate(X, T) :- \+ get_function_type(X, _),
-                            is_list(X),
-                            maplist('get-type', X, T).
-get_type_candidate(X, T) :- match('&self', [':',X,T], T, _).
-'get-metatype'(X, 'Variable') :- var(X), !.
-'get-metatype'(X, 'Grounded') :- number(X), !.
-'get-metatype'(X, 'Grounded') :- string(X), !.
-'get-metatype'(true,  'Grounded') :- !.
-'get-metatype'(false, 'Grounded') :- !.
-'get-metatype'(X, 'Grounded') :- atom(X), fun(X), !.  % e.g., '+' is a registered fun/1
-'get-metatype'(X, 'Expression') :- is_list(X), !.     % e.g., (+ 1 2), (a b)
-'get-metatype'(X, 'Symbol') :- atom(X), !.            % e.g., a
-
-'is-var'(A,R) :- var(A) -> R=true ; R=false.
-'is-expr'(A,R) :- is_list(A) -> R=true ; R=false.
-'is-space'(A,R) :- atom(A), atom_concat('&', _, A) -> R=true ; R=false.
-
 %%% Diagnostics / Testing: %%%
 'println!'(Arg, true) :- swrite(Arg, RArg),
                          format('~w~n', [RArg]).
@@ -228,13 +205,62 @@ assert(Goal, true) :- ( call(Goal) -> true
                                                    ; Call0 =.. [A|Args] ),
                                                 py_call(builtins:Call0, Result, Opts) ).
 
-%%% States: %%%
-'bind!'(A, ['new-state', B], C) :- 'change-state!'(A, B, C).
-'change-state!'(Var, Value, true) :- nb_setval(Var, Value).
-'get-state'(Var, Value) :- nb_getval(Var, Value).
+py_term_atom(Term, Atom) :-
+    ( atom(Term) -> Atom = Term
+    ; string(Term) -> atom_string(Atom, Term)
+    ; term_to_atom(Term, Atom)
+    ).
+
+py_path_parts(Spec, Parts) :-
+    py_term_atom(Spec, Atom),
+    atomic_list_concat(Raw, '.', Atom),
+    Raw \= [],
+    Parts = Raw.
+
+py_get_attr(Obj, Attr, Value) :-
+    py_term_atom(Attr, AttrAtom),
+    py_call(builtins:getattr(Obj, AttrAtom), Value).
+
+py_resolve_attrs(Obj, [], Obj).
+py_resolve_attrs(Obj, [Attr|Attrs], Value) :-
+    py_get_attr(Obj, Attr, Next),
+    py_resolve_attrs(Next, Attrs, Value).
+
+py_resolve_path(Spec, Value) :-
+    py_path_parts(Spec, [Module|Attrs]),
+    catch(py_call(importlib:import_module(Module), Root), _, fail), !,
+    py_resolve_attrs(Root, Attrs, Value).
+py_resolve_path(Spec, Value) :-
+    py_path_parts(Spec, [Builtin|Attrs]),
+    py_call(importlib:import_module(builtins), Builtins),
+    py_get_attr(Builtins, Builtin, Root),
+    py_resolve_attrs(Root, Attrs, Value).
+
+py_resolve_value(Atom, Value) :-
+    atom(Atom),
+    atom_concat('&', _, Atom),
+    catch(nb_getval(Atom, Bound), _, fail), !,
+    Value = Bound.
+py_resolve_value(Value, Value).
+
+py_callable(Value) :-
+    catch(py_call(builtins:callable(Value), @(true)), _, fail).
+
+py_call_callable(Callable0, Args, Result) :-
+    py_resolve_value(Callable0, Callable),
+    py_callable(Callable),
+    compound_name_arguments(Call, '__call__', Args),
+    py_call(Callable:Call, Result).
+
+'py-atom'(Spec, Result) :-
+    py_resolve_path(Spec, Result).
+
+'py-dot'(Obj0, Attr, Result) :-
+    py_resolve_value(Obj0, Obj),
+    py_get_attr(Obj, Attr, Result).
 
 %%% Eval: %%%
-eval(C, Out) :- translate_expr(C, Goals, Out),
+eval(C, Out) :- once(translate_expr(C, Goals, Out)),
                 call_goals(Goals).
 
 call_goals([]).
@@ -269,19 +295,7 @@ retractPredicate(_, false).
 ensure_metta_ext(Path, Path) :- file_name_extension(_, metta, Path), !.
 ensure_metta_ext(Path, PathWithExt) :- file_name_extension(Path, metta, PathWithExt).
 
-'import!'(Space, File, true) :- catch(importer_helper(Space, File), _, fail).
-importer_helper(Space, File) :- atom_string(File, SFile),
-                                working_dir(Base),
-                                ( file_name_extension(ModPath, 'py', SFile)
-                                  -> absolute_file_name(SFile, Path, [relative_to(Base)]),
-                                     file_directory_name(Path, Dir),
-                                     file_base_name(ModPath, ModuleName),
-                                     py_call(sys:path:append(Dir), _),
-                                     py_call(builtins:'__import__'(ModuleName), _)
-                                   ; ( Path = SFile ; atomic_list_concat([Base, '/', SFile], Path) ),
-                                     ensure_metta_ext(Path, PathWithExt),
-                                     exists_file(PathWithExt), !,
-                                     load_metta_file(PathWithExt, _, Space) ).
+'import!'(Space, File, Out) :- he_bridge_import(Space, File, Out).
 
 :- dynamic translator_rule/1.
 'add-translator-rule!'(HV, true) :- ( translator_rule(HV)
@@ -295,15 +309,24 @@ register_fun(N) :- (fun(N) -> true ; assertz(fun(N))).
 :- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
                           '<','>','==', '!=', '=', '=?', '<=', '>=', and, or, xor, implies, not, sqrt, exp, log, cos, sin,
                           'first-from-pair', 'second-from-pair', 'car-atom', 'cdr-atom', 'unique-atom', 'alpha-unique-atom',
-                          repr, repra, parse, 'println!', 'readln!', test, assert, 'mm2-exec', atom_concat, atom_chars, copy_term, term_hash,
+                          repr, repra, parse, 'println!', 'readln!', test, assert, nop, size, 'count-atoms',
+                          'mm2-exec', atom_concat, atom_chars, copy_term, term_hash,
                           foldl, first, last, append, length, 'size-atom', sort, msort, member, 'is-member', 'exclude-item', list_to_set, maplist, eval, reduce, 'import!',
-                          'add-atom', 'remove-atom', 'get-atoms', match, 'is-var', 'is-expr', 'is-space', 'get-mettatype',
-                          decons, 'decons-atom', 'py-call', 'get-type', 'get-metatype', '=alpha', concat, sread, cons, reverse,
+                          'new-space', 'add-atom', 'add-atom-nodup', 'remove-atom', 'get-atoms', match, 'with-space-snapshot', 'is-var', 'is-expr', 'is-space', 'get-mettatype',
+                          decons, 'decons-atom', 'py-call', 'py-atom', 'py-dot', 'get-type', 'get-metatype', '=alpha', concat, sread, cons, reverse,
                           '#+','#-','#*','#div','#//','#mod','#min','#max','#<','#>','#=','#\\=','set_hook',
                           'union-atom', 'cons-atom', 'intersection-atom', 'subtraction-atom', 'index-atom', id,
                           'pow-math', 'sqrt-math', 'sort-atom','abs-math', 'log-math', 'trunc-math', 'ceil-math',
                           'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math','random-int','random-float',
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
                           'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time', library, exists_file,
-                          import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate,
-                          'add-translator-rule!', 'remove-translator-rule!', argv]).
+	                          'new-state', 'get-doc', 'help!',
+	                          import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate,
+	                          'add-translator-rule!', 'remove-translator-rule!', argv, 'pragma!',
+	                          'register-module!', 'mod-space!', 'module-inventory!',
+	                          'mork:new-space', 'mork:add-atom', 'mork:match', 'mork:size', 'mork:get-atoms',
+	                          'mork:clone', 'mork:step!', 'mork:dump!', 'mork:open-act']).
+:- ( metta_profile(Profile),
+      current_predicate(install_profile/1)
+   -> install_profile(Profile)
+   ; true ).

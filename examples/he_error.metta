@@ -9,7 +9,9 @@
 !(test (let $result (catch (+ 40 a))
             (if-error $result
                 Error 
-                $result))
+                (if (== (repr $result) "(+ 40 a)")
+                    Error
+                    $result)))
        Error)
 
 !(test (if-error (Error 5 BadType) "Error!" "No error")

@@ -1,0 +1,7 @@
+# These are allowed divergences only because the copied HE spec text
+# does not specify the corresponding behavior.
+#
+# subject                       PeTTa --he       upstream HE
+quote-output-shape              (+ 1 2)          (quote (+ 1 2))
+signed-percent-minus-7-3        2                -1
+integer-slash-350003-5          70000.6          70000

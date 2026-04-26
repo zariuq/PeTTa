@@ -1,0 +1,7 @@
+(: => (-> Expression Expression Atom Atom))
+(= (=> (cons , $args) $C $stvImp)
+   (chain (cut) $discard (add-atom &self (= $C one))))
+(= (=> $A $C $stvImp)
+   (add-atom &self (= $C two)))
+!(=> (, a b) c tv)
+!(assertPeTTaTest (collapse (match &self (= c $body) $body)) (one))

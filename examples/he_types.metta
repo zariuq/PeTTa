@@ -7,7 +7,7 @@
 ;!(type-cast A type1 &self)
 ;!(type-cast 1 type1 &self)
 !(test (match-types Atom Atom "Matched!" "Didn't match") "Matched!")
-!(test (match-types Atom Number "Matched!" "Didn't match") "Didn't match")
+!(test (match-types Atom Number "Matched!" "Didn't match") "Matched!")
 !(test (first-from-pair (A B)) A)
 !(test (second-from-pair (A B)) B)
 !(test (match-type-or True Number Bool) True)

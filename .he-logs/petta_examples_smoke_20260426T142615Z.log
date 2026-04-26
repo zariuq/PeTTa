@@ -1,0 +1,152 @@
+PASS examples/and_or.metta
+PASS examples/atomops.metta
+PASS examples/booleansolver.metta
+PASS examples/builin_types.metta
+PASS examples/callquoteevalreduce.metta
+PASS examples/callquoteevalreduce2.metta
+PASS examples/case.metta
+PASS examples/case2.metta
+PASS examples/caseconstrain.metta
+PASS examples/caseempty.metta
+PASS examples/casenew.metta
+PASS examples/chain.metta
+PASS examples/collapse.metta
+PASS examples/comments.metta
+PASS examples/constanthead.metta
+PASS examples/curry.metta
+PASS examples/cut.metta
+PASS examples/empty.metta
+PASS examples/eval.metta
+PASS examples/factorial.metta
+PASS examples/fib.metta
+PASS examples/fibadd.metta
+PASS examples/fibsmart.metta
+PASS examples/fibsmartimport.metta
+PASS examples/foldall.metta
+PASS examples/foldallmatch.metta
+PASS examples/foldallspacecount.metta
+PASS examples/forall.metta
+PASS examples/functionhead.metta
+PASS examples/functionhead2.metta
+PASS examples/functionhead3.metta
+PASS examples/functionremoval.metta
+PASS examples/functionremovalspec.metta
+PASS examples/functiontypes.metta
+SKIP examples/git_import.metta (network git import)
+SKIP examples/git_import2.metta (network git import plus build step)
+SKIP examples/greedy_chess.metta (interactive chess REPL)
+SKIP examples/he_assert.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_atomspace.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_equalreduct.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_error.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_evaluation.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_math.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_minimalmetta.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_quoting.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+SKIP examples/he_types.metta (HE profile example; covered by run_he_profile_suite.sh under --he)
+PASS examples/holbenchmark.metta
+PASS examples/holfunctions.metta
+PASS examples/holfunctions_intrinsicop.metta
+PASS examples/hyperpose_primes.metta
+PASS examples/identity.metta
+PASS examples/if.metta
+PASS examples/if2.metta
+PASS examples/if3.metta
+PASS examples/if4.metta
+PASS examples/ifcasenondet.metta
+PASS examples/ifsimple.metta
+PASS examples/invertfunction.metta
+PASS examples/invertpeanoplus.metta
+PASS examples/iter.metta
+PASS examples/lambda.metta
+PASS examples/let_superpose_if_case.metta
+PASS examples/letext.metta
+PASS examples/letlet.metta
+PASS examples/letstar.metta
+PASS examples/library.metta
+PASS examples/listhead.metta
+SKIP examples/llm_cities.metta (external LLM/API example)
+PASS examples/logicprog.metta
+PASS examples/logicprogset.metta
+PASS examples/matchnested.metta
+PASS examples/matchnested2.metta
+PASS examples/matchsingle.metta
+PASS examples/matchtypes.metta
+PASS examples/matespace.metta
+PASS examples/matespace2.metta
+PASS examples/matespacefast.metta
+PASS examples/math.metta
+PASS examples/meta_types.metta
+PASS examples/metta4_prog.metta
+PASS examples/metta4_streams.metta
+PASS examples/mettaset.metta
+PASS examples/multicall.metta
+PASS examples/multiset_operations.metta
+PASS examples/mutex_and_transaction.metta
+PASS examples/myinterpreter.metta
+PASS examples/nars_direct.metta
+PASS examples/nars_tuffy.metta
+PASS examples/nestedcons.metta
+PASS examples/nilbc.metta
+PASS examples/once.metta
+PASS examples/parametric_types.metta
+PASS examples/parse.metta
+PASS examples/partialdef.metta
+PASS examples/patrick_iterate_fib.metta
+PASS examples/patrick_iterate_quad.metta
+PASS examples/patrick_test.metta
+PASS examples/peano.metta
+PASS examples/peanofast.metta
+PASS examples/permutations.metta
+PASS examples/pln_direct.metta
+PASS examples/pln_roman.metta
+PASS examples/pln_tuffy.metta
+PASS examples/plntest.metta
+PASS examples/plntestdirect.metta
+PASS examples/prologimport.metta
+PASS examples/python.metta
+PASS examples/python_import.metta
+PASS examples/recursive_types.metta
+PASS examples/recursive_types2.metta
+SKIP examples/repl.metta (interactive REPL)
+PASS examples/repr.metta
+PASS examples/roman_test.metta
+PASS examples/scale.metta
+PASS examples/selfprog.metta
+PASS examples/smartdispatch.metta
+PASS examples/spacefunction.metta
+PASS examples/spaces.metta
+PASS examples/spaces2.metta
+PASS examples/spaces3.metta
+PASS examples/spaces_find.metta
+PASS examples/spaces_removeallatoms.metta
+PASS examples/spaces_succeedspredicate.metta
+PASS examples/specialize.metta
+PASS examples/specializecyclic.metta
+PASS examples/specializefunctiontypes.metta
+PASS examples/state.metta
+PASS examples/streamops.metta
+PASS examples/string.metta
+PASS examples/supercollapse.metta
+PASS examples/superpose_nested.metta
+PASS examples/superpose_primes.metta
+PASS examples/tabling_fib.metta
+PASS examples/test_alpha_unique_atom.metta
+PASS examples/test_string_comments.metta
+SKIP examples/test_unify_eval_branches.metta (HE/lib_he compatibility example; covered under --he)
+PASS examples/tests.metta
+PASS examples/tilepuzzle.metta
+SKIP examples/torch.metta (external PyTorch dependency)
+PASS examples/translatepredicate.metta
+PASS examples/translatorrule.metta
+PASS examples/translatorrule_fib.metta
+PASS examples/translatorrule_for.metta
+PASS examples/twostage.metta
+PASS examples/types.metta
+PASS examples/types_dependent.metta
+PASS examples/types_nondet.metta
+PASS examples/xor.metta
+
+Default PeTTa examples smoke:
+  total=148 ran=132 skipped=16 passed=132 failed=0 timed_out=0
+  log=/home/zar/claude/tmp/petta-he-profile/.he-logs/petta_examples_smoke_20260426T142615Z.log

@@ -33,8 +33,15 @@ specialize_call(HV, AVs, Out, Goal) :- %1. Retrieve a copy of all meta-clauses s
                                              Arity is N + 1,
                                              assertz(arity(SpecName, Arity)),
                                              ( %4.2. Re-use the type definition of the parent function for the specialization:
-                                               findall(TypeChain, catch(match('&self', [':', HV, TypeChain], TypeChain, TypeChain), _, fail), TypeChains),
-                                               forall(member(TypeChain, TypeChains), add_sexp('&self', [':', SpecName, TypeChain])),
+                                               ( he_profile_enabled
+                                               -> he_function_typechains(HV, TypeChains)
+                                               ;  findall(TypeChain,
+                                                          catch(match('&self', [':', HV, TypeChain], TypeChain, TypeChain), _, fail),
+                                                          TypeChains)
+                                               ),
+                                               forall(member(TypeChain, TypeChains),
+                                                      ( add_sexp('&self', [':', SpecName, TypeChain]),
+                                                        he_note_space_fact_added('&self', [':', SpecName, TypeChain]) )),
                                                %4.3 Translate specialized MeTTa clauseses to Prolog, keeping track of the function we are compiling through recursion:
                                                maplist({SpecName}/[fun_meta(ArgsNorm,BodyExpr),clause_info(Input,Clause)]>>
                                                        ( Input = [=,[SpecName|ArgsNorm],BodyExpr], translate_clause(Input,Clause,false) ), MetaList, ClauseInfos),
@@ -45,6 +52,7 @@ specialize_call(HV, AVs, Out, Goal) :- %1. Retrieve a copy of all meta-clauses s
                                                ( asserta(Clause, Ref),
                                                  assertz(translated_from(Ref, Input)),
                                                  add_sexp('&self', Input),
+                                                 he_note_space_fact_added('&self', Input),
                                                  format(atom(Label), "metta specialization (~w)", [SpecName]),
                                                  maybe_print_compiled_clause(Label, Input, Clause) ))
                                                %4.6 Ok specialized, but if we did not succeed ensure the specialization is retracted:
@@ -94,6 +102,7 @@ specializable_arg(Arg) :- nonvar(Arg),
 %Forget function symbol:
 forget_symbol(Name) :- retractall('&self'(=, [Name|_], _)),
                        retractall('&self'(:, Name, _)),
+                       he_invalidate_function_typechain_cache(Name),
                        findall(Ref, ( current_predicate(Name/A), functor(H, Name, A), clause(H, _, Ref) ), Refs),
                        forall(member(R, Refs), erase(R)),
                        retractall(arity(Name,_)),

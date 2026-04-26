@@ -1,0 +1,15 @@
+; Translated from PeTTa to HE (23 atoms)
+; Source: /home/zar/claude/tmp/petta-he-profile/examples/test_string_comments.metta
+
+!(assertPeTTaTest ")" ")")
+!(assertPeTTaTest "(" "(")
+!(assertPeTTaTest ";" ";")
+!(assertPeTTaTest (quote ";") ";")
+!(assertPeTTaTest "foo;bar" "foo;bar")
+!(assertPeTTaTest ";;;" ";;;")
+!(assertPeTTaTest ";start" ";start")
+!(assertPeTTaTest "end;" "end;")
+!(assertPeTTaTest "quote: \"" "quote: \"")
+!(assertPeTTaTest "path\\file" "path\\file")
+(= (test-func) result)
+!(assertPeTTaTest (test-func) result)

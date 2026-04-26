@@ -1,0 +1,50 @@
+
+>>> matespace2 (timeout=300s)
+  default: wall=24.20 rss=572444 exit=0
+  --he:    wall=300.00 rss=2128 exit=124
+
+>>> matespacefast (timeout=300s)
+  default: wall=20.03 rss=3416540 exit=0
+  --he:    wall=300.00 rss=2084 exit=124
+
+>>> matespace (timeout=300s)
+  default: wall=16.73 rss=635948 exit=0
+  --he:    wall=300.00 rss=2128 exit=124
+
+>>> peano (timeout=300s)
+  default: wall=6.06 rss=19512 exit=0
+  --he:    wall=300.00 rss=2084 exit=124
+
+>>> holbenchmark (timeout=300s)
+  default: wall=4.51 rss=571240 exit=0
+  --he:    wall=300.00 rss=2256 exit=124
+
+>>> hyperpose_primes (timeout=300s)
+  default: wall=4.30 rss=16664 exit=0
+  --he:    wall=182.45 rss=8640272 exit=1
+
+>>> scale (timeout=300s)
+  default: wall=3.97 rss=404104 exit=0
+  --he:    wall=300.00 rss=2128 exit=124
+
+>>> peanofast (timeout=300s)
+  default: wall=1.86 rss=345592 exit=0
+  --he:    wall=255.31 rss=354836 exit=0
+
+>>> patrick_iterate_quad (timeout=300s)
+  default: wall=0.99 rss=16180 exit=0
+  --he:    wall=167.12 rss=3953580 exit=0
+
+>>> nars_tuffy (timeout=300s)
+  default: wall=0.49 rss=20620 exit=0
+  --he:    wall=300.00 rss=2128 exit=124
+
+>>> pln_roman (timeout=300s)
+  default: wall=0.34 rss=19744 exit=0
+  --he:    wall=300.00 rss=2128 exit=124
+
+>>> invertpeanoplus (timeout=300s)
+  default: wall=0.15 rss=15828 exit=0
+  --he:    wall=300.00 rss=2128 exit=124
+
+TSV /home/zar/claude/tmp/petta-he-profile/.he-logs/he_translation_timeout_rerun_300s_20260425T085732Z.tsv

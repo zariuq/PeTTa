@@ -1,0 +1,94 @@
+Running translator tests...
+
+=== HE → PeTTa Tests ===
+  ✓ 1: chain → let
+  ✓ 2: nested chain → nested let
+  ✓ 3: collapse-bind → collapse
+  ✓ 4: superpose-bind → superpose
+  ✓ 5: switch → case
+  ✓ 6: atom-subst → let
+  ✓ 7: nop → let $fresh X () (hygiene) (fresh binder: $__tr_discard_1)
+  ✓ 8: function/return → unwrap
+  ✓ 9: if passthrough (translate children)
+  ✓ 10: equation with chain body
+  ✓ 11: type declaration passthrough
+  ✓ 12: bare fact passthrough
+  ✓ 13: let passthrough (shared)
+  ✓ 14: match passthrough (shared)
+  ✓ 16: add-atom passthrough (shared)
+  ✓ 17: remove-atom passthrough (shared)
+  ✓ 18: get-atoms passthrough (shared)
+  ✓ 23: explicit space handle passthrough (shared atomspace handle)
+  ✓ 19: new-space passthrough (extension surface)
+  ✓ 20: new-state passthrough (shared surface)
+  ✓ 21: get-state passthrough (shared surface)
+  ✓ 22: change-state! passthrough (shared surface)
+  ✓ 24: unique → collapse + unique-atom + superpose (fresh binders: $__tr_collapsed_2, $__tr_unique_3)
+  ✓ 15: deduce-And → let* sequencing
+
+=== HE → PeTTa Trusted Tests ===
+  ✓ 1: new-space → trusted PeTTa gensym call
+  ✓ 2: change-state! return value → (State val) wrapper via chain
+
+=== HE → PeTTa Program Tests ===
+  ✓ 1: backchain kernel drops obsolete bool-And helper
+  ✓ 2: keep bool-And helper when other RHS And uses remain
+
+=== PeTTa → HE Tests ===
+  ✓ 1: progn (2-arg) → nested let (fresh vars) (fresh binder: $__tr_discard_5)
+  ✓ 2: progn (3-arg) → nested let (fresh vars) (fresh binder: $__tr_discard_6)
+  ✓ 3: progn (0-arg) → unit
+  ✓ 4: progn (1-arg) → translated term
+  ✓ 5: progn (4-arg) → nested lets (fresh vars) (fresh binder: $__tr_discard_8)
+  ✓ 6: prog1 → let + let (fresh vars) (fresh binder: $__tr_result_11)
+  ✓ 7: prog1 (0-arg) → unit
+  ✓ 8: prog1 (1-arg) → translated term
+  ✓ 9: prog1 (3-arg) → let + nested let (fresh vars) (fresh binder: $__tr_result_13)
+  ✓ 100: REGRESSION: prog1 with $__r in source (was captured) (fresh binder: $__tr_result_16)
+  ✓ 101: REGRESSION: progn with $_ in source (was captured) (fresh binder: $__tr_discard_18)
+  ✓ 10: @< → <s
+  ✓ 11: @> → not(<s)
+  ✓ 12: if passthrough
+  ✓ 15: add-atom passthrough (shared)
+  ✓ 16: remove-atom passthrough (shared)
+  ✓ 17: match passthrough (shared)
+  ✓ 18: get-atoms passthrough (shared)
+  ✓ 23: explicit space handle passthrough (shared atomspace handle)
+  ✓ 19: new-space passthrough (extension surface)
+  ✓ 20: new-state passthrough (shared surface)
+  ✓ 21: get-state passthrough (shared surface)
+  ✓ 22: change-state! passthrough (shared surface)
+  ✓ 24: unique-atom(collapse ...) → collapse(unique ...)
+  ✓ 13: equation with progn body (fresh vars) (fresh binder: $__tr_discard_19)
+  ✓ 14: foldall → let(collapse) + foldl-atom (fresh binders: $__tr_acc_21, $__tr_item_22)
+  ✓ 25: 3-arg foldl-atom → binder form (symbol combiner) (fresh binders: $__tr_acc_23, $__tr_item_24)
+  ✓ 26: 3-arg foldl-atom → binder form (expression combiner) (fresh binders: $__tr_acc_25, $__tr_item_26)
+  ✓ 27: raw reduce → eval
+  ✓ 28: collapse(raw reduce ...) → collapse(eval ...)
+  ✓ 29: length(collapse ...) → bind + size-atom (fresh tuple binder: $__tr_tuple_27)
+  ✓ 30: test scalar → assertEqual lowering
+  ✓ 31: test length(collapse ...) → assertEqual lowering (fresh tuple binder: $__tr_tuple_28)
+  ✓ 32: generic length stays length (compat helper is file-level)
+
+=== PeTTa → HE Trusted Tests ===
+  ✓ 1: trusted gensym call → new-space
+
+=== PeTTa → HE Extended Mode Tests ===
+  ✓ 1: foldall (extended) → let(collect) + foldl-atom (fresh binders: $__tr_acc_30, $__tr_item_31)
+
+=== PeTTa → HE Optimization Tests ===
+  ✓ 1: discard let → chain when body ignores binder
+  ✓ 2: discard let → nop on unit tail
+  ✓ 3: result let → direct expression
+  ✓ 4: keep foldall let(collapse ...) intact
+
+=== Normalization Tests (HE → PeTTa → HE normal form) ===
+  ✓ 1: chain normalizes to let
+  ✓ 2: nested chain normalizes to nested lets
+  ✓ 3: if with chain normalizes in branch
+---
+Running path compatibility tests...
+
+=== File Translation Path Compatibility Tests ===
+  ✗ 1: plain local import spec rewrites relative to translated output
+All tests passed.

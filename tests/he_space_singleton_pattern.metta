@@ -1,0 +1,10 @@
+!(add-atom &wuspace (wu))
+!(add-atom &wuspace (wu 42))
+
+!(assertPeTTaTest (collapse (match &wuspace ($x) ($x))) ((wu)))
+!(assertPeTTaTest (collapse (match &wuspace ($x) $x)) (wu))
+!(assertPeTTaTest (collapse (once (match &wuspace (wu) True))) (true))
+!(assertPeTTaTest (collapse (once (match &wuspace (missing) True))) ())
+!(assertPeTTaTest (collapse (once (match &wuspace ($x) True))) (true))
+!(assertPeTTaTest (== () (collapse (once (match &wuspace (missing) True)))) true)
+!(assertPeTTaTest (== () (collapse (once (match &wuspace (wu) True)))) false)

@@ -1,0 +1,13 @@
+source	default_wall	default_rss	default_exit	he_wall	he_rss	he_exit	ratio_wall	reading
+examples/matespace2.metta	24.20	572444	0	300.00	2128	124	12,40	--he too slow even at 300s
+examples/matespacefast.metta	20.03	3416540	0	300.00	2084	124	14,98	--he too slow even at 300s
+examples/matespace.metta	16.73	635948	0	300.00	2128	124	17,93	--he too slow even at 300s
+examples/peano.metta	6.06	19512	0	300.00	2084	124	49,50	--he too slow even at 300s
+examples/holbenchmark.metta	4.51	571240	0	300.00	2256	124	66,52	--he too slow even at 300s
+examples/hyperpose_primes.metta	4.30	16664	0	182.45	8640272	1	42,43	exit-mismatch default=0 he=1
+examples/scale.metta	3.97	404104	0	300.00	2128	124	75,57	--he too slow even at 300s
+examples/peanofast.metta	1.86	345592	0	255.31	354836	0	137,26	completed under both, ratio=137,26x
+examples/patrick_iterate_quad.metta	0.99	16180	0	167.12	3953580	0	168,81	completed under both, ratio=168,81x
+examples/nars_tuffy.metta	0.49	20620	0	300.00	2128	124	612,24	non-termination under --he
+examples/pln_roman.metta	0.34	19744	0	300.00	2128	124	882,35	non-termination under --he
+examples/invertpeanoplus.metta	0.15	15828	0	300.00	2128	124	2000,00	non-termination under --he
