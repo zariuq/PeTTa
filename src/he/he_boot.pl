@@ -4,6 +4,8 @@
 :- dynamic he_runtime_loaded/0.
 :- dynamic he_state_loaded/0.
 :- dynamic he_types_loaded/0.
+:- dynamic he_amp_prefixed_atom_cache/1.
+:- dynamic he_plain_atom_cache/1.
 :- dynamic metta_profile/1.
 :- dynamic 'bind!'/3.
 :- dynamic 'change-state!'/3.
@@ -54,8 +56,12 @@
 :- multifile he_known_fun_dispatch/9.
 :- multifile he_note_space_fact_added/2.
 :- multifile he_note_space_fact_removed/2.
+:- multifile he_note_fun_registered/1.
+:- multifile he_note_fun_removed/1.
 :- multifile he_space_fact_added_hook/2.
 :- multifile he_space_fact_removed_hook/2.
+:- multifile he_fun_registered_hook/1.
+:- multifile he_fun_removed_hook/1.
 :- multifile he_post_builtin_dispatch/5.
 :- multifile he_pre_builtin_dispatch/5.
 :- multifile he_unknown_or_callable_dispatch/5.
@@ -79,8 +85,12 @@
 :- discontiguous he_known_fun_dispatch/9.
 :- discontiguous he_note_space_fact_added/2.
 :- discontiguous he_note_space_fact_removed/2.
+:- discontiguous he_note_fun_registered/1.
+:- discontiguous he_note_fun_removed/1.
 :- discontiguous he_space_fact_added_hook/2.
 :- discontiguous he_space_fact_removed_hook/2.
+:- discontiguous he_fun_registered_hook/1.
+:- discontiguous he_fun_removed_hook/1.
 :- discontiguous he_post_builtin_dispatch/5.
 :- discontiguous he_pre_builtin_dispatch/5.
 :- discontiguous he_unknown_or_callable_dispatch/5.
@@ -112,7 +122,19 @@ set_metta_profile(Profile) :-
 
 he_space_ref_atom(Term) :-
     atom(Term),
-    atom_prefix(Term, '&').
+    he_amp_prefixed_atom(Term).
+
+he_amp_prefixed_atom(Term) :-
+    he_plain_atom_cache(Term), !,
+    fail.
+he_amp_prefixed_atom(Term) :-
+    he_amp_prefixed_atom_cache(Term), !.
+he_amp_prefixed_atom(Term) :-
+    atom_prefix(Term, '&'), !,
+    assertz(he_amp_prefixed_atom_cache(Term)).
+he_amp_prefixed_atom(Term) :-
+    assertz(he_plain_atom_cache(Term)),
+    fail.
 
 mark_he_runtime_loaded :-
     ( he_runtime_loaded -> true ; assertz(he_runtime_loaded) ).
@@ -157,9 +179,17 @@ he_note_space_fact_added(Space, Term) :-
     forall(he_space_fact_added_hook(Space, Term), true).
 he_note_space_fact_removed(Space, Term) :-
     forall(he_space_fact_removed_hook(Space, Term), true).
+he_note_fun_registered(Name) :-
+    forall(he_fun_registered_hook(Name), true).
+he_note_fun_removed(Name) :-
+    forall(he_fun_removed_hook(Name), true).
 he_space_fact_added_hook(_, _) :-
     fail.
 he_space_fact_removed_hook(_, _) :-
+    fail.
+he_fun_registered_hook(_) :-
+    fail.
+he_fun_removed_hook(_) :-
     fail.
 he_invalidate_function_typechain_cache(_) :-
     \+ he_types_loaded, !.

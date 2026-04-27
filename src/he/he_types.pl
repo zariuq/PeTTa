@@ -9,6 +9,9 @@
 :- dynamic 'get-type'/2.
 :- dynamic he_type_fact/2.
 :- dynamic he_function_typechains_cache/2.
+:- dynamic he_function_typechains_arity_cache/3.
+:- dynamic he_no_function_typechains/1.
+:- dynamic he_no_function_typechain_arity/2.
 
 :- multifile 'get-metatype'/2.
 :- multifile 'get-type'/2.
@@ -74,15 +77,33 @@ he_get_type_candidate(X, ['StateMonad', T]) :-
 he_get_type_candidate(X, T) :- atom(X), he_builtin_type(X, T).
 he_get_type_candidate(X, T) :-
     is_list(X), !,
-    ( get_function_type(X, T)
-    ; \+ once(get_function_type(X, _)),
-      match('&self', [':', X, T], T, _)
-    ; \+ once(get_function_type(X, _)),
-      \+ once(match('&self', [':', X, _], _, _)),
-      he_data_tuple_type(X, T)
+    ( he_list_function_types(X, Types)
+    -> member(T, Types)
+    ; he_self_or_data_tuple_type(X, T)
     ).
 he_get_type_candidate(X, T) :- get_function_type(X, T).
-he_get_type_candidate(X, T) :- match('&self', [':',X,T], T, _).
+he_get_type_candidate(X, T) :- he_self_type_fact(X, T).
+
+he_list_function_types([Fun|Args], Types) :-
+    atom(Fun),
+    !,
+    \+ he_no_function_typechains(Fun),
+    length(Args, Arity),
+    \+ he_no_function_typechain_arity(Fun, Arity),
+    he_function_typechains_for_arity(Fun, Arity, Matching),
+    ( Matching == []
+    -> assertz(he_no_function_typechain_arity(Fun, Arity)),
+       fail
+    ;  findall(Type,
+               ( member(FType, Matching),
+                 he_apply_list_function_type(FType, Args, Type)
+               ),
+               Types),
+       Types \= []
+    ).
+he_list_function_types(X, Types) :-
+    findall(Type, get_function_type(X, Type), Types),
+    Types \= [].
 
 get_type_candidate(X, 'Number')   :- number(X), !.
 get_type_candidate(X, _) :- \+ he_profile_enabled, var(X), !.
@@ -123,19 +144,16 @@ get_type_candidate(X, ['StateMonad', T]) :-
     state_cell(Id, T, _), !.
 get_type_candidate(X, T) :- he_profile_enabled, atom(X), he_builtin_type(X, T).
 get_type_candidate(X, T) :- he_profile_enabled, is_list(X), !,
-                            ( get_function_type(X, T)
-                            ; \+ once(get_function_type(X, _)),
-                              match('&self', [':', X, T], T, _)
-                            ; \+ once(get_function_type(X, _)),
-                              \+ once(match('&self', [':', X, _], _, _)),
-                              he_data_tuple_type(X, T)
+                            ( he_list_function_types(X, Types)
+                            -> member(T, Types)
+                            ; he_self_or_data_tuple_type(X, T)
                             ).
 get_type_candidate(X, T) :- get_function_type(X,T).
 get_type_candidate(X, T) :- \+ he_profile_enabled,
                             \+ get_function_type(X, _),
                             is_list(X),
                             maplist('get-type', X, T).
-get_type_candidate(X, T) :- match('&self', [':',X,T], T, _).
+get_type_candidate(X, T) :- he_self_type_fact(X, T).
 
 'get-metatype'(X, 'Variable') :- var(X), !.
 'get-metatype'(X, 'Grounded') :- number(X), !.
@@ -154,8 +172,7 @@ get_type_candidate(X, T) :- match('&self', [':',X,T], T, _).
 
 he_function_type_term(Fun, Type) :-
     \+ atom(Fun),
-    'get-type'(Fun, Type),
-    he_arrow_typechain(Type).
+    he_non_atom_function_type(Fun, Type).
 he_function_type_term(Fun, Type) :-
     atom(Fun),
     he_function_typechain(Fun, Type).
@@ -165,12 +182,101 @@ he_function_type_parts([->|TypeItems], ArgTypes, ReturnType) :-
 
 he_arrow_typechain([->|_]).
 
+he_non_atom_function_type(Fun, Type) :-
+    he_self_type_fact(Fun, Type),
+    he_arrow_typechain(Type).
+he_non_atom_function_type(Fun, Type) :-
+    he_non_atom_head_may_return_arrow(Fun),
+    'get-type'(Fun, Type),
+    he_arrow_typechain(Type).
+
+he_non_atom_head_may_return_arrow([Head|Args]) :-
+    atom(Head), !,
+    length(Args, Arity),
+    he_function_typechains_for_arity(Head, Arity, TypeChains),
+    member(TypeChain, TypeChains),
+    he_function_type_parts(TypeChain, _, ReturnType),
+    he_possible_arrow_return_type(ReturnType), !.
+
+he_possible_arrow_return_type(Type) :-
+    var(Type), !.
+he_possible_arrow_return_type([->|_]) :- !.
+he_possible_arrow_return_type([':', _, Type]) :-
+    he_possible_arrow_return_type(Type).
+
+he_apply_function_type(FType, Args, T) :-
+    ground(FType), !,
+    he_function_type_parts(FType, ArgTypes, ReturnType),
+    same_length(Args, ArgTypes),
+    he_bind_argument_types(Args, ArgTypes),
+    T = ReturnType.
 he_apply_function_type(FType, Args, T) :-
     copy_term(FType-Args, FTypeCopy-ArgsCopy),
     he_function_type_parts(FTypeCopy, ArgTypesCopy, ReturnTypeCopy),
     same_length(ArgsCopy, ArgTypesCopy),
     he_bind_argument_types(ArgsCopy, ArgTypesCopy),
     copy_term(ReturnTypeCopy, T).
+
+he_apply_list_function_type(FType, Args, Type) :-
+    he_try_ground_function_type(FType, Args, Decision), !,
+    Decision = type(T0),
+    he_normalize_type_expr(T0, Type).
+he_apply_list_function_type(FType, Args, Type) :-
+    he_apply_function_type(FType, Args, T0),
+    he_normalize_type_expr(T0, Type).
+
+he_try_ground_function_type(FType, Args, Decision) :-
+    ground(FType),
+    he_function_type_parts(FType, ArgTypes, ReturnType),
+    ( \+ same_length(Args, ArgTypes)
+    -> Decision = mismatch
+    ;  he_try_ground_arg_types(Args, ArgTypes, Decision0),
+       ( Decision0 == match
+       -> Decision = type(ReturnType)
+       ;  Decision = mismatch
+       )
+    ).
+
+he_try_ground_arg_types([], [], match).
+he_try_ground_arg_types([Arg|Args], [Expected|Types], Decision) :-
+    he_try_ground_arg_type(Arg, Expected, ArgDecision),
+    ( ArgDecision == mismatch
+    -> Decision = mismatch
+    ;  he_try_ground_arg_types(Args, Types, Decision)
+    ).
+
+he_try_ground_arg_type(_, Expected, match) :-
+    ( Expected == '%Undefined%'
+    ; Expected == 'Atom'
+    ), !.
+he_try_ground_arg_type(Arg, Expected, Decision) :-
+    var(Arg), !,
+    ( he_meta_type(Expected)
+    -> ( Expected == 'Variable' -> Decision = match ; Decision = mismatch )
+    ;  Decision = match
+    ).
+he_try_ground_arg_type(Arg, Expected, Decision) :-
+    he_fast_known_actual_type(Arg, Actual), !,
+    ( he_match_types_live(Expected, Actual)
+    -> Decision = match
+    ;  Decision = mismatch
+    ).
+he_try_ground_arg_type(Arg, Expected, Decision) :-
+    he_meta_type(Expected), !,
+    ( 'get-metatype'(Arg, Expected)
+    -> Decision = match
+    ;  Decision = mismatch
+    ).
+
+he_fast_known_actual_type(Arg, 'Number') :-
+    number(Arg), !.
+he_fast_known_actual_type(Arg, 'String') :-
+    string(Arg), !.
+he_fast_known_actual_type(true, 'Bool') :- !.
+he_fast_known_actual_type(false, 'Bool') :- !.
+he_fast_known_actual_type('True', 'Bool') :- !.
+he_fast_known_actual_type('False', 'Bool') :- !.
+he_fast_known_actual_type('&self', 'Space') :- !.
 
 he_candidate_atom_type(Atom, Type) :-
     he_profile_enabled, !,
@@ -185,6 +291,15 @@ he_candidate_atom_type(Atom, '%Undefined%') :-
     \+ get_type_candidate(Atom, _),
     \+ he_known_typed_expression(Atom).
 
+he_atom_types(Atom, ['Number']) :-
+    number(Atom), !.
+he_atom_types(Atom, ['String']) :-
+    string(Atom), !.
+he_atom_types(true, ['Bool']) :- !.
+he_atom_types(false, ['Bool']) :- !.
+he_atom_types('True', ['Bool']) :- !.
+he_atom_types('False', ['Bool']) :- !.
+he_atom_types('&self', ['Space']) :- !.
 he_atom_types(Atom, Types) :-
     findall(Type, he_candidate_atom_type(Atom, Type), Raw),
     alpha_list_to_set(Raw, Unique),
@@ -196,6 +311,18 @@ he_atom_types(Atom, Types) :-
 he_data_tuple_type(X, T) :-
     is_list(X),
     maplist('get-type', X, T).
+
+he_self_or_data_tuple_type(X, T) :-
+    ( once(he_self_type_fact(X, _))
+    -> he_self_type_fact(X, T)
+    ;  he_data_tuple_type(X, T)
+    ).
+
+he_self_type_fact(Subject, Type) :-
+    he_profile_enabled, !,
+    he_type_fact(Subject, Type).
+he_self_type_fact(Subject, Type) :-
+    match('&self', [':', Subject, Type], Type, _).
 
 %%% match_types
 
@@ -367,6 +494,35 @@ he_first_bad_actual_type(Argument, ExpectedType, ActualType) :-
     member(ActualType, ActualTypes), !.
 he_first_bad_actual_type(_, _, '%Undefined%').
 
+he_check_if_function_type_is_applicable(Atom, FuncType, ExpectedType, _Space, [], Result) :-
+    ground(FuncType),
+    ground(ExpectedType),
+    Atom = [_|Args],
+    ground(Args),
+    he_try_ground_function_type(FuncType, Args, type(ReturnType)), !,
+    he_match_types(ExpectedType, ReturnType, [], ReturnMatches),
+    ( ReturnMatches == []
+    -> Result = err([['Error', Atom, ['BadType', ExpectedType, ReturnType]]])
+    ;  Result = ok([ReturnType])
+    ).
+he_check_if_function_type_is_applicable(Atom, FuncType, ExpectedType, Space, [], Result) :-
+    ground(FuncType),
+    ground(ExpectedType),
+    Atom = [_|Args],
+    ground(Args), !,
+    he_function_type_parts(FuncType, ArgTypes, ReturnType),
+    ( \+ same_length(Args, ArgTypes)
+    -> Result = err([['Error', Atom, 'IncorrectNumberOfArguments']])
+    ;  he_check_function_args(Atom, Args, ArgTypes, Space, [], 1, ArgErrors),
+       ( ArgErrors \= []
+       -> Result = err(ArgErrors)
+       ;  he_match_types(ExpectedType, ReturnType, [], ReturnMatches),
+          ( ReturnMatches == []
+          -> Result = err([['Error', Atom, ['BadType', ExpectedType, ReturnType]]])
+          ;  Result = ok([ReturnType])
+          )
+       )
+    ).
 he_check_if_function_type_is_applicable(Atom, FuncType, ExpectedType, Space, Bindings, Result) :-
     Atom = [_|Args],
     copy_term(FuncType-ExpectedType-Args-Bindings,
@@ -479,29 +635,53 @@ he_builtin_type('system-cwd', [->, 'String']).
 he_builtin_type('system-has-args', [->, 'Bool']).
 
 he_invalidate_all_function_typechain_cache :-
-    retractall(he_function_typechains_cache(_, _)).
+    retractall(he_function_typechains_cache(_, _)),
+    retractall(he_function_typechains_arity_cache(_, _, _)),
+    retractall(he_no_function_typechains(_)),
+    retractall(he_no_function_typechain_arity(_, _)).
 
 he_invalidate_function_typechain_cache(Fun) :-
     atom(Fun), !,
-    retractall(he_function_typechains_cache(Fun, _)).
+    retractall(he_function_typechains_cache(Fun, _)),
+    retractall(he_function_typechains_arity_cache(Fun, _, _)),
+    retractall(he_no_function_typechains(Fun)),
+    retractall(he_no_function_typechain_arity(Fun, _)).
 he_invalidate_function_typechain_cache(_).
 
-he_space_fact_added_hook('&self', [':', Fun, Type]) :-
-    atom(Fun), !,
-    ( he_type_fact(Fun, Type)
+he_space_fact_added_hook('&self', [':', Subject, Type]) :-
+    !,
+    ( he_type_fact_variant(Subject, Type)
     -> true
-    ; assertz(he_type_fact(Fun, Type))
+    ; assertz(he_type_fact(Subject, Type))
     ),
-    he_invalidate_function_typechain_cache(Fun).
+    he_invalidate_type_fact_subject(Subject).
 
-he_space_fact_removed_hook('&self', [':', Fun, Type]) :-
-    atom(Fun), !,
-    retractall(he_type_fact(Fun, Type)),
-    he_invalidate_function_typechain_cache(Fun).
+he_space_fact_removed_hook('&self', [':', Subject, Type]) :-
+    !,
+    he_retract_type_fact_variant(Subject, Type),
+    he_invalidate_type_fact_subject(Subject).
+
+he_type_fact_variant(Subject, Type) :-
+    he_type_fact(StoredSubject, StoredType),
+    StoredSubject =@= Subject,
+    StoredType =@= Type, !.
+
+he_retract_type_fact_variant(Subject, Type) :-
+    forall((clause(he_type_fact(StoredSubject, StoredType), true, Ref),
+            StoredSubject =@= Subject,
+            StoredType =@= Type),
+           erase(Ref)).
+
+he_invalidate_type_fact_subject(Subject) :-
+    atom(Subject), !,
+    he_invalidate_function_typechain_cache(Subject).
+he_invalidate_type_fact_subject(_) :-
+    he_invalidate_all_function_typechain_cache.
 
 he_function_typechain_uncached(Fun, TypeChain) :-
     he_type_fact(Fun, TypeChain).
 he_function_typechain_uncached(Fun, TypeChain) :-
+    \+ he_profile_enabled,
     catch(match('&self', [':', Fun, TypeChain], TypeChain, TypeChain), _, fail),
     \+ he_type_fact(Fun, TypeChain).
 he_function_typechain_uncached(Fun, TypeChain) :-
@@ -526,6 +706,20 @@ he_function_typechains(Fun, TypeChains) :-
 he_function_typechains(Fun, TypeChains) :-
     findall(TypeChain, he_function_typechain_uncached(Fun, TypeChain), Raw),
     alpha_list_to_set(Raw, TypeChains).
+
+he_function_typechains_for_arity(Fun, _Arity, TypeChains) :-
+    he_no_function_typechains(Fun), !,
+    TypeChains = [].
+he_function_typechains_for_arity(Fun, Arity, TypeChains) :-
+    he_function_typechains_arity_cache(Fun, Arity, TypeChains), !.
+he_function_typechains_for_arity(Fun, Arity, TypeChains) :-
+    he_function_typechains(Fun, AllTypeChains),
+    ( AllTypeChains == []
+    -> assertz(he_no_function_typechains(Fun)),
+       TypeChains = []
+    ;  include(he_typechain_arity_matches_arity(Arity), AllTypeChains, TypeChains),
+       assertz(he_function_typechains_arity_cache(Fun, Arity, TypeChains))
+    ).
 
 he_known_typed_expression(X) :-
     is_list(X),
@@ -564,6 +758,10 @@ he_eval_if_expr(X, V) :-
 he_typechain_arity_matches(Args, [->|TypeItems]) :-
     append(ArgTypes, [_], TypeItems),
     same_length(Args, ArgTypes).
+
+he_typechain_arity_matches_arity(Arity, [->|TypeItems]) :-
+    length(TypeItems, TypeItemCount),
+    TypeItemCount =:= Arity + 1.
 
 he_args_type_error(Args, ExpectedTypes, _Index, Error) :-
     copy_term(Args-ExpectedTypes, ArgsCopy-ExpectedCopy),

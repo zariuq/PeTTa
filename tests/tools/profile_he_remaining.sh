@@ -18,6 +18,7 @@ Profiles reduced HE repros with SWI's profiler and writes one log per case:
   pln_roman         tests/profile_repros/he_pln_roman_step10.metta
   nars_tuffy        tests/profile_repros/he_nars_tuffy_step2.metta
   hyperpose_primes  tests/profile_repros/he_hyperpose_primes_once_reduced.metta
+  prime_find_divisor tests/profile_repros/he_prime_find_divisor_single.metta
 
 Environment:
   TIMEOUT_SECONDS   per-case profiling window in seconds (default: 120)
@@ -49,6 +50,7 @@ tilepuzzle tests/profile_repros/he_tilepuzzle_bfs_500.metta
 pln_roman tests/profile_repros/he_pln_roman_step10.metta
 nars_tuffy tests/profile_repros/he_nars_tuffy_step2.metta
 hyperpose_primes tests/profile_repros/he_hyperpose_primes_once_reduced.metta
+prime_find_divisor tests/profile_repros/he_prime_find_divisor_single.metta
 '
 
 for entry in $CASES; do

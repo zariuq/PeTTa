@@ -42,7 +42,10 @@ he_fast_plain_self_root(Term) :-
 
 he_plain_non_state_atom(Term) :-
     atom(Term),
-    \+ atom_prefix(Term, '&').
+    he_plain_atom_cache(Term), !.
+he_plain_non_state_atom(Term) :-
+    atom(Term),
+    \+ he_space_ref_atom(Term).
 
 he_plain_fast_arg(Term) :-
     var(Term), !.
@@ -98,11 +101,10 @@ he_match_equation(Space, Call, BodyPattern, OutPattern, Result) :-
     atom(Fun),
     length(CallArgs, Arity),
     he_eq_fact(Fun, Arity, HeadArgs, StoredBody0), !,
-    copy_term(HeadArgs-StoredBody0, HeadCopy-StoredBody),
-    HeadCopy = CallArgs,
+    HeadArgs = CallArgs,
     ( ground(Call)
-    -> he_eval_or_raw(StoredBody, BodyPattern)
-    ; BodyPattern = StoredBody
+    -> he_eval_or_raw(StoredBody0, BodyPattern)
+    ; BodyPattern = StoredBody0
     ),
     \+ cyclic_term(OutPattern),
     Result = OutPattern.
@@ -147,7 +149,7 @@ he_term_has_state(Term) :-
     fail.
 he_term_has_state(Term) :-
     atom(Term),
-    atom_prefix(Term, '&'),
+    he_space_ref_atom(Term),
     catch(nb_getval(Term, Bound), _, fail),
     he_state_handle(Bound, _), !.
 he_term_has_state(Term) :-

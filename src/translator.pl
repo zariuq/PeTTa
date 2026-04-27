@@ -145,12 +145,17 @@ translate_expr([H0|T0], Goals, Out) :-
                                               append(GsH, [Goal1], G1),
                                               append(G1, GsE, G2),
                                               append(G2, [test(Actual, ExpVal, Out)], Goals)
+		; HV == once, T = [[hyperpose, L]],
+		  nonvar(L), is_list(L)
+		  -> build_hyperpose_once_branches(L, Out, Branches),
+		     append(GsH, [first_solution(Out, Branches, [on_fail(continue)])], Goals)
 		; HV == once, T = [X] -> translate_expr_to_conj(X, Conj, Out),
-		                                 append(GsH, [once(Conj)], Goals)
+			                                 append(GsH, [once(Conj)], Goals)
 		; HV == hyperpose, T = [L]
 	  -> ( nonvar(L), is_list(L)
                -> build_hyperpose_branches(L, Branches),
-                  append(GsH, [concurrent_and(member((Goal,Res), Branches), (call(Goal), Out = Res))], Goals)
+                  append(GsH, [concurrent_and(member((Goal,Res), Branches),
+                                                 he_hyperpose_branch_call(Goal, Res, Out))], Goals)
                ; translate_expr(L, GsL, LV),
                  append(GsH, GsL, Inner),
                  append(Inner, [hyperpose_runtime(LV, Out)], Goals) )
@@ -443,9 +448,88 @@ build_hyperpose_branches([], []).
 build_hyperpose_branches([E|Es], [(Goal, Res)|Bs]) :- translate_expr_to_conj(E, Goal, Res),
                                                       build_hyperpose_branches(Es, Bs).
 
+build_hyperpose_once_branches([], _, []).
+build_hyperpose_once_branches([E|Es], Out, [once(he_hyperpose_once_branch_call(Goal))|Bs]) :-
+    translate_expr_to_conj(E, Conj, Val),
+    build_branch(Conj, Val, Out, Goal),
+    build_hyperpose_once_branches(Es, Out, Bs).
+
 %Runtime hyperpose path for variable/computed list arguments.
-hyperpose_runtime(Exprs, Out) :- is_list(Exprs),
-                                 concurrent_and(member(Expr, Exprs), eval(Expr, Out)).
+hyperpose_runtime(Exprs, Out) :-
+    is_list(Exprs),
+    concurrent_and(member(Expr, Exprs), he_hyperpose_eval_expr(Expr, Out)).
+
+he_hyperpose_eval_expr(Expr, Out) :-
+    he_hyperpose_branch_call(eval(Expr, Out), Out, Out).
+
+he_hyperpose_once_branch_call(Goal) :-
+    he_hyperpose_branch_call(Goal, true, true).
+
+:- dynamic he_hyperpose_thread_profile_enabled/0.
+:- dynamic he_hyperpose_thread_profile_seq/1.
+:- dynamic he_hyperpose_thread_profile_sample/6.
+
+he_hyperpose_thread_profile_enable :-
+    retractall(he_hyperpose_thread_profile_sample(_, _, _, _, _, _)),
+    retractall(he_hyperpose_thread_profile_seq(_)),
+    assertz(he_hyperpose_thread_profile_seq(0)),
+    ( he_hyperpose_thread_profile_enabled -> true
+    ; assertz(he_hyperpose_thread_profile_enabled)
+    ).
+
+he_hyperpose_thread_profile_disable :-
+    retractall(he_hyperpose_thread_profile_enabled).
+
+he_hyperpose_branch_call(Goal, Res, Out) :-
+    he_hyperpose_thread_profile_enabled, !,
+    he_hyperpose_profiled_branch_call(Goal, Res, Out).
+he_hyperpose_branch_call(Goal, Res, Out) :-
+    call(Goal),
+    Out = Res.
+
+he_hyperpose_profiled_branch_call(Goal, Res, Out) :-
+    thread_self(Thread),
+    he_hyperpose_goal_label(Goal, Label),
+    get_time(Wall0),
+    statistics(cputime, Cpu0),
+    he_hyperpose_note_profile_sample(Thread, Label, Wall0, Wall0, Cpu0, Cpu0, start),
+    catch(call(Goal), Error, he_hyperpose_profiled_error(Error, Thread, Label, Wall0, Cpu0)),
+    get_time(Wall1),
+    statistics(cputime, Cpu1),
+    he_hyperpose_note_profile_sample(Thread, Label, Wall0, Wall1, Cpu0, Cpu1, success),
+    Out = Res.
+
+he_hyperpose_profiled_error(Error, Thread, Label, Wall0, Cpu0) :-
+    get_time(Wall1),
+    statistics(cputime, Cpu1),
+    he_hyperpose_note_profile_sample(Thread, Label, Wall0, Wall1, Cpu0, Cpu1, error),
+    throw(Error).
+
+he_hyperpose_goal_label(Goal, Label) :-
+    compound(Goal), !,
+    functor(Goal, Name, Arity),
+    format(atom(Label), '~w/~w', [Name, Arity]).
+he_hyperpose_goal_label(Goal, Label) :-
+    format(atom(Label), '~w', [Goal]).
+
+he_hyperpose_note_profile_sample(Thread, Label, Wall0, Wall1, Cpu0, Cpu1, Status) :-
+    WallMs is round((Wall1 - Wall0) * 1000),
+    CpuMs is round((Cpu1 - Cpu0) * 1000),
+    with_mutex(he_hyperpose_thread_profile,
+               ( ( retract(he_hyperpose_thread_profile_seq(Id0))
+                 -> Id is Id0 + 1
+                 ;  Id = 1
+                 ),
+                 assertz(he_hyperpose_thread_profile_seq(Id))
+               )),
+    assertz(he_hyperpose_thread_profile_sample(Id, Thread, Label, WallMs, CpuMs, Status)).
+
+he_hyperpose_thread_profile_report(Stream) :-
+    aggregate_all(count, he_hyperpose_thread_profile_sample(_, _, _, _, _, _), Count),
+    format(Stream, 'hyperpose_thread_samples=~w~n', [Count]),
+    forall(he_hyperpose_thread_profile_sample(Id, Thread, Label, WallMs, CpuMs, Status),
+           format(Stream, '~w\t~w\t~w\t~w\t~w\t~w~n',
+                  [Id, Thread, Label, WallMs, CpuMs, Status])).
 
 %Like membercheck but with direct equality rather than unification
 memberchk_eq(V, [H|_]) :- V == H, !.

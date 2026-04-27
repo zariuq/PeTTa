@@ -61,7 +61,9 @@ remove_sexp(Space, [Rel|Args]) :- Term =.. [Space, Rel | Args],
                                          invalidate_specializations(F),
                                          he_clause_functor(F, ClauseFunctor),
                                          ( \+ ( current_predicate(ClauseFunctor/A), functor(H2, ClauseFunctor, A), clause(H2, _, _) )
-                                           -> retractall(fun(F)) ; true ),
+                                           -> retractall(fun(F)),
+                                              he_note_fun_removed(F)
+                                           ; true ),
                                          ( Refs = [] -> Removed = false ; Removed = true ).
 
 %Remove all same atoms:
@@ -71,6 +73,7 @@ remove_sexp(Space, [Rel|Args]) :- Term =.. [Space, Rel | Args],
 match('&self', Pattern, OutPattern, Result) :-
     he_profile_enabled,
     he_fast_plain_self_matchable(Pattern), !,
+    he_space_may_have_match('&self', Pattern),
     he_direct_space_match('&self', Pattern, OutPattern, Result).
 
 match(Space0, Pattern, OutPattern, Result) :-
@@ -82,6 +85,11 @@ match(Space, Pattern, OutPattern, Result) :-
     he_bridge_match_override(Space, Pattern, OutPattern, Result).
 match(_, Pattern, _, _) :-
     he_bridge_match_blocked(Pattern), !,
+    fail.
+
+match(Space, Pattern, _, _) :-
+    he_profile_enabled,
+    \+ he_space_may_have_match(Space, Pattern), !,
     fail.
 
 %Match for conjunctive pattern

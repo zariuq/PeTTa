@@ -58,6 +58,7 @@ specialize_call(HV, AVs, Out, Goal) :- %1. Retrieve a copy of all meta-clauses s
                                                %4.6 Ok specialized, but if we did not succeed ensure the specialization is retracted:
                                                -> true ; format("Not specialized ~w~n", [SpecName/Arity]),
                                                          retractall(fun(SpecName)),
+                                                         he_note_fun_removed(SpecName),
                                                          abolish(SpecName, Arity),
                                                          retractall(arity(SpecName,Arity)),
                                                          retractall(ho_specialization(HV, SpecName)), fail ))), !,
@@ -107,6 +108,7 @@ forget_symbol(Name) :- retractall('&self'(=, [Name|_], _)),
                        forall(member(R, Refs), erase(R)),
                        retractall(arity(Name,_)),
                        retractall(fun(Name)),
+                       he_note_fun_removed(Name),
                        catch(nb_delete(Name), _, true),
                        retractall(ho_specialization(Name,_)).
 

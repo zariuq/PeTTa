@@ -1,6 +1,10 @@
 he_user_functor_prefix('$metta$:').
 
 :- multifile he_clause_functor/2.
+:- dynamic he_compiled_goal_resolution/3.
+:- dynamic he_compiled_goal_no_resolution/2.
+:- dynamic he_runtime_callable_head_cache/1.
+:- dynamic he_call_partial_arity_cache/3.
 
 metta_user_functor(Fun, UserFun) :-
     atom(Fun),
@@ -175,6 +179,26 @@ he_fast_typed_call('<=', [A, B], _, R) :-
 he_fast_typed_call('>=', [A, B], _, R) :-
     number(A), number(B), !,
     ( A >= B -> R = true ; R = false ).
+he_fast_typed_call('==', [A, B], _, R) :-
+    he_fast_typed_literal(A),
+    he_fast_typed_literal(B), !,
+    ( A =@= B -> R = true ; R = false ).
+he_fast_typed_call('!=', [A, B], _, R) :-
+    he_fast_typed_literal(A),
+    he_fast_typed_literal(B), !,
+    ( A =@= B -> R = false ; R = true ).
+
+he_fast_typed_literal(A) :-
+    number(A), !.
+he_fast_typed_literal(A) :-
+    string(A), !.
+he_fast_typed_literal(true) :- !.
+he_fast_typed_literal(false) :- !.
+he_fast_typed_literal('True') :- !.
+he_fast_typed_literal('False') :- !.
+he_fast_typed_literal(A) :-
+    atom(A),
+    \+ fun(A).
 
 he_display_call_args('change-state!', [State|Rest], [DisplayState|Rest]) :-
     he_state_handle(State, Id),
@@ -247,8 +271,7 @@ he_call_has_equation(Call) :-
     atom(Fun),
     length(Args, Arity),
     he_eq_fact(Fun, Arity, HeadArgs, _),
-    copy_term(HeadArgs-Args, HeadCopy-ArgsCopy),
-    HeadCopy = ArgsCopy, !.
+    HeadArgs = Args, !.
 he_call_has_equation(Call) :-
     copy_term(Call, CallCopy),
     catch(match('&self', [=, CallCopy, Body], Body, _), _, fail), !.
@@ -260,7 +283,56 @@ he_call_has_fun_meta([Fun|Args]) :-
     copy_term(HeadArgs-Args, HeadCopy-ArgsCopy),
     HeadCopy = ArgsCopy, !.
 
-he_compiled_user_goal([Fun|Args], Out, Goal) :-
+he_invalidate_compiled_goal_resolution(Fun) :-
+    atom(Fun), !,
+    retractall(he_compiled_goal_resolution(Fun, _, _)),
+    retractall(he_compiled_goal_no_resolution(Fun, _)).
+he_invalidate_compiled_goal_resolution(_).
+
+he_invalidate_runtime_callable_head_cache(Fun) :-
+    atom(Fun), !,
+    retractall(he_runtime_callable_head_cache(Fun)).
+he_invalidate_runtime_callable_head_cache(_).
+
+he_invalidate_call_partial_arity_cache(Fun) :-
+    atom(Fun), !,
+    retractall(he_call_partial_arity_cache(Fun, _, _)).
+he_invalidate_call_partial_arity_cache(_).
+
+he_space_fact_added_hook('&self', [=, [Fun|_], _]) :-
+    atom(Fun), !,
+    he_invalidate_compiled_goal_resolution(Fun),
+    he_invalidate_runtime_callable_head_cache(Fun),
+    he_invalidate_call_partial_arity_cache(Fun).
+he_space_fact_removed_hook('&self', [=, [Fun|_], _]) :-
+    atom(Fun), !,
+    he_invalidate_compiled_goal_resolution(Fun),
+    he_invalidate_runtime_callable_head_cache(Fun),
+    he_invalidate_call_partial_arity_cache(Fun).
+he_fun_registered_hook(Fun) :-
+    atom(Fun), !,
+    he_invalidate_runtime_callable_head_cache(Fun),
+    he_invalidate_call_partial_arity_cache(Fun).
+he_fun_removed_hook(Fun) :-
+    atom(Fun), !,
+    he_invalidate_runtime_callable_head_cache(Fun),
+    he_invalidate_compiled_goal_resolution(Fun),
+    he_invalidate_call_partial_arity_cache(Fun).
+
+he_compiled_goal_user_functor(Fun, Arity, UserFun) :-
+    he_compiled_goal_resolution(Fun, Arity, UserFun), !.
+he_compiled_goal_user_functor(Fun, Arity, _) :-
+    he_compiled_goal_no_resolution(Fun, Arity), !,
+    fail.
+he_compiled_goal_user_functor(Fun, Arity, UserFun) :-
+    metta_user_functor(Fun, UserFun),
+    current_predicate(UserFun/Arity), !,
+    assertz(he_compiled_goal_resolution(Fun, Arity, UserFun)).
+he_compiled_goal_user_functor(Fun, Arity, _) :-
+    assertz(he_compiled_goal_no_resolution(Fun, Arity)),
+    fail.
+
+he_compiled_equation_goal([Fun|Args], Out, Goal) :-
     he_profile_enabled,
     atom(Fun),
     length(Args, Arity),
@@ -268,14 +340,15 @@ he_compiled_user_goal([Fun|Args], Out, Goal) :-
     metta_user_functor(Fun, UserFun),
     append(Args, [Out], CallArgs),
     Goal =.. [UserFun|CallArgs].
+he_compiled_user_goal(Call, Out, Goal) :-
+    he_compiled_equation_goal(Call, Out, Goal).
 he_compiled_user_goal([Fun|Args], Out, Goal) :-
     he_profile_enabled,
     atom(Fun),
     fun(Fun),
-    metta_user_functor(Fun, UserFun),
     append(Args, [Out], CallArgs),
     length(CallArgs, Arity),
-    current_predicate(UserFun/Arity),
+    he_compiled_goal_user_functor(Fun, Arity, UserFun),
     Goal =.. [UserFun|CallArgs].
 
 he_build_user_call_or_eval(Call, Out, Goal) :-
@@ -311,6 +384,10 @@ he_eval_or_reduce([maplist, Func, List], Out) :-
     he_profile_enabled,
     is_list(List), !,
     he_maplist_reduce(List, Func, Out).
+he_eval_or_reduce(Call, Out) :-
+    he_profile_enabled,
+    he_compiled_equation_goal(Call, Out, Goal), !,
+    catch(call(Goal), _, fail).
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     he_compiled_user_goal(Call, Out, Goal), !,
@@ -350,15 +427,20 @@ he_apply_callable_result(Expr, Args, Out) :-
 
 he_runtime_callable_head(Fun) :-
     atom(Fun),
-    fun(Fun), !.
+    he_runtime_callable_head_cache(Fun), !.
 he_runtime_callable_head(Fun) :-
     atom(Fun),
-    he_constructor_symbol(Fun), !.
+    fun(Fun), !,
+    assertz(he_runtime_callable_head_cache(Fun)).
+he_runtime_callable_head(Fun) :-
+    atom(Fun),
+    he_constructor_symbol(Fun), !,
+    assertz(he_runtime_callable_head_cache(Fun)).
 he_runtime_callable_head(Fun) :-
     atom(Fun),
     catch(nb_getval(Fun, Metas), _, fail),
-    is_list(Metas),
-    Metas \= [], !.
+    is_list(Metas), Metas \= [], !,
+    assertz(he_runtime_callable_head_cache(Fun)).
 he_runtime_callable_head(Fun) :-
     py_resolve_value(Fun, Callable),
     py_callable(Callable), !.
@@ -388,15 +470,38 @@ he_call_or_self(Fun, Args, Out) :-
 he_call_is_partial_arity(Fun, Args) :-
     atom(Fun),
     length(Args, Supplied),
+    he_call_partial_arity_decision(Fun, Supplied, Decision),
+    Decision == partial.
+
+he_call_partial_arity_decision(Fun, Supplied, Decision) :-
+    he_call_partial_arity_cache(Fun, Supplied, Decision), !.
+he_call_partial_arity_decision(Fun, Supplied, Decision) :-
     SuppliedOutArity is Supplied + 1,
-    catch(arity(Fun, FullOutArity), _, fail),
+    ( he_call_known_full_out_arity(Fun, SuppliedOutArity, FullOutArity),
+      FullOutArity > SuppliedOutArity
+    -> Decision = partial
+    ;  Decision = none
+    ),
+    assertz(he_call_partial_arity_cache(Fun, Supplied, Decision)).
+
+he_call_known_full_out_arity(Fun, _, FullOutArity) :-
+    he_builtin_type(Fun, TypeChain),
+    TypeChain = [->|TypeItems],
+    length(TypeItems, FullOutArity).
+he_call_known_full_out_arity(Fun, _, FullOutArity) :-
+    catch(arity(Fun, FullOutArity), _, fail).
+he_call_known_full_out_arity(Fun, SuppliedOutArity, FullOutArity) :-
+    he_profile_enabled,
+    he_eq_fact(Fun, HeadArity, _, _),
+    FullOutArity is HeadArity + 1,
     FullOutArity > SuppliedOutArity.
-he_call_is_partial_arity(Fun, Args) :-
-    atom(Fun),
-    length(Args, Supplied),
-    SuppliedOutArity is Supplied + 1,
-    current_predicate(Fun/FullOutArity),
-    FullOutArity > SuppliedOutArity.
+he_call_known_full_out_arity(Fun, SuppliedOutArity, FullOutArity) :-
+    MinArity is SuppliedOutArity + 1,
+    he_partial_arity_probe_limit(MaxArity),
+    between(MinArity, MaxArity, FullOutArity),
+    current_predicate(Fun/FullOutArity).
+
+he_partial_arity_probe_limit(32).
 
 he_call_compiled_or_self(Call, Goal, _) :-
     he_call_has_equation(Call), !,
