@@ -66,6 +66,7 @@ he_get_type_candidate([=, A, B], _) :-
     TB \== '%Undefined%',
     TA \== TB, !,
     fail.
+he_get_type_candidate([=, _A, _B], '%Undefined%') :- !.
 he_get_type_candidate(X, ['StateMonad', T]) :-
     he_space_ref_atom(X),
     catch(nb_getval(X, State), _, fail),
@@ -79,6 +80,10 @@ he_get_type_candidate(X, T) :-
     is_list(X), !,
     ( he_list_function_types(X, Types)
     -> member(T, Types)
+    ; he_untyped_functor_application_type(X, T)
+    -> true
+    ; he_blocks_data_tuple_type_fallback(X)
+    -> fail
     ; he_self_or_data_tuple_type(X, T)
     ).
 he_get_type_candidate(X, T) :- get_function_type(X, T).
@@ -132,6 +137,8 @@ get_type_candidate([=, A, B], _) :-
     TB \== '%Undefined%',
     TA \== TB, !,
     fail.
+get_type_candidate([=, _A, _B], '%Undefined%') :-
+    he_profile_enabled, !.
 get_type_candidate(X, ['StateMonad', T]) :-
     he_profile_enabled,
     he_space_ref_atom(X),
@@ -146,6 +153,10 @@ get_type_candidate(X, T) :- he_profile_enabled, atom(X), he_builtin_type(X, T).
 get_type_candidate(X, T) :- he_profile_enabled, is_list(X), !,
                             ( he_list_function_types(X, Types)
                             -> member(T, Types)
+                            ; he_untyped_functor_application_type(X, T)
+                            -> true
+                            ; he_blocks_data_tuple_type_fallback(X)
+                            -> fail
                             ; he_self_or_data_tuple_type(X, T)
                             ).
 get_type_candidate(X, T) :- get_function_type(X,T).
@@ -295,6 +306,8 @@ he_atom_types(Atom, ['Number']) :-
     number(Atom), !.
 he_atom_types(Atom, ['String']) :-
     string(Atom), !.
+he_atom_types(Atom, ['%Undefined%']) :-
+    var(Atom), !.
 he_atom_types(true, ['Bool']) :- !.
 he_atom_types(false, ['Bool']) :- !.
 he_atom_types('True', ['Bool']) :- !.
@@ -317,6 +330,44 @@ he_self_or_data_tuple_type(X, T) :-
     -> he_self_type_fact(X, T)
     ;  he_data_tuple_type(X, T)
     ).
+
+he_untyped_functor_application_type([Head, Elem], ['%Undefined%', ElemType]) :-
+    atom(Head),
+    'get-type'(Head, '%Undefined%'),
+    'get-type'(Elem, ElemType),
+    ElemType \== '%Undefined%'.
+he_untyped_functor_application_type([Head, Elem, Tail], ['%Undefined%', ElemType]) :-
+    atom(Head),
+    'get-type'(Head, '%Undefined%'),
+    'get-type'(Elem, ElemType),
+    ElemType \== '%Undefined%',
+    he_untyped_functor_tail_compatible(Tail, ElemType).
+
+he_untyped_functor_tail_compatible([TailHead], _ElemType) :-
+    atom(TailHead),
+    'get-type'(TailHead, '%Undefined%').
+he_untyped_functor_tail_compatible(Tail, ElemType) :-
+    he_untyped_functor_application_type(Tail, ['%Undefined%', ElemType]).
+
+he_blocks_data_tuple_type_fallback([Head|_]) :-
+    he_head_may_denote_callable(Head), !.
+
+he_head_may_denote_callable(Head) :-
+    is_list(Head),
+    he_non_atom_head_may_return_arrow(Head), !.
+he_head_may_denote_callable(Head) :-
+    atom(Head),
+    ( fun(Head)
+    ; he_has_atom_head_equation(Head)
+    ; catch(nb_getval(Head, Metas), _, fail),
+      is_list(Metas),
+      Metas \= []
+    ), !.
+he_head_may_denote_callable(Head) :-
+    atom(Head),
+    he_function_typechains(Head, TypeChains),
+    member(TypeChain, TypeChains),
+    he_arrow_typechain(TypeChain), !.
 
 he_self_type_fact(Subject, Type) :-
     he_profile_enabled, !,
@@ -446,7 +497,9 @@ he_argument_matches_expected(Argument, ExpectedType) :-
 he_argument_matches_expected(Argument, ExpectedType) :-
     he_atom_types(Argument, ActualTypes),
     member(ActualType, ActualTypes),
-    he_match_types_live(ExpectedType, ActualType).
+    ( he_match_types_live(ExpectedType, ActualType)
+    ; he_type_is_fully_undefined(ActualType)
+    ).
 
 he_check_argument_type(Argument, ExpectedType, _Space, Bindings, Results) :-
     he_atom_types(Argument, ActualTypes),
@@ -455,9 +508,13 @@ he_check_argument_type(Argument, ExpectedType, _Space, Bindings, Results) :-
               copy_term(ExpectedType-ActualType-Bindings,
                         ExpectedCopy-ActualCopy-BindingsCopy),
               he_match_types(ExpectedCopy, ActualCopy, BindingsCopy, Matches),
-              ( Matches == []
+              ( Matches == [],
+                \+ he_type_is_fully_undefined(ActualType)
               -> Result = err(ActualType)
-              ;  member(MatchedBindings, Matches),
+              ;  ( Matches == []
+                 -> MatchedBindings = Bindings
+                 ;  member(MatchedBindings, Matches)
+                 ),
                  Result = ok(MatchedBindings)
               )
             ),
@@ -545,18 +602,18 @@ he_check_if_function_type_is_applicable(Atom, FuncType, ExpectedType, Space, Bin
 
 he_check_function_args(_, [], [], _, _, _, []).
 he_check_function_args(Atom, [Arg|Args], [Expected|Types], Space, Bindings, Index, Errors) :-
-    he_bind_argument_type(Arg, Expected),
-    Index1 is Index + 1,
-    he_check_function_args(Atom, Args, Types, Space, Bindings, Index1, Errors).
-he_check_function_args(Atom, [Arg|_], [Expected|_], Space, Bindings, Index, Errors) :-
-    he_check_argument_type(Arg, Expected, Space, Bindings, Checks),
-    findall(Error,
-            ( member(err(Actual), Checks),
-              copy_term(Expected-Actual, ExpectedOut-ActualOut),
-              Error = ['Error', Atom, ['BadArgType', Index, ExpectedOut, ActualOut]]
-            ),
-            RawErrors),
-    alpha_list_to_set(RawErrors, Errors).
+    ( he_bind_argument_type(Arg, Expected)
+    -> Index1 is Index + 1,
+       he_check_function_args(Atom, Args, Types, Space, Bindings, Index1, Errors)
+    ;  he_check_argument_type(Arg, Expected, Space, Bindings, Checks),
+       findall(Error,
+               ( member(err(Actual), Checks),
+                 copy_term(Expected-Actual, ExpectedOut-ActualOut),
+                 Error = ['Error', Atom, ['BadArgType', Index, ExpectedOut, ActualOut]]
+               ),
+               RawErrors),
+       alpha_list_to_set(RawErrors, Errors)
+    ).
 
 %%% Type Normalization
 
@@ -782,9 +839,17 @@ he_args_have_undefined([Arg|Args], [_|Types]) :-
     ).
 he_args_have_undefined([], []) :- fail.
 
+he_args_have_runtime_undefined([Arg|_]) :-
+    he_arg_has_undefined_type(Arg), !.
+he_args_have_runtime_undefined([_|Args]) :-
+    he_args_have_runtime_undefined(Args).
+he_args_have_runtime_undefined([]) :-
+    fail.
+
 he_arg_has_undefined_type(Arg) :-
     he_atom_types(Arg, Types),
-    memberchk('%Undefined%', Types).
+    member(Type, Types),
+    he_type_is_fully_undefined(Type), !.
 
 he_args_include_data_type([Type|_]) :-
     nonvar(Type),
@@ -803,7 +868,19 @@ he_type_accepts(Expected, Arg, Actual) :-
     copy_term(Expected-Arg, ExpectedCopy-ArgCopy),
     he_argument_matches_expected(ArgCopy, ExpectedCopy), !,
     he_actual_type(Arg, Actual).
-he_type_accepts(_, _, '%Undefined%').
+he_type_accepts(_, Arg, Actual) :-
+    he_actual_type(Arg, Actual),
+    he_type_is_fully_undefined(Actual), !.
+
+he_type_is_fully_undefined('%Undefined%').
+he_type_is_fully_undefined([Type|Types]) :-
+    he_type_is_fully_undefined(Type),
+    he_type_list_fully_undefined(Types).
+
+he_type_list_fully_undefined([]).
+he_type_list_fully_undefined([Type|Types]) :-
+    he_type_is_fully_undefined(Type),
+    he_type_list_fully_undefined(Types).
 
 he_cast_result(_, Expected, Value, Value) :-
     ( var(Expected)

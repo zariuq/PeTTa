@@ -15,6 +15,10 @@ he_fast_plain_self_root([Head, _, _]) :-
     nonvar(Head),
     Head == 'runtime-counter', !,
     fail.
+he_fast_plain_self_root([Head|_]) :-
+    nonvar(Head),
+    Head == ',', !,
+    fail.
 he_fast_plain_self_root([=, Call, _]) :-
     is_list(Call),
     Call = [_|CallArgs],

@@ -11,6 +11,9 @@
                   'he_match',
                   'he_docs']).
 
+:- ( he_import_loaded -> true ; assertz(he_import_loaded) ).
+:- ( he_types_loaded -> true ; assertz(he_types_loaded) ).
+:- ( he_state_loaded -> true ; assertz(he_state_loaded) ).
 :- mark_he_runtime_loaded.
 
 :- multifile he_bridge_clause_constrains_args/1.

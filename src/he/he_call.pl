@@ -33,10 +33,30 @@ he_constructor_symbol(Fun) :-
     atom_chars(Fun, [First|_]),
     char_type(First, upper).
 
+he_he_data_shadowed_fun(Fun) :-
+    he_profile_enabled,
+    atom(Fun),
+    he_constructor_symbol(Fun),
+    fun(Fun),
+    \+ he_has_atom_head_equation(Fun),
+    \+ catch(nb_getval(Fun, _Metas), _, fail),
+    he_function_typechains(Fun, TypeChains),
+    TypeChains == [].
+
 he_unify_success(Space, Pattern) :-
     he_space_ref_atom(Space), !,
     once(match(Space, Pattern, Pattern, _)).
 he_unify_success(A, B) :- A = B.
+
+he_py_callable_head(Fun) :-
+    nonvar(Fun),
+    \+ atom(Fun),
+    py_callable(Fun), !.
+he_py_callable_head(Fun) :-
+    atom(Fun),
+    he_space_ref_atom(Fun),
+    py_resolve_value(Fun, Callable),
+    py_callable(Callable).
 
 he_call_typed(Fun, Args, TypeChains, Out) :-
     he_fast_typed_call(Fun, Args, TypeChains, Out), !.
@@ -97,6 +117,13 @@ he_finish_typed_call_selections(Fun, Args, DisplayArgs, Selections, Out) :-
     !,
     member(BoundArgs-Out, Solutions),
     Args = BoundArgs.
+he_finish_typed_call_selections(Fun, Args, _DisplayArgs, Selections, Out) :-
+    he_relaxed_runtime_allowed(Args, Selections),
+    he_collect_relaxed_runtime_solutions(Fun, Args, Solutions),
+    Solutions \= [],
+    !,
+    member(BoundArgs-Out, Solutions),
+    Args = BoundArgs.
 he_finish_typed_call_selections(Fun, Args, DisplayArgs, Selections, Out) :-
     member(Selection, Selections),
     he_finish_typed_call(Fun, Args, DisplayArgs, Selection, Out), !.
@@ -106,6 +133,23 @@ he_collect_typed_nonerror_solutions(Fun, Args, DisplayArgs, Selections, Solution
             he_typed_nonerror_solution(Fun, Args, DisplayArgs, Selections, BoundArgs, Candidate),
             Solutions0),
     alpha_list_to_set(Solutions0, Solutions).
+
+he_collect_relaxed_runtime_solutions(Fun, Args, Solutions) :-
+    findall(BoundArgs-Candidate,
+            he_relaxed_runtime_solution(Fun, Args, BoundArgs, Candidate),
+            Solutions0),
+    alpha_list_to_set(Solutions0, Solutions).
+
+he_relaxed_runtime_allowed(Args, _Selections) :-
+    he_args_have_runtime_undefined(Args).
+
+he_relaxed_runtime_solution(Fun, Args, BoundArgs, Candidate) :-
+    copy_term(Args, ArgsCopy),
+    catch(he_invoke_typed(Fun, ArgsCopy, Raw0), _, fail),
+    \+ he_error_atom(Raw0),
+    \+ Raw0 = [Fun|ArgsCopy],
+    BoundArgs = ArgsCopy,
+    Candidate = Raw0.
 
 he_typed_nonerror_solution(Fun, Args, DisplayArgs, Selections, BoundArgs, Candidate) :-
     copy_term(Args-DisplayArgs, ArgsCopy-DisplayCopy),
@@ -145,7 +189,7 @@ he_finish_typed_call(Fun, Args, _DisplayArgs, ok(TypeChain, _ReturnType), Out) :
     ; he_args_include_data_type(ArgTypes)
     -> Out = [Fun|Args]
     ; he_static_callable_for_args(Fun, Args)
-    -> fail
+    -> Out = [Fun|Args]
     ; he_eval_constructor_args(Args, EvalArgs),
       Out = [Fun|EvalArgs]
     ).
@@ -181,11 +225,23 @@ he_fast_typed_call('>=', [A, B], _, R) :-
     ( A >= B -> R = true ; R = false ).
 he_fast_typed_call('==', [A, B], _, R) :-
     he_fast_typed_literal(A),
-    he_fast_typed_literal(B), !,
+    he_fast_typed_literal(B),
+    ( he_auto_typecheck(true)
+    -> 'get-type'(A, TA),
+       'get-type'(B, TB),
+       he_match_types_live(TA, TB)
+    ;  true
+    ), !,
     ( A =@= B -> R = true ; R = false ).
 he_fast_typed_call('!=', [A, B], _, R) :-
     he_fast_typed_literal(A),
-    he_fast_typed_literal(B), !,
+    he_fast_typed_literal(B),
+    ( he_auto_typecheck(true)
+    -> 'get-type'(A, TA),
+       'get-type'(B, TB),
+       he_match_types_live(TA, TB)
+    ;  true
+    ), !,
     ( A =@= B -> R = false ; R = true ).
 
 he_fast_typed_literal(A) :-
@@ -270,8 +326,9 @@ he_call_has_equation(Call) :-
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
+    copy_term(Args, ArgsCopy),
     he_eq_fact(Fun, Arity, HeadArgs, _),
-    HeadArgs = Args, !.
+    HeadArgs = ArgsCopy, !.
 he_call_has_equation(Call) :-
     copy_term(Call, CallCopy),
     catch(match('&self', [=, CallCopy, Body], Body, _), _, fail), !.
@@ -369,8 +426,22 @@ he_eval_or_reduce(Call, Out) :-
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     Call = [Fun|Args],
+    is_list(Fun), !,
+    ( he_call_has_equation(Call)
+    -> catch(match('&self', [=, Call, Body], Body, _), _, fail),
+       eval(Body, Out)
+    ;  he_eval_or_reduce(Fun, Callable),
+       ( Callable \=@= Fun
+       -> he_apply_callable_result(Callable, Args, Out)
+       ;  Out = [Fun|Args]
+       )
+    ).
+he_eval_or_reduce(Call, Out) :-
+    he_profile_enabled,
+    Call = [Fun|Args],
     nonvar(Fun),
-    \+ he_runtime_callable_head(Fun), !,
+    \+ he_runtime_callable_head(Fun),
+    \+ he_py_callable_head(Fun), !,
     Out = [Fun|Args].
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
@@ -387,7 +458,7 @@ he_eval_or_reduce([maplist, Func, List], Out) :-
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     he_compiled_equation_goal(Call, Out, Goal), !,
-    catch(call(Goal), _, fail).
+    he_call_compiled_or_self(Call, Goal, Out).
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     he_compiled_user_goal(Call, Out, Goal), !,
@@ -430,11 +501,8 @@ he_runtime_callable_head(Fun) :-
     he_runtime_callable_head_cache(Fun), !.
 he_runtime_callable_head(Fun) :-
     atom(Fun),
+    \+ he_he_data_shadowed_fun(Fun),
     fun(Fun), !,
-    assertz(he_runtime_callable_head_cache(Fun)).
-he_runtime_callable_head(Fun) :-
-    atom(Fun),
-    he_constructor_symbol(Fun), !,
     assertz(he_runtime_callable_head_cache(Fun)).
 he_runtime_callable_head(Fun) :-
     atom(Fun),
@@ -442,6 +510,8 @@ he_runtime_callable_head(Fun) :-
     is_list(Metas), Metas \= [], !,
     assertz(he_runtime_callable_head_cache(Fun)).
 he_runtime_callable_head(Fun) :-
+    atom(Fun),
+    he_space_ref_atom(Fun),
     py_resolve_value(Fun, Callable),
     py_callable(Callable), !.
 he_runtime_callable_head(Fun) :-

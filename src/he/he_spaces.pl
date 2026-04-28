@@ -141,6 +141,7 @@ he_space_may_have_match(_Space, Pattern) :-
     var(Pattern), !.
 he_space_may_have_match(_Space, [Rel|_]) :-
     var(Rel), !.
+he_space_may_have_match(_Space, [','|_]) :- !.
 he_space_may_have_match('&self', [':', Fun, Type]) :-
     nonvar(Fun), !,
     he_type_fact(Fun, Type).

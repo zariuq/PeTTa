@@ -6,12 +6,40 @@ constrain_args([F, A, B], Out, Goals) :- nonvar(F),
                                          constrain_args(B, B1, G2),
                                          Out = [A1|B1],
                                          append(G1, G2, Goals), !.
+constrain_args([F|Args], Var, Goals) :- he_profile_enabled,
+                                        atom(F),
+                                        he_constructor_symbol(F), !,
+                                        maplist(constrain_args, Args, OutArgs, NestedGoalsList),
+                                        flatten(NestedGoalsList, NestedGoals),
+                                        append(NestedGoals, [he_unify_clause_pattern([F|OutArgs], Var)], Goals).
 constrain_args([F|Args], Var, Goals) :- atom(F),
                                         fun(F), !,
                                         translate_expr([F|Args], GoalsExpr, Var),
                                         flatten(GoalsExpr, Goals).
 constrain_args(In, Out, Goals) :- maplist(constrain_args, In, Out, NestedGoalsList),
                                   flatten(NestedGoalsList, Goals), !.
+
+he_unify_clause_pattern(Expected, Actual) :-
+    he_clause_pattern_equiv(Expected, Actual).
+
+he_clause_pattern_equiv(Expected, Actual) :-
+    var(Expected), !,
+    Expected = Actual.
+he_clause_pattern_equiv(Expected, Actual) :-
+    atomic(Expected), !,
+    Expected = Actual.
+he_clause_pattern_equiv([Head|ExpectedArgs], Actual) :-
+    atom(Head),
+    he_call_is_partial_arity(Head, ExpectedArgs),
+    nonvar(Actual),
+    Actual = partial(Head, ActualArgs), !,
+    same_length(ExpectedArgs, ActualArgs),
+    maplist(he_clause_pattern_equiv, ExpectedArgs, ActualArgs).
+he_clause_pattern_equiv([Head|ExpectedArgs], [Head|ActualArgs]) :-
+    same_length(ExpectedArgs, ActualArgs),
+    maplist(he_clause_pattern_equiv, ExpectedArgs, ActualArgs), !.
+he_clause_pattern_equiv(Expected, Actual) :-
+    Expected = Actual.
 
 %Flatten (= Head Body) MeTTa function into Prolog Clause:
 translate_clause(Input, Clause) :- translate_clause(Input, Clause, true).
@@ -102,11 +130,6 @@ safe_rewrite_streamops(In, Out) :- ( compound(In), In = [Op|_], atom(Op) -> rewr
 
 %Turn MeTTa code S-expression into goals list:
 translate_expr(X, [], X)          :- ((var(X) ; atomic(X)) ; X = partial(_,_)), !.
-translate_expr([H0|T0], Goals, Out) :-
-        he_profile_enabled,
-        is_list(H0),
-        \+ he_callable_data_head(H0), !,
-        eval_data_list([H0|T0], Goals, Out).
 translate_expr([H0|T0], Goals, Out) :-
         safe_rewrite_streamops([H0|T0],[H|T]),
         translate_expr(H, GsH, HV),
@@ -342,6 +365,9 @@ translate_expr([H0|T0], Goals, Out) :-
           ; ( atomic(HV), \+ atom(HV) ; atom(HV), \+ fun(HV) ) -> Out = [HV|AVs],
                                                                   Goals = Inner
           %Plain data list: evaluate inner fun-sublists
+          ; is_list(HV),
+            he_profile_enabled
+          -> append(Inner, [he_eval_or_reduce([HV|AVs], Out)], Goals)
           ; is_list(HV) -> eval_data_term(HV, Gd, HV1),
                            append(Inner, Gd, Goals),
                            Out = [HV1|AVs]

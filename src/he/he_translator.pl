@@ -73,6 +73,26 @@ he_eval_goal(Arg, Out, he_eval_special(Arg, Out)) :-
     he_profile_enabled, !.
 he_eval_goal(Arg, Out, eval(Arg, Out)).
 
+he_smart_known_fun(Fun, AllAVs, Out, Inner, T, GsH, IsPartial, Bound, Goals) :-
+    he_profile_enabled,
+    findall(TypeChain,
+            catch(match('&self', [':', Fun, TypeChain], TypeChain, TypeChain), _, fail),
+            TypeChains0),
+    alpha_list_to_set(TypeChains0, TypeChains),
+    include(he_arrow_typechain, TypeChains, ArrowTypeChains),
+    ArrowTypeChains \= [],
+    !,
+    ( IsPartial -> append(Bound, T, AllRawArgs) ; AllRawArgs = T ),
+    include(he_typechain_arity_matches(AllRawArgs), ArrowTypeChains, MatchingArity),
+    ( MatchingArity == []
+    -> append(Inner, [he_call_typed(Fun, AllAVs, ArrowTypeChains, Out)], Goals)
+    ; maplist({Fun,AllRawArgs,GsH,Out}/[TypeChain,BranchGoal]>>(
+          he_typed_functioncall_branch(Fun, AllRawArgs, GsH, TypeChain, Out, BranchGoal)),
+          MatchingArity,
+          Branches),
+      disj_list(Branches, Disj),
+      Goals = [Disj]
+    ).
 he_smart_known_fun(Fun, AllAVs, Out, Inner, _T, _GsH, _IsPartial, _Bound, Goals) :-
     he_profile_enabled, !,
     he_build_user_call_or_eval([Fun|AllAVs], Out, HeGoal),
