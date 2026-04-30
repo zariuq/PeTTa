@@ -1,3 +1,7 @@
+% HE-profile overrides for PeTTa's internal MeTTa -> Prolog runtime compiler.
+% This is not the canonical file-to-file PeTTa <-> HE translator; that lives
+% in /home/zar/claude/hyperon/translators/.
+
 :- discontiguous he_translate_special/5.
 
 he_clause_constrains_args(ConstrainArgs) :-
@@ -109,6 +113,13 @@ he_smart_known_fun(Fun, AllAVs, Out, Inner, T, GsH, IsPartial, Bound, Goals) :-
 
 he_unknown_head_dispatch(HV, AVs, Out, Inner, Goals) :-
     he_profile_enabled,
+    is_list(HV),
+    \+ he_callable_data_head(HV), !,
+    Out = [HV|AVs],
+    Goals = Inner.
+
+he_unknown_head_dispatch(HV, AVs, Out, Inner, Goals) :-
+    he_profile_enabled,
     \+ ( atomic(HV), \+ atom(HV) ), !,
     append(Inner, [he_eval_or_reduce([HV|AVs], Out)], Goals).
 
@@ -149,7 +160,7 @@ he_callable_data_head_functor(Head) :-
     he_callable_data_head(Head), !.
 he_callable_data_head_functor(Head) :-
     atom(Head),
-    ( fun(Head)
+    ( he_head_may_denote_callable(Head)
     ; Head == '|->'
     ; Head == lambda
     ; memberchk(Head, [if, let, chain, 'let*', eval, collapse])
@@ -267,11 +278,7 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     T = [Expr, Expected], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
     translate_expr(Expected, ExpGoals, ExpVal),
-    ActualGoal = ( ( once((ExprConj, FirstActual = ExprVal)),
-                     he_petta_test_matches(FirstActual, ExpVal) )
-                   -> Actual = FirstActual
-                   ;  findall(ExprVal, ExprConj, Results),
-                      ( Results = [Actual] -> true ; Actual = Results ) ),
+    ActualGoal = he_collect_petta_test_actual(ExprVal, ExprConj, ExpVal, Actual),
     AssertGoal = he_assert_petta_test([assertPeTTaTest, Expr, Expected],
                                       Actual, ExpVal, Out),
     append([GsH, ExpGoals, [ActualGoal, AssertGoal]], Goals).
@@ -363,6 +370,14 @@ he_native_helper_dispatch(HV, RawArgs, GsH, Out, Goals) :-
 
 he_typed_dispatch(HV, RawArgs, GsH, Out, Goals) :-
     he_profile_enabled,
+    atom(HV),
+    memberchk(HV, ['==', '!=']),
+    RawArgs = [LeftRaw, RightRaw], !,
+    translate_he_eq_arg(LeftRaw, GsLeft, Left),
+    translate_he_eq_arg(RightRaw, GsRight, Right),
+    append([GsH, GsLeft, GsRight, [he_call_typed(HV, [Left, Right], [[->, 'Atom', 'Atom', 'Bool']], Out)]], Goals).
+he_typed_dispatch(HV, RawArgs, GsH, Out, Goals) :-
+    he_profile_enabled,
     ( atom(HV), Fun = HV, AllRawArgs = RawArgs
     ; compound(HV), HV = partial(Fun, Bound), append(Bound, RawArgs, AllRawArgs)
     ),
@@ -420,6 +435,17 @@ translate_he_arg_by_type(A, Type, [], A) :-
       )
     ), !.
 translate_he_arg_by_type(A, _, Goals, AV) :-
+    translate_expr(A, Goals, AV).
+
+translate_he_eq_arg(A, [], A) :-
+    ( var(A)
+    ; atomic(A)
+    ; is_list(A),
+      A = [Head|_],
+      atom(Head),
+      \+ he_callable_data_head_functor(Head)
+    ), !.
+translate_he_eq_arg(A, Goals, AV) :-
     translate_expr(A, Goals, AV).
 
 he_arg_stays_data(_, 'Atom') :- !.

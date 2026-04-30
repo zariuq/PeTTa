@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (18 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/atomops.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/atomops.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(assertPeTTaTest (cons-atom 0 (1 2 3)) (0 1 2 3))
 !(assertPeTTaTest (car-atom (1 2 3)) 1)

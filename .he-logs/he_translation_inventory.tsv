@@ -1,149 +1,149 @@
-source	category	translated	default_exit	he_exit	reason	next_action
-examples/and_or.metta	translated_passes	examples/he_translated/and_or_he.metta	0	0	translator output runs cleanly under --he	-
-examples/atomops.metta	translated_passes	examples/he_translated/atomops_he.metta	0	0	translator output runs cleanly under --he	-
-examples/booleansolver.metta	translated_passes	examples/he_translated/booleansolver_he.metta	0	0	translator output runs cleanly under --he	-
-examples/builin_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/callquoteevalreduce.metta	translated_passes	examples/he_translated/callquoteevalreduce_he.metta	0	0	translator output runs cleanly under --he	-
-examples/callquoteevalreduce2.metta	translated_passes	examples/he_translated/callquoteevalreduce2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/case.metta	translated_passes	examples/he_translated/case_he.metta	0	0	translator output runs cleanly under --he	-
-examples/case2.metta	translated_passes	examples/he_translated/case2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/caseconstrain.metta	translated_passes	examples/he_translated/caseconstrain_he.metta	0	0	translator output runs cleanly under --he	-
-examples/caseempty.metta	translated_passes	examples/he_translated/caseempty_he.metta	0	0	translator output runs cleanly under --he	-
-examples/casenew.metta	translated_passes	examples/he_translated/casenew_he.metta	0	0	translator output runs cleanly under --he	-
-examples/chain.metta	translated_passes	examples/he_translated/chain_he.metta	0	0	translator output runs cleanly under --he	-
-examples/collapse.metta	translated_passes	examples/he_translated/collapse_he.metta	0	0	translator output runs cleanly under --he	-
-examples/comments.metta	translated_passes	examples/he_translated/comments_he.metta	0	0	translator output runs cleanly under --he	-
-examples/constanthead.metta	translated_passes	examples/he_translated/constanthead_he.metta	0	0	translator output runs cleanly under --he	-
-examples/curry.metta	translated_passes	examples/he_translated/curry_he.metta	0	0	translator output runs cleanly under --he	-
-examples/cut.metta	translated_passes	examples/he_translated/cut_he.metta	0	0	translator output runs cleanly under --he	-
-examples/empty.metta	translated_passes	examples/he_translated/empty_he.metta	0	0	translator output runs cleanly under --he	-
-examples/eval.metta	translated_passes	examples/he_translated/eval_he.metta	0	0	translator output runs cleanly under --he	-
-examples/factorial.metta	translated_passes	examples/he_translated/factorial_he.metta	0	0	translator output runs cleanly under --he	-
-examples/fib.metta	translated_passes	examples/he_translated/fib_he.metta	0	0	translator output runs cleanly under --he	-
-examples/fibadd.metta	translated_passes	examples/he_translated/fibadd_he.metta	0	0	translator output runs cleanly under --he	-
-examples/fibsmart.metta	translated_passes	examples/he_translated/fibsmart_he.metta	0	0	translator output runs cleanly under --he	-
-examples/fibsmartimport.metta	translated_passes	examples/he_translated/fibsmartimport_he.metta	0	0	translator output runs cleanly under --he	-
-examples/foldall.metta	translated_passes	examples/he_translated/foldall_he.metta	0	0	translator output runs cleanly under --he	-
-examples/foldallmatch.metta	translated_passes	examples/he_translated/foldallmatch_he.metta	0	0	translator output runs cleanly under --he	-
-examples/foldallspacecount.metta	translated_passes	examples/he_translated/foldallspacecount_he.metta	0	0	translator output runs cleanly under --he	-
-examples/forall.metta	translated_passes	examples/he_translated/forall_he.metta	0	0	translator output runs cleanly under --he	-
-examples/functionhead.metta	translated_passes	examples/he_translated/functionhead_he.metta	0	0	translator output runs cleanly under --he	-
-examples/functionhead2.metta	translated_passes	examples/he_translated/functionhead2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/functionhead3.metta	translated_passes	examples/he_translated/functionhead3_he.metta	0	0	translator output runs cleanly under --he	-
-examples/functionremoval.metta	translated_passes	examples/he_translated/functionremoval_he.metta	0	0	translator output runs cleanly under --he	-
-examples/functionremovalspec.metta	translated_passes	examples/he_translated/functionremovalspec_he.metta	0	0	translator output runs cleanly under --he	-
-examples/functiontypes.metta	translated_passes	examples/he_translated/functiontypes_he.metta	0	0	translator output runs cleanly under --he	-
-examples/git_import.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/git_import2.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/greedy_chess.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/he_assert.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_atomspace.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_equalreduct.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_error.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_evaluation.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_math.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_minimalmetta.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_quoting.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/he_types.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-
-examples/holbenchmark.metta	he_runtime_gap_core	examples/he_translated/holbenchmark_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/holfunctions.metta	translated_passes	examples/he_translated/holfunctions_he.metta	0	0	translator output runs cleanly under --he	-
-examples/holfunctions_intrinsicop.metta	translated_passes	examples/he_translated/holfunctions_intrinsicop_he.metta	0	0	translator output runs cleanly under --he	-
-examples/hyperpose_primes.metta	he_runtime_gap_core	examples/he_translated/hyperpose_primes_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/identity.metta	translated_passes	examples/he_translated/identity_he.metta	0	0	translator output runs cleanly under --he	-
-examples/if.metta	translated_passes	examples/he_translated/if_he.metta	0	0	translator output runs cleanly under --he	-
-examples/if2.metta	translated_passes	examples/he_translated/if2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/if3.metta	translated_passes	examples/he_translated/if3_he.metta	0	0	translator output runs cleanly under --he	-
-examples/if4.metta	translated_passes	examples/he_translated/if4_he.metta	0	0	translator output runs cleanly under --he	-
-examples/ifcasenondet.metta	translated_passes	examples/he_translated/ifcasenondet_he.metta	0	0	translator output runs cleanly under --he	-
-examples/ifsimple.metta	translated_passes	examples/he_translated/ifsimple_he.metta	0	0	translator output runs cleanly under --he	-
-examples/invertfunction.metta	translated_passes	examples/he_translated/invertfunction_he.metta	0	0	translator output runs cleanly under --he	-
-examples/invertpeanoplus.metta	he_runtime_gap_core	examples/he_translated/invertpeanoplus_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/iter.metta	translated_passes	examples/he_translated/iter_he.metta	0	0	translator output runs cleanly under --he	-
-examples/lambda.metta	translated_passes	examples/he_translated/lambda_he.metta	0	0	translator output runs cleanly under --he	-
-examples/let_superpose_if_case.metta	translated_passes	examples/he_translated/let_superpose_if_case_he.metta	0	0	translator output runs cleanly under --he	-
-examples/letext.metta	translated_passes	examples/he_translated/letext_he.metta	0	0	translator output runs cleanly under --he	-
-examples/letlet.metta	translated_passes	examples/he_translated/letlet_he.metta	0	0	translator output runs cleanly under --he	-
-examples/letstar.metta	translated_passes	examples/he_translated/letstar_he.metta	0	0	translator output runs cleanly under --he	-
-examples/library.metta	translated_passes	examples/he_translated/library_he.metta	0	0	translator output runs cleanly under --he	-
-examples/listhead.metta	translated_passes	examples/he_translated/listhead_he.metta	0	0	translator output runs cleanly under --he	-
-examples/llm_cities.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/logicprog.metta	translated_passes	examples/he_translated/logicprog_he.metta	0	0	translator output runs cleanly under --he	-
-examples/logicprogset.metta	translated_passes	examples/he_translated/logicprogset_he.metta	0	0	translator output runs cleanly under --he	-
-examples/matchnested.metta	translated_passes	examples/he_translated/matchnested_he.metta	0	0	translator output runs cleanly under --he	-
-examples/matchnested2.metta	translated_passes	examples/he_translated/matchnested2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/matchsingle.metta	translated_passes	examples/he_translated/matchsingle_he.metta	0	0	translator output runs cleanly under --he	-
-examples/matchtypes.metta	translated_passes	examples/he_translated/matchtypes_he.metta	0	0	translator output runs cleanly under --he	-
-examples/matespace.metta	he_runtime_gap_core	examples/he_translated/matespace_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/matespace2.metta	he_runtime_gap_core	examples/he_translated/matespace2_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/matespacefast.metta	he_runtime_gap_core	examples/he_translated/matespacefast_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/math.metta	translated_passes	examples/he_translated/math_he.metta	0	0	translator output runs cleanly under --he	-
-examples/meta_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/metta4_prog.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/metta4_streams.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/mettaset.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/multicall.metta	translated_passes	examples/he_translated/multicall_he.metta	0	0	translator output runs cleanly under --he	-
-examples/multiset_operations.metta	translated_passes	examples/he_translated/multiset_operations_he.metta	0	0	translator output runs cleanly under --he	-
-examples/mutex_and_transaction.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/myinterpreter.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/nars_direct.metta	he_runtime_gap_core	examples/he_translated/nars_direct_he.metta	0	1	--he exit=1 with stderr/stdout error	inspect translator output; minimal repro
-examples/nars_tuffy.metta	he_runtime_gap_core	examples/he_translated/nars_tuffy_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/nestedcons.metta	translated_passes	examples/he_translated/nestedcons_he.metta	0	0	translator output runs cleanly under --he	-
-examples/nilbc.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/once.metta	translated_passes	examples/he_translated/once_he.metta	0	0	translator output runs cleanly under --he	-
-examples/parametric_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/parse.metta	translated_passes	examples/he_translated/parse_he.metta	0	0	translator output runs cleanly under --he	-
-examples/partialdef.metta	translated_passes	examples/he_translated/partialdef_he.metta	0	0	translator output runs cleanly under --he	-
-examples/patrick_iterate_fib.metta	translated_passes	examples/he_translated/patrick_iterate_fib_he.metta	0	0	translator output runs cleanly under --he	-
-examples/patrick_iterate_quad.metta	he_runtime_gap_core	examples/he_translated/patrick_iterate_quad_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/patrick_test.metta	translated_passes	examples/he_translated/patrick_test_he.metta	0	0	translator output runs cleanly under --he	-
-examples/peano.metta	he_runtime_gap_core	examples/he_translated/peano_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/peanofast.metta	he_runtime_gap_core	examples/he_translated/peanofast_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/permutations.metta	translated_passes	examples/he_translated/permutations_he.metta	0	0	translator output runs cleanly under --he	-
-examples/pln_direct.metta	he_runtime_gap_core	examples/he_translated/pln_direct_he.metta	0	1	--he exit=1 with stderr/stdout error	inspect translator output; minimal repro
-examples/pln_roman.metta	translated_passes	examples/he_translated/pln_roman_he.metta	0	0	translator output runs cleanly under --he	-
-examples/pln_tuffy.metta	translated_passes	examples/he_translated/pln_tuffy_he.metta	0	0	translator output runs cleanly under --he	-
-examples/plntest.metta	translated_passes	examples/he_translated/plntest_he.metta	0	0	translator output runs cleanly under --he	-
-examples/plntestdirect.metta	translated_passes	examples/he_translated/plntestdirect_he.metta	0	0	translator output runs cleanly under --he	-
-examples/prologimport.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/python.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/python_import.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/recursive_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/recursive_types2.metta	translated_passes	examples/he_translated/recursive_types2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/repl.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/repr.metta	translated_passes	examples/he_translated/repr_he.metta	0	0	translator output runs cleanly under --he	-
-examples/roman_test.metta	he_runtime_gap_core	examples/he_translated/roman_test_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/scale.metta	he_runtime_gap_core	examples/he_translated/scale_he.metta	0	124	--he timed out on translator output	inspect for translator-emitted nontermination; minimal repro
-examples/selfprog.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/smartdispatch.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/spacefunction.metta	translated_passes	examples/he_translated/spacefunction_he.metta	0	0	translator output runs cleanly under --he	-
-examples/spaces.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/spaces2.metta	translated_passes	examples/he_translated/spaces2_he.metta	0	0	translator output runs cleanly under --he	-
-examples/spaces3.metta	translated_passes	examples/he_translated/spaces3_he.metta	0	0	translator output runs cleanly under --he	-
-examples/spaces_find.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/spaces_removeallatoms.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/spaces_succeedspredicate.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/specialize.metta	translated_passes	examples/he_translated/specialize_he.metta	0	0	translator output runs cleanly under --he	-
-examples/specializecyclic.metta	translated_passes	examples/he_translated/specializecyclic_he.metta	0	0	translator output runs cleanly under --he	-
-examples/specializefunctiontypes.metta	he_runtime_gap_core	examples/he_translated/specializefunctiontypes_he.metta	0	1	--he exit=1 with stderr/stdout error	inspect translator output; minimal repro
-examples/state.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/streamops.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/string.metta	translated_passes	examples/he_translated/string_he.metta	0	0	translator output runs cleanly under --he	-
-examples/supercollapse.metta	translated_passes	examples/he_translated/supercollapse_he.metta	0	0	translator output runs cleanly under --he	-
-examples/superpose_nested.metta	translated_passes	examples/he_translated/superpose_nested_he.metta	0	0	translator output runs cleanly under --he	-
-examples/superpose_primes.metta	translated_passes	examples/he_translated/superpose_primes_he.metta	0	0	translator output runs cleanly under --he	-
-examples/tabling_fib.metta	translated_passes	examples/he_translated/tabling_fib_he.metta	0	0	translator output runs cleanly under --he	-
-examples/test_alpha_unique_atom.metta	translated_passes	examples/he_translated/test_alpha_unique_atom_he.metta	0	0	translator output runs cleanly under --he	-
-examples/test_string_comments.metta	translated_passes	examples/he_translated/test_string_comments_he.metta	0	0	translator output runs cleanly under --he	-
-examples/test_unify_eval_branches.metta	translated_passes	examples/he_translated/test_unify_eval_branches_he.metta	0	0	translator output runs cleanly under --he	-
-examples/tests.metta	translated_passes	examples/he_translated/tests_he.metta	0	0	translator output runs cleanly under --he	-
-examples/tilepuzzle.metta	he_runtime_gap_core	examples/he_translated/tilepuzzle_he.metta	0	1	--he exit=1 with stderr/stdout error	inspect translator output; minimal repro
-examples/torch.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-
-examples/translatepredicate.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/translatorrule.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/translatorrule_fib.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/translatorrule_for.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/twostage.metta	translated_passes	examples/he_translated/twostage_he.metta	0	0	translator output runs cleanly under --he	-
-examples/types.metta	he_runtime_gap_core	examples/he_translated/types_he.metta	0	1	--he exit=1 with stderr/stdout error	inspect translator output; minimal repro
-examples/types_dependent.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/types_nondet.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-
-examples/xor.metta	translated_passes	examples/he_translated/xor_he.metta	0	0	translator output runs cleanly under --he	-
+source	portable_category	portable_translated	default_exit	portable_he_exit	portable_reason	portable_next_action	parallel_category	parallel_translated	parallel_he_exit	parallel_reason	parallel_next_action
+examples/and_or.metta	translated_passes	examples/he_translated/and_or_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/atomops.metta	translated_passes	examples/he_translated/atomops_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/booleansolver.metta	translated_passes	examples/he_translated/booleansolver_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/builin_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/callquoteevalreduce.metta	translated_passes	examples/he_translated/callquoteevalreduce_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/callquoteevalreduce2.metta	translated_passes	examples/he_translated/callquoteevalreduce2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/case.metta	translated_passes	examples/he_translated/case_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/case2.metta	translated_passes	examples/he_translated/case2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/caseconstrain.metta	translated_passes	examples/he_translated/caseconstrain_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/caseempty.metta	translated_passes	examples/he_translated/caseempty_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/casenew.metta	translated_passes	examples/he_translated/casenew_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/chain.metta	translated_passes	examples/he_translated/chain_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/collapse.metta	translated_passes	examples/he_translated/collapse_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/comments.metta	translated_passes	examples/he_translated/comments_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/constanthead.metta	translated_passes	examples/he_translated/constanthead_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/curry.metta	translated_passes	examples/he_translated/curry_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/cut.metta	translated_passes	examples/he_translated/cut_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/empty.metta	translated_passes	examples/he_translated/empty_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/eval.metta	translated_passes	examples/he_translated/eval_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/factorial.metta	translated_passes	examples/he_translated/factorial_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/fib.metta	translated_passes	examples/he_translated/fib_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/fibadd.metta	translated_passes	examples/he_translated/fibadd_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/fibsmart.metta	translated_passes	examples/he_translated/fibsmart_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/fibsmartimport.metta	translated_passes	examples/he_translated/fibsmartimport_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/foldall.metta	translated_passes	examples/he_translated/foldall_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/foldallmatch.metta	translated_passes	examples/he_translated/foldallmatch_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/foldallspacecount.metta	translated_passes	examples/he_translated/foldallspacecount_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/forall.metta	translated_passes	examples/he_translated/forall_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/functionhead.metta	translated_passes	examples/he_translated/functionhead_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/functionhead2.metta	translated_passes	examples/he_translated/functionhead2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/functionhead3.metta	translated_passes	examples/he_translated/functionhead3_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/functionremoval.metta	translated_passes	examples/he_translated/functionremoval_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/functionremovalspec.metta	translated_passes	examples/he_translated/functionremovalspec_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/functiontypes.metta	translated_passes	examples/he_translated/functiontypes_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/git_import.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/git_import2.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/greedy_chess.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/he_assert.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_atomspace.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_equalreduct.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_error.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_evaluation.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_math.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_minimalmetta.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_quoting.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/he_types.metta	already_he	-	-	-	HE-style example; covered by run_he_profile_suite.sh	-	-	-	-	-	-
+examples/holbenchmark.metta	correct_but_perf_gap	examples/he_translated/holbenchmark_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_holbenchmark_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/holfunctions.metta	translated_passes	examples/he_translated/holfunctions_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/holfunctions_intrinsicop.metta	translated_passes	examples/he_translated/holfunctions_intrinsicop_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/hyperpose_primes.metta	portable_extension_lowered	examples/he_translated/hyperpose_primes_he_sequential.metta	0	124	portable _he_sequential translation intentionally sequentializes hyperpose; preserved-hyperpose lane carries the semantic compatibility claim	-	translated_passes	examples/he_translated/hyperpose_primes_he_parallel.metta	0	preserve-hyperpose translator output runs cleanly under --he	-
+examples/identity.metta	translated_passes	examples/he_translated/identity_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/if.metta	translated_passes	examples/he_translated/if_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/if2.metta	translated_passes	examples/he_translated/if2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/if3.metta	translated_passes	examples/he_translated/if3_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/if4.metta	translated_passes	examples/he_translated/if4_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/ifcasenondet.metta	translated_passes	examples/he_translated/ifcasenondet_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/ifsimple.metta	translated_passes	examples/he_translated/ifsimple_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/invertfunction.metta	translated_passes	examples/he_translated/invertfunction_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/invertpeanoplus.metta	translated_passes	examples/he_translated/invertpeanoplus_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/iter.metta	translated_passes	examples/he_translated/iter_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/lambda.metta	translated_passes	examples/he_translated/lambda_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/let_superpose_if_case.metta	translated_passes	examples/he_translated/let_superpose_if_case_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/letext.metta	translated_passes	examples/he_translated/letext_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/letlet.metta	translated_passes	examples/he_translated/letlet_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/letstar.metta	translated_passes	examples/he_translated/letstar_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/library.metta	translated_passes	examples/he_translated/library_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/listhead.metta	translated_passes	examples/he_translated/listhead_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/llm_cities.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/logicprog.metta	translated_passes	examples/he_translated/logicprog_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/logicprogset.metta	translated_passes	examples/he_translated/logicprogset_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/matchnested.metta	translated_passes	examples/he_translated/matchnested_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/matchnested2.metta	translated_passes	examples/he_translated/matchnested2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/matchsingle.metta	translated_passes	examples/he_translated/matchsingle_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/matchtypes.metta	translated_passes	examples/he_translated/matchtypes_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/matespace.metta	correct_but_perf_gap	examples/he_translated/matespace_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_matespace_demo_4_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/matespace2.metta	correct_but_perf_gap	examples/he_translated/matespace2_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_matespace2_demo_4_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/matespacefast.metta	correct_but_perf_gap	examples/he_translated/matespacefast_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_matespacefast_demo_6_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/math.metta	translated_passes	examples/he_translated/math_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/meta_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/metta4_prog.metta	translated_passes	examples/he_translated/metta4_prog_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/metta4_streams.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/mettaset.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/multicall.metta	translated_passes	examples/he_translated/multicall_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/multiset_operations.metta	translated_passes	examples/he_translated/multiset_operations_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/mutex_and_transaction.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/myinterpreter.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/nars_direct.metta	translated_passes	examples/he_translated/nars_direct_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/nars_tuffy.metta	correct_but_perf_gap	examples/he_translated/nars_tuffy_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_nars_tuffy_smallkb_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/nestedcons.metta	translated_passes	examples/he_translated/nestedcons_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/nilbc.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/once.metta	translated_passes	examples/he_translated/once_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/parametric_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/parse.metta	translated_passes	examples/he_translated/parse_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/partialdef.metta	translated_passes	examples/he_translated/partialdef_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/patrick_iterate_fib.metta	translated_passes	examples/he_translated/patrick_iterate_fib_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/patrick_iterate_quad.metta	translated_passes	examples/he_translated/patrick_iterate_quad_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/patrick_test.metta	translated_passes	examples/he_translated/patrick_test_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/peano.metta	correct_but_perf_gap	examples/he_translated/peano_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_peano_demo_50_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/peanofast.metta	translated_passes	examples/he_translated/peanofast_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/permutations.metta	translated_passes	examples/he_translated/permutations_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/pln_direct.metta	translated_passes	examples/he_translated/pln_direct_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/pln_roman.metta	translated_passes	examples/he_translated/pln_roman_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/pln_tuffy.metta	translated_passes	examples/he_translated/pln_tuffy_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/plntest.metta	translated_passes	examples/he_translated/plntest_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/plntestdirect.metta	translated_passes	examples/he_translated/plntestdirect_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/prologimport.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/python.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/python_import.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/recursive_types.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/recursive_types2.metta	translated_passes	examples/he_translated/recursive_types2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/repl.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/repr.metta	translated_passes	examples/he_translated/repr_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/roman_test.metta	translated_passes	examples/he_translated/roman_test_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/scale.metta	translated_passes	examples/he_translated/scale_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/selfprog.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/smartdispatch.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/spacefunction.metta	translated_passes	examples/he_translated/spacefunction_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/spaces.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/spaces2.metta	translated_passes	examples/he_translated/spaces2_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/spaces3.metta	translated_passes	examples/he_translated/spaces3_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/spaces_find.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/spaces_removeallatoms.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/spaces_succeedspredicate.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/specialize.metta	translated_passes	examples/he_translated/specialize_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/specializecyclic.metta	translated_passes	examples/he_translated/specializecyclic_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/specializefunctiontypes.metta	translated_passes	examples/he_translated/specializefunctiontypes_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/state.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/streamops.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/string.metta	translated_passes	examples/he_translated/string_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/supercollapse.metta	translated_passes	examples/he_translated/supercollapse_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/superpose_nested.metta	translated_passes	examples/he_translated/superpose_nested_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/superpose_primes.metta	translated_passes	examples/he_translated/superpose_primes_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/tabling_fib.metta	translated_passes	examples/he_translated/tabling_fib_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/test_alpha_unique_atom.metta	translated_passes	examples/he_translated/test_alpha_unique_atom_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/test_string_comments.metta	translated_passes	examples/he_translated/test_string_comments_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/test_unify_eval_branches.metta	translated_passes	examples/he_translated/test_unify_eval_branches_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/tests.metta	translated_passes	examples/he_translated/tests_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/tilepuzzle.metta	correct_but_perf_gap	examples/he_translated/tilepuzzle_he.metta	0	124	portable full translated run timed out, but reduced witness tests/profile_repros/he_tilepuzzle_bfs_500_witness.metta passes under --he	keep full portable translation; treat as performance/capacity gap; profile the full workload	-	-	-	-	-
+examples/torch.metta	external_or_interactive	-	-	-	network/LLM/PyTorch/REPL/UI/Python bridge	-	-	-	-	-	-
+examples/translatepredicate.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/translatorrule.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/translatorrule_fib.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/translatorrule_for.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/twostage.metta	translated_passes	examples/he_translated/twostage_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/types.metta	translated_passes	examples/he_translated/types_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-
+examples/types_dependent.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/types_nondet.metta	petta_specific_no_translation	-	-	-	deliberately PeTTa-only construct	-	-	-	-	-	-
+examples/xor.metta	translated_passes	examples/he_translated/xor_he.metta	0	0	portable translator output runs cleanly under --he	-	-	-	-	-	-

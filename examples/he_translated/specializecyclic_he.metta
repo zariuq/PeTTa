@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (8 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/specializecyclic.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/specializecyclic.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (f1 $f $a) (if (< $a 0) ($f nevercalled 42) (if (== $a 0) (f2 $f (- $a 1)) finish)))
 (= (f2 $f $a) (if (< $a 0) ($f nevercalled 42) (f1 $f $a)))

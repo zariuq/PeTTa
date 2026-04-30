@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (14 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/functiontypes.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/functiontypes.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (: wu1 (-> Number Expression Expression))
 (= (wu1 $a $b) (42 $a $b))

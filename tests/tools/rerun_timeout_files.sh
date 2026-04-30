@@ -41,15 +41,34 @@ run_capture() {
     printf '%s\t%s\t%s' "$wall" "$rss" "$exit_field"
 }
 
+portable_generated_for_base() {
+    local base=$1
+    local sequential="$GENERATED_DIR/${base}_he_sequential.metta"
+    local legacy="$GENERATED_DIR/${base}_he.metta"
+    if [ "$base" != hyperpose_primes ] && [ -f "$legacy" ]; then
+        printf '%s\n' "$legacy"
+        return 0
+    fi
+    if [ -f "$sequential" ]; then
+        printf '%s\n' "$sequential"
+        return 0
+    fi
+    if [ -f "$legacy" ]; then
+        printf '%s\n' "$legacy"
+        return 0
+    fi
+    return 1
+}
+
 for base in $FILES; do
     src="examples/${base}.metta"
-    gen="$GENERATED_DIR/${base}_he.metta"
+    gen=$(portable_generated_for_base "$base" || true)
     if [ ! -f "$ROOT/$src" ]; then
         printf 'MISSING source %s\n' "$src" | tee -a "$LOG"
         continue
     fi
-    if [ ! -f "$gen" ]; then
-        printf 'MISSING generated %s\n' "$gen" | tee -a "$LOG"
+    if [ -z "$gen" ] || [ ! -f "$gen" ]; then
+        printf 'MISSING generated portable translation for %s\n' "$base" | tee -a "$LOG"
         continue
     fi
     printf '\n>>> %s (timeout=%ss)\n' "$base" "$TIMEOUT_SECONDS" | tee -a "$LOG"

@@ -105,6 +105,6 @@ he_bridge_match_blocked(Pattern) :-
     he_blocks_generic_list_match(Pattern), !.
 
 he_bridge_run_runnable(Goals, Result) :-
-    catch(call_goals(Goals),
+    catch(once(call_goals(Goals)),
           he_return(Returned),
           Result = [['Error', [return, Returned], 'NoReturn']]).

@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (16 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/spacefunction.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/spacefunction.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(add-atom &self (= (f $x $y) (+ $x $y)))
 !(add-atom &self (= (g $x $y) (+ $x $y)))

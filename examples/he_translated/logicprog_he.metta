@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (10 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/logicprog.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/logicprog.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (successor b a) True)
 (= (successor c b) True)

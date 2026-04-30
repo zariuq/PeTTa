@@ -229,20 +229,32 @@ he_fast_typed_call('==', [A, B], _, R) :-
     ( he_auto_typecheck(true)
     -> 'get-type'(A, TA),
        'get-type'(B, TB),
-       he_match_types_live(TA, TB)
+       ( he_match_types_live(TA, TB)
+       -> true
+       ;  R = ['Error', ['==', A, B], ['BadArgType', 2, TA, TB]]
+       )
     ;  true
     ), !,
-    ( A =@= B -> R = true ; R = false ).
+    ( var(R) ->
+      ( A =@= B -> R = true ; R = false )
+    ; true
+    ).
 he_fast_typed_call('!=', [A, B], _, R) :-
     he_fast_typed_literal(A),
     he_fast_typed_literal(B),
     ( he_auto_typecheck(true)
     -> 'get-type'(A, TA),
        'get-type'(B, TB),
-       he_match_types_live(TA, TB)
+       ( he_match_types_live(TA, TB)
+       -> true
+       ;  R = ['Error', ['!=', A, B], ['BadArgType', 2, TA, TB]]
+       )
     ;  true
     ), !,
-    ( A =@= B -> R = false ; R = true ).
+    ( var(R) ->
+      ( A =@= B -> R = false ; R = true )
+    ; true
+    ).
 
 he_fast_typed_literal(A) :-
     number(A), !.
@@ -426,16 +438,28 @@ he_eval_or_reduce(Call, Out) :-
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     Call = [Fun|Args],
+    is_list(Fun),
+    \+ he_callable_data_head(Fun), !,
+    Out = [Fun|Args].
+he_eval_or_reduce(Call, Out) :-
+    he_profile_enabled,
+    Call = [Fun|Args],
     is_list(Fun), !,
     ( he_call_has_equation(Call)
     -> catch(match('&self', [=, Call, Body], Body, _), _, fail),
        eval(Body, Out)
-    ;  he_eval_or_reduce(Fun, Callable),
-       ( Callable \=@= Fun
-       -> he_apply_callable_result(Callable, Args, Out)
+    ;  ( he_eval_or_reduce(Fun, Callable)
+       -> ( Callable \=@= Fun,
+            he_apply_callable_result(Callable, Args, Applied)
+          -> Out = Applied
+          ;  Out = [Fun|Args]
+          )
        ;  Out = [Fun|Args]
        )
     ).
+he_eval_or_reduce(['union-atom', A, B], Out) :-
+    he_profile_enabled, !,
+    he_union_atom(A, B, Out).
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     Call = [Fun|Args],
@@ -496,6 +520,17 @@ he_apply_callable_result(Expr, Args, Out) :-
     Callable \=@= Expr,
     he_apply_callable_result(Callable, Args, Out).
 
+he_union_atom(A, B, Out) :-
+    nonvar(Out),
+    is_list(B), !,
+    once(append(A, B, Out)).
+he_union_atom(A, B, Out) :-
+    nonvar(Out),
+    is_list(A), !,
+    once(append(A, B, Out)).
+he_union_atom(A, B, Out) :-
+    append(A, B, Out).
+
 he_runtime_callable_head(Fun) :-
     atom(Fun),
     he_runtime_callable_head_cache(Fun), !.
@@ -518,6 +553,10 @@ he_runtime_callable_head(Fun) :-
     compound(Fun),
     Fun = partial(_, _), !.
 
+he_call_or_self(Fun, Args, Out) :-
+    Fun == 'union-atom',
+    Args = [A, B], !,
+    he_union_atom(A, B, Out).
 he_call_or_self(Fun, Args, Out) :-
     \+ he_call_is_partial_arity(Fun, Args),
     append(Args, [Out], CallArgs),
@@ -577,8 +616,11 @@ he_call_compiled_or_self(Call, Goal, _) :-
     he_call_has_equation(Call), !,
     catch(call(Goal), _, fail).
 he_call_compiled_or_self(Call, Goal, Out) :-
-    ( catch(call(Goal), _, fail)
-    ; Out = Call ).
+    State = state(no_solution),
+    ( catch((call(Goal), nb_setarg(1, State, solved)), _, fail)
+    ; arg(1, State, no_solution),
+      Out = Call
+    ).
 
 he_maybe_register_specialization_types(Fun, Args, TypeChains) :-
     he_profile_enabled,

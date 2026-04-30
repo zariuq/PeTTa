@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (16 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/curry.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/curry.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (f $a $b) (+ $a $b))
 (= (g $a $b $c) (+ $c (+ $a $b)))

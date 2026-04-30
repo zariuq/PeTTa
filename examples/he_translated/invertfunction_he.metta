@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (8 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/invertfunction.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/invertfunction.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (f $X $Y) (append ($X) $Y))
 (= (g $X $Y $Z) (append ((#+ $X $Z)) $Y))

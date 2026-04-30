@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (26 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/test_alpha_unique_atom.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/test_alpha_unique_atom.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(assertPeTTaTest (=alpha (alpha-unique-atom ((link $x human) (link $y human) (link $z human))) ((link $a human))) True)
 !(assertPeTTaTest (=alpha (alpha-unique-atom ((parent $x human) (parent $y human) (child $z human))) ((parent $a human) (child $b human))) True)

@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (14 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/spaces3.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/spaces3.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(add-atom &wuspace (wu))
 !(add-atom &wuspace (wu 42))

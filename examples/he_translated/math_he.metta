@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (38 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/math.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/math.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(assertPeTTaTest (pow-math 2 3) 8)
 !(assertPeTTaTest (sqrt-math 9) 3.0)

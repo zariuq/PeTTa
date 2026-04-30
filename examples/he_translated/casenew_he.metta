@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (5 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/casenew.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/casenew.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (wu1) (empty))
 (= (wu2) (full))

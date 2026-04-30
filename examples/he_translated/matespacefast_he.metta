@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (4 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/matespacefast.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/matespacefast.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (length $expr) (let $tuple (eval $expr) (size-atom $tuple)))
 (= (rewriteK $t $n) (if (== $n 0) done (let* (($_1 (add-atom &self (num (M $t)))) ($_2 (add-atom &self (num (W $t)))) ($_3 (add-atom &self (num (C $t))))) ((rewriteK (M $t) (- $n 1)) (rewriteK (W $t) (- $n 1))))))

@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (7 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/matespace.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/matespace.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (length $expr) (let $tuple (eval $expr) (size-atom $tuple)))
 (= (add-atom-no-duplicate $Space $Atom) (if (== () (collapse (once (match $Space $Atom $Atom)))) (add-atom $Space $Atom) (empty)))

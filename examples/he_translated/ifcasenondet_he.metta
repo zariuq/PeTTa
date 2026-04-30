@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (6 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/ifcasenondet.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/ifcasenondet.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (if-nondet $y) (if (superpose $y) a b))
 (= (case-nondet $y) (case (superpose $y) ((True a) (False b))))

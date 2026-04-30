@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (67 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/permutations.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/permutations.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (length $expr) (let $tuple (eval $expr) (size-atom $tuple)))
 (1 != 2)

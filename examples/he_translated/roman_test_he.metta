@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (55 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/roman_test.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/roman_test.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(import! &self ../../lib/lib_roman.metta)
 !(assertPeTTaTest (map-flat (+ 1) (1 2 3)) (2 3 4))

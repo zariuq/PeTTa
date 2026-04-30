@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (23 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/nars_direct.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/nars_direct.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(import! &self (library lib_nars))
 (: => (-> Expression Expression Atom Atom))

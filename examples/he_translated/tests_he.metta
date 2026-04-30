@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (6 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/tests.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/tests.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (program1 $Y) (let $X $Y (collapse (superpose (12 (+ $X 4))))))
 (= (program2 $Y) (let $list (let $L (1 2 3) (collapse (superpose $L))) (superpose $list)))

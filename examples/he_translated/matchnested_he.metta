@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (7 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/matchnested.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/matchnested.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (hide $1) (empty))
 !(hide ((add-atom &self (friend tim tom)) (add-atom &self (friend tom tam)) (add-atom &self (friend sim som)) (add-atom &self (friend som sam))))

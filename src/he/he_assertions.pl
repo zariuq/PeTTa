@@ -1,3 +1,5 @@
+:- meta_predicate he_collect_petta_test_actual(?, 0, ?, ?).
+
 he_result_key(Term, Key) :-
     copy_term(Term, Copy),
     he_normalize_state_term(Copy, Norm),
@@ -43,6 +45,23 @@ he_petta_test_matches(Actual, Expected) :-
     he_result_key(Actual, ActualKey),
     he_result_key(Expected, ExpectedKey),
     ActualKey == ExpectedKey.
+
+he_collect_petta_test_actual(ExprVal, ExprConj, Expected, Actual) :-
+    findnsols(2, ExprVal, ExprConj, Sampled),
+    ( Sampled = [First|_],
+      he_petta_test_matches(First, Expected)
+    -> Actual = First
+    ; Sampled = [Actual]
+    -> true
+    ; findall(ExprVal, ExprConj, Results),
+      ( Results = [First|_],
+        he_petta_test_matches(First, Expected)
+      -> Actual = First
+      ; Results = [Actual]
+      -> true
+      ; Actual = Results
+      )
+    ).
 
 he_assert_petta_test(Label, Actual, Expected, true) :-
     ( he_petta_test_matches(Actual, Expected)

@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (9 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/pln_roman.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/pln_roman.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(import! &self ../../lib/lib_pln.metta)
 (= (STV A) (stv 0.5 0.9))

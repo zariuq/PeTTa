@@ -1,3 +1,7 @@
+% Internal MeTTa -> Prolog runtime compiler used by PeTTa at load/eval time.
+% This is not the canonical file-to-file PeTTa <-> HE translator; that lives
+% in /home/zar/claude/hyperon/translators/.
+
 %Pattern matching, structural and functional/relational constraints on arguments:
 constrain_args(X, X, []) :- (var(X); atomic(X)), !.
 constrain_args([F, A, B], Out, Goals) :- nonvar(F),
@@ -353,9 +357,17 @@ translate_expr([H0|T0], Goals, Out) :-
         ; he_post_builtin_dispatch(HV, T, GsH, Out, Goals)
         %--- Automatic 'smart' dispatch, translator deciding when to create a predicate call, data list, or dynamic dispatch: ---
         ; translate_args(T, GsT, AVs),
-          append(GsH, GsT, Inner),
-          %Known function => direct call:
-          ( is_list(AVs), 
+          %HE list-headed data tuple: preserve the head expression structurally,
+          % but keep evaluating the remaining tuple elements.
+          ( he_profile_enabled,
+            is_list(H),
+            \+ he_callable_data_head(H)
+          -> eval_data_term(H, Gd, HV1),
+             append(GsT, Gd, Goals),
+             Out = [HV1|AVs]
+          ; append(GsH, GsT, Inner),
+            %Known function => direct call:
+            ( is_list(AVs), 
             ( atom(HV), fun(HV), Fun = HV, AllAVs = AVs, IsPartial = false
             ; compound(HV), HV = partial(Fun, Bound), append(Bound,AVs,AllAVs), IsPartial = true
             ) % Check for type definition [:,HV,TypeChain]
@@ -372,7 +384,7 @@ translate_expr([H0|T0], Goals, Out) :-
                            append(Inner, Gd, Goals),
                            Out = [HV1|AVs]
           %Unknown head (var/compound) => runtime dispatch:
-                           ; append(Inner, [reduce([HV|AVs], Out)], Goals) )).
+                           ; append(Inner, [reduce([HV|AVs], Out)], Goals) ))).
 
 %Generate actual function call or partial if arity not complete:
 build_call_or_partial(Fun, AVs, Out, Inner, Extra, Goals) :- length(AVs, N),

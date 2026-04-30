@@ -161,6 +161,7 @@ install_he_library("system") :-
 importer_helper(_, mork) :- !.
 importer_helper(_, File) :-
     he_profile_enabled,
+    ( atom(File) ; string(File) ),
     term_atom_string(File, LibName),
     install_he_library(LibName), !.
 importer_helper(Space, [library, Name]) :-

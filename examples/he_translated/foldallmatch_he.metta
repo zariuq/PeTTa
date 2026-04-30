@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (8 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/foldallmatch.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/foldallmatch.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (kb 1)
 (kb 2)

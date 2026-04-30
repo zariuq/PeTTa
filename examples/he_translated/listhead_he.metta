@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (8 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/listhead.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/listhead.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (len ()) 0)
 (= (len (cons $Head $Tail)) (let $N0 (len $Tail) (+ $N0 1)))

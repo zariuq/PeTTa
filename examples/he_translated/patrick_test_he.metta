@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (9 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/patrick_test.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/patrick_test.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 !(import! &self (library lib_patrick))
 (= (mirror (@ $L (cons $head $tail))) (append (reverse $L) $tail))

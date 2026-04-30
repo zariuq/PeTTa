@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (14 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/callquoteevalreduce2.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/callquoteevalreduce2.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (fib $N) (if (< $N 2) $N (+ (fib (- $N 1)) (fib (- $N 2)))))
 (= (myfunc) 5)

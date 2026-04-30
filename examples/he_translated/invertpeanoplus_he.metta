@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (12 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/invertpeanoplus.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/invertpeanoplus.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (plus Z $y) $y)
 (= (plus (S $x) $y) (S (plus $x $y)))

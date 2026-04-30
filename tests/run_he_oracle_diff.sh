@@ -30,15 +30,6 @@ if [ -z "$HE_METTA_BIN" ]; then
     exit 0
 fi
 
-is_support_only() {
-    case "$1" in
-        */cetta_tests/spec_module_inventory.metta) return 0 ;;
-        */cetta_tests/profile_he_prime_dependent_binders_compat.metta) return 0 ;;
-        */cetta_tests/support/import_parse_fail/module.metta) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 collect_files() {
     find "$CORPUS_ROOT" -type f -name '*.metta' | sort
 }
@@ -68,7 +59,7 @@ categories=()
 while IFS= read -r file; do
     total=$((total + 1))
     rel=${file#"$CORPUS_ROOT"/}
-    if is_support_only "$file"; then
+    if he_corpus_skip_reason "$rel" "$file" >/dev/null; then
         skipped=$((skipped + 1))
         continue
     fi

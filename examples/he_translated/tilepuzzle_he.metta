@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (31 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/tilepuzzle.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/tilepuzzle.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (move (___ $_2 $_3 $_4 $_5 $_6 $_7 $_8 $_9) R) ($_2 ___ $_3 $_4 $_5 $_6 $_7 $_8 $_9))
 (= (move (___ $_2 $_3 $_4 $_5 $_6 $_7 $_8 $_9) D) ($_4 $_2 $_3 ___ $_5 $_6 $_7 $_8 $_9))

@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (29 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/forall.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/forall.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (f) 1)
 (= (f) 2)

@@ -95,10 +95,13 @@ run_he_examples() {
 }
 
 run_case 'PeTTa --he native surface' "$RUN_SH" --he "$ROOT/tests/he_native_surface.metta" --silent
+run_case 'PeTTa --he direct hyperpose surface' "$RUN_SH" --he "$ROOT/tests/he_hyperpose_direct.metta" --silent
 run_case 'PeTTa --he foreign callable heads' "$RUN_SH" --he "$ROOT/tests/he_foreign_callable.metta" --silent
 run_case 'PeTTa --he executable spec core corpus' "$RUN_SH" --he "$ROOT/tests/he_spec_core.metta" --silent
 run_case 'PeTTa --he executable spec type/error corpus' "$RUN_SH" --he "$ROOT/tests/he_spec_type_errors.metta" --silent
 run_case 'PeTTa --he arithmetic boundary' "$RUN_SH" --he "$ROOT/tests/he_profile_arithmetic.metta" --silent
+run_case 'PeTTa --he equality callable lowering prime lane' "$RUN_SH" --he "$ROOT/tests/he_eq_callable_prime.metta" --silent
+run_case 'PeTTa --he equality auto-type mismatch regression' "$RUN_SH" --he "$ROOT/tests/he_eq_autotype_error.metta" --silent
 run_case 'PeTTa --he arithmetic helpers' "$RUN_SH" --he "$ROOT/tests/he_arithmetic_helpers.metta" --silent
 run_case 'default PeTTa arithmetic unchanged' "$RUN_SH" "$ROOT/tests/petta_profile_arithmetic.metta" --silent
 run_case 'default PeTTa lib_he remains a real import' "$RUN_SH" "$ROOT/tests/default_lib_he_real_import.metta" --silent
@@ -114,6 +117,7 @@ run_case 'PeTTa --he singleton expression space patterns' "$RUN_SH" --he "$ROOT/
 run_case 'PeTTa --he collapse in data tuples' "$RUN_SH" --he "$ROOT/tests/he_collapse_in_data_tuple.metta" --silent
 run_case 'PeTTa --he typed nondeterministic bool dispatch' "$RUN_SH" --he "$ROOT/tests/he_typed_nondet_bool.metta" --silent
 run_case 'PeTTa --he foldl compatibility' "$RUN_SH" --he "$ROOT/tests/he_foldl_compat.metta" --silent
+run_case 'PeTTa --he higher-order curry full application' "$RUN_SH" --he "$ROOT/tests/he_higherorder_curry_call.metta" --silent
 run_case 'PeTTa --he chain cut side effects' "$RUN_SH" --he "$ROOT/tests/he_chain_cut_side_effect.metta" --silent
 run_case 'PeTTa --he add-unique-or-fail compatibility' "$RUN_SH" --he "$ROOT/tests/he_add_unique_or_fail_native.metta" --silent
 run_case 'PeTTa --he specialization type facts' "$RUN_SH" --he "$ROOT/tests/he_specialization_type_facts.metta" --silent

@@ -1,5 +1,8 @@
 ; Translated from PeTTa to HE (14 atoms)
-; Source: /home/zar/claude/tmp/petta-he-profile/examples/matchtypes.metta
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/matchtypes.metta
+; Translation target: PeTTa HE
+; Intended runtime: ./run.sh --he
+; Portability: portable/default HE lowering
 
 (= (match-types $A $B $Then $Else) (if (== $A $B) $Then $Else))
 !(match-types Atom Atom "Matched!" "Didn't match")

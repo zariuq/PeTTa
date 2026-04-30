@@ -31,15 +31,6 @@ STRICT_ALL=${STRICT_ALL:-0}
 # assert_fail/crashed/timed_out stay distinguishable.
 readonly TIMEOUT_RC=124
 
-is_support_only() {
-    case "$1" in
-        */cetta_tests/spec_module_inventory.metta) return 0 ;;
-        */cetta_tests/profile_he_prime_dependent_binders_compat.metta) return 0 ;;
-        */cetta_tests/support/import_parse_fail/module.metta) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 collect_files() {
     find "$CORPUS_ROOT" -type f -name '*.metta' | sort
 }
@@ -52,6 +43,12 @@ total=0
 skipped=0
 skipped_fixture=0
 skipped_admin=0
+skipped_workload=0
+skipped_nonpetta_extension=0
+hyperon_seen=0
+cetta_seen=0
+hyperon_runnable=0
+cetta_runnable=0
 full_match=0
 petta_supports_more=0
 output_shape_differs=0
@@ -74,20 +71,6 @@ upstream_only_files=()
 # legitimately print the words "Assertion failed:" as program output.
 is_assertion_failure_output() {
     printf '%s' "$1" | grep -q '^Assertion failed:\|\\nAssertion failed:'
-}
-
-skip_reason() {
-    case "$1" in
-        */cetta_tests/spec_module_inventory.metta)
-            printf 'cetta-admin-profile-inventory'
-            ;;
-        */cetta_tests/profile_he_prime_dependent_binders_compat.metta|*/cetta_tests/support/import_parse_fail/module.metta)
-            printf 'malformed-or-obsolete-fixture'
-            ;;
-        *)
-            printf 'support-only'
-            ;;
-    esac
 }
 
 # A runtime's output "effectively failed" when its result stream is an
@@ -129,16 +112,25 @@ has_error_atom_output() {
 while IFS= read -r file; do
     total=$((total + 1))
     rel=${file#"$CORPUS_ROOT"/}
-    if is_support_only "$file"; then
+    case "$rel" in
+        hyperon_scripts/*) hyperon_seen=$((hyperon_seen + 1)) ;;
+        cetta_tests/*) cetta_seen=$((cetta_seen + 1)) ;;
+    esac
+    if reason=$(he_corpus_skip_reason "$rel" "$file"); then
         skipped=$((skipped + 1))
-        reason=$(skip_reason "$file")
         case "$reason" in
-            cetta-admin-profile-inventory) skipped_admin=$((skipped_admin + 1)) ;;
+            cetta-admin) skipped_admin=$((skipped_admin + 1)) ;;
+            cetta-workload) skipped_workload=$((skipped_workload + 1)) ;;
+            cetta-nonpetta-he-extension) skipped_nonpetta_extension=$((skipped_nonpetta_extension + 1)) ;;
             *) skipped_fixture=$((skipped_fixture + 1)) ;;
         esac
         printf 'SKIP [%s] %s\n' "$reason" "$rel" | tee -a "$LOG"
         continue
     fi
+    case "$rel" in
+        hyperon_scripts/*) hyperon_runnable=$((hyperon_runnable + 1)) ;;
+        cetta_tests/*) cetta_runnable=$((cetta_runnable + 1)) ;;
+    esac
 
     petta_pair=$(run_capture petta "$RUN_SH" --he "$file" --silent)
     petta_rc=${petta_pair%%$'\t'*}
@@ -284,6 +276,8 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
 {
     printf '\n'
     printf 'PeTTa --he — %s HE test files (%s).\n' "$total" "$CORPUS_ROOT"
+    printf '  · hyperon-experimental rows seen/runnable: %s/%s\n' "$hyperon_runnable" "$hyperon_seen"
+    printf '  · CeTTa rows seen/runnable: %s/%s\n' "$cetta_runnable" "$cetta_seen"
     printf '\n'
     if [ -n "$HE_METTA_BIN" ]; then
         printf 'HE-spec-core conformance: %s/%s files match upstream HE exactly.\n' \
@@ -379,6 +373,12 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
     fi
     if [ "$skipped_admin" -gt 0 ]; then
         printf '  · %s CeTTa administrative/profile-inventory probe(s), kept out of PeTTa --he conformance.\n' "$skipped_admin"
+    fi
+    if [ "$skipped_workload" -gt 0 ]; then
+        printf '  · %s CeTTa benchmark/workload file(s), kept out of the correctness lane.\n' "$skipped_workload"
+    fi
+    if [ "$skipped_nonpetta_extension" -gt 0 ]; then
+        printf '  · %s CeTTa file(s) using non-PeTTa HE-extension surfaces.\n' "$skipped_nonpetta_extension"
     fi
     printf '\n'
     printf 'LOG %s\n' "$LOG"
