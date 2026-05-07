@@ -3,6 +3,14 @@
 %Generate a MeTTa S-expression string from the Prolog list (inverse parsing):
 swrite(Term, String) :- phrase(swrite_exp(Term), Codes),
                         string_codes(String, Codes).
+swrite_public(Term, String) :-
+    he_public_term(Term, Public),
+    swrite(Public, String).
+swrite_result_bag(Results, String) :-
+    must_be(list, Results),
+    maplist(swrite_public, Results, Rendered),
+    atomic_list_concat(Rendered, ', ', Inner),
+    format(string(String), '[~w]', [Inner]).
 swrite_exp(Var)   --> { var(Var) }, !, "$", { term_to_atom(Var, A), atom_codes(A, Cs) }, Cs.
 swrite_exp(Num)   --> { number(Num) }, !, { number_codes(Num, Cs) }, Cs.
 swrite_exp(Str)   --> { string(Str) }, !, "\"", { string_codes(Str, Cs), escape_quotes(Cs, Es) }, Es, "\"".
@@ -16,6 +24,29 @@ seq([X|Xs]) --> swrite_exp(X), " ", seq(Xs).
 escape_quotes([], []).
 escape_quotes([0'"|T], [0'\\,0'"|R]) :- !, escape_quotes(T, R).
 escape_quotes([H|T], [H|R]) :- escape_quotes(T, R).
+
+he_public_term(Term, Public) :-
+    var(Term), !,
+    Public = Term.
+he_public_term(true, 'True') :- !.
+he_public_term(false, 'False') :- !.
+he_public_term(Term, ['State', PublicValue]) :-
+    atom(Term),
+    current_predicate(he_state_handle/2),
+    current_predicate(he_normalize_state_term/2),
+    catch(he_state_handle(Term, _), _, fail),
+    catch(he_normalize_state_term(Term, ['new-state', Value0]), _, fail), !,
+    he_public_term(Value0, PublicValue).
+he_public_term(Term, Public) :-
+    atomic(Term), !,
+    Public = Term.
+he_public_term(Term, Public) :-
+    is_list(Term), !,
+    maplist(he_public_term, Term, Public).
+he_public_term(Term, Public) :-
+    Term =.. [F|Args],
+    maplist(he_public_term, Args, PublicArgs),
+    Public =.. [F|PublicArgs].
 
 %Read S string or atom, extract codes, and apply DCG (parsing):
 sread(S, T) :- ( atom_string(A, S),

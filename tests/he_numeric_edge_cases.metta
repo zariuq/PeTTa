@@ -1,0 +1,6 @@
+!(assertEqualToResult (/ 5 0) ((Error (/ 5 0) DivisionByZero)))
+!(assertEqualToResult (% 7 0) ((Error (% 7 0) DivisionByZero)))
+!(assertEqual (/ 5.0 0.0) inf)
+!(assertEqual (/ 0.0 0.0) NaN)
+!(assertEqual (let $nan (/ 0.0 0.0) (isnan-math $nan)) true)
+!(assertEqual (let $inf (/ 5.0 0.0) (isinf-math $inf)) true)

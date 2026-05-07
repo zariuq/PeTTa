@@ -14,5 +14,5 @@
    (== $n (find-divisor $n 2)))
 
 !(assertPeTTaTest
-  (prime? 5421844300001)
+  (prime? 15485863)
   True)

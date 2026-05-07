@@ -49,11 +49,19 @@ he_doc_function_parts(Type, ArgTypes, RetType) :-
       RetType = '%Undefined%'
     ).
 
+'he_doc_lookup_item'(Item, Item) :-
+    he_doc_atom(Item, _), !.
+'he_doc_lookup_item'(Item0, Item) :-
+    he_namespace_sugar_alias(Item0, Item),
+    Item \== Item0,
+    he_doc_atom(Item, _).
+
 'get-doc'(Item, 'Empty') :-
     is_list(Item), !.
-'get-doc'(Item, 'Empty') :-
-    \+ he_doc_atom(Item, _), !.
-'get-doc'(Item, Doc) :-
+'get-doc'(Item0, 'Empty') :-
+    \+ 'he_doc_lookup_item'(Item0, _), !.
+'get-doc'(Item0, Doc) :-
+    'he_doc_lookup_item'(Item0, Item),
     he_doc_atom(Item, Fields),
     'get-type'(Item, Type),
     he_doc_field(Fields, '@desc', "No documentation", Desc),
@@ -63,14 +71,51 @@ he_doc_function_parts(Type, ArgTypes, RetType) :-
        he_doc_function_parts(Type, ArgTypes, RetType),
        he_doc_formal_params(ArgTypes, ParamDescs, ParamsFormal),
        he_doc_return_desc(Fields, ReturnDesc),
-       Doc = ['@doc-formal', ['@item', Item], ['@kind', function], ['@type', Type],
+       Doc = ['@doc-formal', ['@item', Item0], ['@kind', function], ['@type', Type],
               ['@desc', Desc], ['@params', ParamsFormal],
               ['@return', ['@type', RetType], ['@desc', ReturnDesc]]]
-    ; Doc = ['@doc-formal', ['@item', Item], ['@kind', atom], ['@type', Type], ['@desc', Desc]]
+    ; Doc = ['@doc-formal', ['@item', Item0], ['@kind', atom], ['@type', Type], ['@desc', Desc]]
     ).
 
-'help!'(Item, true) :-
-    'get-doc'(Item, Doc),
-    swrite(Doc, SDoc),
-    format("~w~n", [SDoc]).
+he_doc_text(Term, Text) :-
+    string(Term), !,
+    Text = Term.
+he_doc_text(Term, Text) :-
+    swrite(Term, Text).
 
+he_doc_print_param(['@param', ['@type', Type], ['@desc', Desc]]) :-
+    he_doc_text(Type, TypeText),
+    he_doc_text(Desc, DescText),
+    format("  ~w ~w~n", [TypeText, DescText]).
+
+he_doc_print(['@doc-formal', ['@item', Item], ['@kind', function], ['@type', Type],
+              ['@desc', Desc], ['@params', Params],
+              ['@return', ['@type', RetType], ['@desc', ReturnDesc]]]) :-
+    he_doc_text(Item, ItemText),
+    he_doc_text(Type, TypeText),
+    he_doc_text(Desc, DescText),
+    he_doc_text(RetType, RetTypeText),
+    he_doc_text(ReturnDesc, ReturnDescText),
+    format("Function ~w: ~w ~w~n", [ItemText, TypeText, DescText]),
+    format("Parameters:~n", []),
+    forall(member(Param, Params), he_doc_print_param(Param)),
+    format("Return: (type ~w) ~w~n", [RetTypeText, ReturnDescText]).
+he_doc_print(['@doc-formal', ['@item', Item], ['@kind', function], ['@type', Type], ['@desc', Desc]]) :-
+    he_doc_text(Item, ItemText),
+    he_doc_text(Type, TypeText),
+    he_doc_text(Desc, DescText),
+    format("Function ~w: ~w ~w~n", [ItemText, TypeText, DescText]).
+he_doc_print(['@doc-formal', ['@item', Item], ['@kind', atom], ['@type', Type], ['@desc', Desc]]) :-
+    he_doc_text(Item, ItemText),
+    he_doc_text(Type, TypeText),
+    he_doc_text(Desc, DescText),
+    format("Atom ~w: ~w ~w~n", [ItemText, TypeText, DescText]).
+he_doc_print('Empty') :-
+    format("No documentation found.~n", []).
+he_doc_print(Other) :-
+    he_doc_text(Other, Text),
+    format("~w~n", [Text]).
+
+'help!'(Item, []) :-
+    once('get-doc'(Item, Doc)),
+    he_doc_print(Doc).

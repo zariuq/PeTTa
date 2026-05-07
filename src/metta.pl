@@ -73,24 +73,68 @@ exp(Arg,R) :- R is exp(Arg).
 '#='(_, _, false).
 '#\\='(A, B, true)  :- A #\= B, !.
 '#\\='(_, _, false).
-'pow-math'(A, B, Out) :- Out is A ** B.
+he_float_surface_number(Raw, Out) :-
+    integer(Raw), !,
+    Out is float(Raw).
+he_float_surface_number(Raw, Raw).
+
+he_list_prefers_float_surface([Value|_]) :-
+    float(Value), !.
+he_list_prefers_float_surface([_|Values]) :-
+    he_list_prefers_float_surface(Values).
+
+'pow-math'(A, B, ['Error', ['pow-math', A, B], ['MathDomainError', 2, 'IntegralExponentWhenBaseNegative']]) :-
+    number(A),
+    number(B),
+    A < 0,
+    B =\= round(B), !.
+'pow-math'(A, B, ['Error', ['pow-math', A, B], ['MathDomainError', 1, 'NonZeroBaseWhenExponentNegative']]) :-
+    number(A),
+    number(B),
+    A =:= 0,
+    B < 0, !.
+'pow-math'(A, B, Out) :-
+    Raw is A ** B,
+    he_float_surface_number(Raw, Out).
+'sqrt-math'(A, ['Error', ['sqrt-math', A], ['MathDomainError', 1, 'NonNegativeReal']]) :-
+    number(A),
+    A < 0, !.
 'sqrt-math'(A, Out)   :- Out is sqrt(A).
 'abs-math'(A, Out)    :- Out is abs(A).
+'log-math'(Base, X, ['Error', ['log-math', Base, X], ['MathDomainError', 1, 'PositiveRealNotOne']]) :-
+    number(Base),
+    ( Base =< 0 ; Base =:= 1 ), !.
+'log-math'(Base, X, ['Error', ['log-math', Base, X], ['MathDomainError', 2, 'PositiveReal']]) :-
+    number(X),
+    X =< 0, !.
 'log-math'(Base, X, Out) :- Out is log(X) / log(Base).
-'trunc-math'(A, Out)  :- Out is truncate(A).
-'ceil-math'(A, Out)   :- Out is ceil(A).
-'floor-math'(A, Out)  :- Out is floor(A).
-'round-math'(A, Out)  :- Out is round(A).
+'trunc-math'(A, Out)  :- Raw is truncate(A), he_float_surface_number(Raw, Out).
+'ceil-math'(A, Out)   :- Raw is ceil(A), he_float_surface_number(Raw, Out).
+'floor-math'(A, Out)  :- Raw is floor(A), he_float_surface_number(Raw, Out).
+'round-math'(A, Out)  :- Raw is round(A), he_float_surface_number(Raw, Out).
 'sin-math'(A, Out)  :- Out is sin(A).
 'cos-math'(A, Out)  :- Out is cos(A).
 'tan-math'(A, Out)  :- Out is tan(A).
+'asin-math'(A, ['Error', ['asin-math', A], ['MathDomainError', 1, 'ClosedUnitInterval']]) :-
+    number(A),
+    ( A < -1 ; A > 1 ), !.
 'asin-math'(A, Out) :- Out is asin(A).
+'acos-math'(A, ['Error', ['acos-math', A], ['MathDomainError', 1, 'ClosedUnitInterval']]) :-
+    number(A),
+    ( A < -1 ; A > 1 ), !.
 'acos-math'(A, Out) :- Out is acos(A).
 'atan-math'(A, Out) :- Out is atan(A).
-'isnan-math'(A, Out) :- ( A =:= A -> Out = false ; Out = true ).
-'isinf-math'(A, Out) :- ( A =:= 1.0Inf ; A =:= -1.0Inf -> Out = true ; Out = false ).
-'min-atom'(List, Out) :- min_list(List, Out).
-'max-atom'(List, Out) :- max_list(List, Out).
+'isnan-math'('NaN', true) :- !.
+'isnan-math'(A, Out) :- number(A), !, ( A =:= A -> Out = false ; Out = true ).
+'isinf-math'(inf, true) :- !.
+'isinf-math'('-inf', true) :- !.
+'isinf-math'(A, Out) :- number(A), !, ( A =:= 1.0Inf ; A =:= -1.0Inf -> Out = true ; Out = false ).
+'min-atom'(List, Out) :-
+    min_list(List, Raw),
+    he_float_surface_number(Raw, Out).
+'max-atom'(List, Out) :-
+    max_list(List, Raw),
+    he_float_surface_number(Raw, Out).
 
 %%% Random Generators: %%%
 'random-int'(Min, Max, Result) :- random_between(Min, Max, Result).
@@ -144,7 +188,23 @@ alpha_list_to_set_assoc([H|T], SeenIn, R) :-
 
 'sort-atom'(List, Sorted) :- msort(List, Sorted).
 'size-atom'(List, Size) :- length(List, Size).
+'car-atom'(Arg, Out) :-
+    he_profile_enabled,
+    ( var(Arg)
+    ; Arg == []
+    ; \+ is_list(Arg)
+    ), !,
+    Out = ['Error', ['car-atom', Arg],
+           "car-atom expects a non-empty expression as an argument"].
 'car-atom'([H|_], H).
+'cdr-atom'(Arg, Out) :-
+    he_profile_enabled,
+    ( var(Arg)
+    ; Arg == []
+    ; \+ is_list(Arg)
+    ), !,
+    Out = ['Error', ['cdr-atom', Arg],
+           "cdr-atom expects a non-empty expression as an argument"].
 'cdr-atom'([_|T], T).
 decons([H|T], [H|[T]]).
 cons(H, T, [H|T]).
@@ -163,8 +223,8 @@ member(X, L, true) :- member(X, L).
 'intersection-atom'(A, B, Out) :- intersection(A, B, Out).
 
 %%% Diagnostics / Testing: %%%
-'println!'(Arg, true) :- swrite(Arg, RArg),
-                         format('~w~n', [RArg]).
+'println!'(Arg, true) :- he_public_print_text(Arg, Text),
+                         format('~w~n', [Text]).
 
 'readln!'(Out) :- read_line_to_string(user_input, Str),
                   sread(Str, Out).
@@ -324,6 +384,7 @@ register_fun(N) :-
                           'pow-math', 'sqrt-math', 'sort-atom','abs-math', 'log-math', 'trunc-math', 'ceil-math',
                           'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math','random-int','random-float',
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
+                          'range-atom', 'repeat-atom', 'sort-strings', 'print-alternatives!',
                           'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time', library, exists_file,
 	                          'new-state', 'get-doc', 'help!',
 	                          import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate,
@@ -335,3 +396,43 @@ register_fun(N) :-
       current_predicate(install_profile/1)
    -> install_profile(Profile)
    ; true ).
+'range-atom'(End, Out) :-
+    integer(End),
+    End > 0, !,
+    End1 is End - 1,
+    findall(I, between(0, End1, I), Out).
+'range-atom'(End, []) :-
+    integer(End),
+    End =< 0, !.
+'range-atom'(Start, End, []) :-
+    integer(Start),
+    integer(End),
+    Start >= End, !.
+'range-atom'(Start, End, Out) :-
+    integer(Start),
+    integer(End),
+    Start < End,
+    End1 is End - 1,
+    findall(I, between(Start, End1, I), Out).
+'repeat-atom'(Count, _Atom, Out) :-
+    integer(Count),
+    Count =< 0, !,
+    Out = [].
+'repeat-atom'(Count, Atom, Out) :-
+    integer(Count),
+    Count > 0,
+    length(Out, Count),
+    maplist(=(Atom), Out).
+'sort-strings'(List, Sorted) :-
+    is_list(List),
+    maplist(string, List),
+    msort(List, Sorted).
+'print-alternatives!'(Label, Alts, []) :-
+    is_list(Alts), !,
+    length(Alts, Count),
+    swrite(Label, LabelText),
+    format('~w: ~w alternatives~n', [LabelText, Count]),
+    forall(member(Alt, Alts),
+           ( swrite(Alt, AltText),
+             format('~w~n', [AltText]) )).
+'print-alternatives!'(Label, Alts, ['Error', ['print-alternatives!', Label, Alts], 'Atom is not an ExpressionAtom']).

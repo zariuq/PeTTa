@@ -43,9 +43,26 @@ remove_sexp(Space, [Rel|Args]) :- Term =.. [Space, Rel | Args],
 	                                 he_bridge_result([], true, Out).
 
 %Add an atom to the space:
-'add-atom'(Space, Term, Out) :- add_sexp(Space, Term),
+'add-atom'(Space, Term, Out) :-
+                                he_maybe_register_runtime_space(Space),
+                                add_sexp(Space, Term),
                                 he_note_space_fact_added(Space, Term),
                                 he_bridge_result([], true, Out).
+
+'add-atoms'(Space, Terms, Out) :-
+    is_list(Terms), !,
+    forall(member(Term, Terms), 'add-atom'(Space, Term, _)),
+    he_bridge_result([], true, Out).
+'add-atoms'(Space, Term, Out) :-
+    'add-atom'(Space, Term, Out).
+
+he_maybe_register_runtime_space(Space) :-
+    he_profile_enabled,
+    atom(Space),
+    Space \== '&self',
+    \+ he_space_type(Space, _),
+    assertz(he_space_type(Space, 'Space')), !.
+he_maybe_register_runtime_space(_).
 
 %%Remove a function atom:
 'remove-atom'('&self', Term, Removed) :- Term = [=,[F|Args],Body], atom(F), !,
@@ -64,11 +81,13 @@ remove_sexp(Space, [Rel|Args]) :- Term =.. [Space, Rel | Args],
                                            -> retractall(fun(F)),
                                               he_note_fun_removed(F)
                                            ; true ),
-                                         ( Refs = [] -> Removed = false ; Removed = true ).
+                                         ( Refs = [] -> RawRemoved = false ; RawRemoved = true ),
+                                         he_bridge_result([], RawRemoved, Removed).
 
 %Remove all same atoms:
-'remove-atom'(Space, Term, true) :- remove_sexp(Space, Term),
-                                    he_note_space_fact_removed(Space, Term).
+'remove-atom'(Space, Term, Removed) :- remove_sexp(Space, Term),
+                                       he_note_space_fact_removed(Space, Term),
+                                       he_bridge_result([], true, Removed).
 
 match('&self', Pattern, OutPattern, Result) :-
     he_profile_enabled,
@@ -80,6 +99,15 @@ match(Space0, Pattern, OutPattern, Result) :-
     he_bridge_space_ref(Space0, Space),
     Space \== Space0, !,
     match(Space, Pattern, OutPattern, Result).
+
+match(Space, Pattern, OutPattern, Result) :-
+    he_profile_enabled,
+    he_space_ref_atom(Space),
+    \+ he_actual_space_target(Space, _), !,
+    copy_term(Pattern-OutPattern, PatternCopy-BodyCopy),
+    OutPattern = ['Error', [match, Space, PatternCopy, BodyCopy],
+                  'match expects a space as the first argument'],
+    Result = OutPattern.
 
 match(Space, Pattern, OutPattern, Result) :-
     he_bridge_match_override(Space, Pattern, OutPattern, Result).
@@ -127,7 +155,17 @@ he_direct_space_match(Space, [Rel|PatArgs], OutPattern, Result) :-
                                he_bridge_space_ref(Space0, Space),
                                Space \== Space0, !,
                                'get-atoms'(Space, Pattern).
-'get-atoms'(Space, Pattern) :- current_predicate(Space/Arity),
+'get-atoms'(Space0, Pattern) :-
+                               he_profile_enabled,
+                               \+ he_actual_space_target(Space0, _), !,
+                               Pattern = ['Error', ['get-atoms', Space0],
+                                          'get-atoms expects a space as its argument'].
+'get-atoms'(Space, Pattern) :-
+                               current_predicate(Space/Arity),
                                functor(Head, Space, Arity),
                                clause(Head, true),
-                               Head =.. [Space | Pattern].
+                               Head =.. [Space | Stored],
+                               he_reify_space_atom(Stored, Pattern).
+
+he_reify_space_atom([Atom], Atom) :- !.
+he_reify_space_atom(Stored, Stored).

@@ -12,12 +12,16 @@
 :- dynamic he_function_typechains_arity_cache/3.
 :- dynamic he_no_function_typechains/1.
 :- dynamic he_no_function_typechain_arity/2.
+:- dynamic he_pragma_interpreter_mode/1.
 
 :- multifile 'get-metatype'/2.
 :- multifile 'get-type'/2.
 :- multifile 'is-expr'/2.
 :- multifile 'is-space'/2.
 :- multifile 'is-var'/2.
+
+:- retractall(he_pragma_interpreter_mode(_)),
+   assertz(he_pragma_interpreter_mode(default)).
 
 %%% Type Discovery / get-type
 
@@ -49,9 +53,14 @@ he_get_type_candidate(true, 'Bool')  :- !.
 he_get_type_candidate(false, 'Bool') :- !.
 he_get_type_candidate('True', 'Bool')  :- !.
 he_get_type_candidate('False', 'Bool') :- !.
-he_get_type_candidate('&self', 'Space') :- !.
-he_get_type_candidate(X, T) :- he_bound_space_type(X, T), !.
-he_get_type_candidate(X, T) :- atom(X), he_space_type(X, T), !.
+he_get_type_candidate('&self', 'SpaceType') :- !.
+he_get_type_candidate(X, T) :-
+    he_bound_space_type(X, Raw),
+    he_public_space_type(Raw, T), !.
+he_get_type_candidate(X, T) :-
+    atom(X),
+    he_space_type(X, Raw),
+    he_public_space_type(Raw, T), !.
 he_get_type_candidate(X, 'Type') :- he_builtin_type_symbol(X), !.
 he_get_type_candidate([=, A, B], '%Undefined%') :-
     'get-type'(A, TA),
@@ -118,9 +127,16 @@ get_type_candidate(true, 'Bool')  :- !.
 get_type_candidate(false, 'Bool') :- !.
 get_type_candidate('True', 'Bool')  :- !.
 get_type_candidate('False', 'Bool') :- !.
-get_type_candidate('&self', 'Space') :- !.
-get_type_candidate(X, T) :- he_profile_enabled, he_bound_space_type(X, T), !.
-get_type_candidate(X, T) :- he_profile_enabled, atom(X), he_space_type(X, T), !.
+get_type_candidate('&self', 'SpaceType') :- !.
+get_type_candidate(X, T) :-
+    he_profile_enabled,
+    he_bound_space_type(X, Raw),
+    he_public_space_type(Raw, T), !.
+get_type_candidate(X, T) :-
+    he_profile_enabled,
+    atom(X),
+    he_space_type(X, Raw),
+    he_public_space_type(Raw, T), !.
 get_type_candidate(X, 'Type') :- he_profile_enabled, he_builtin_type_symbol(X), !.
 get_type_candidate([=, A, B], '%Undefined%') :-
     he_profile_enabled,
@@ -171,12 +187,16 @@ get_type_candidate(X, T) :- he_self_type_fact(X, T).
 'get-metatype'(X, 'Grounded') :- string(X), !.
 'get-metatype'(true,  'Grounded') :- !.
 'get-metatype'(false, 'Grounded') :- !.
+'get-metatype'(X, 'Grounded') :- he_ground_numeric_constant(X, _), !.
 'get-metatype'(X, 'Grounded') :- atom(X), fun(X), !.
 'get-metatype'(X, 'Expression') :- is_list(X), !.
 'get-metatype'(X, 'Symbol') :- atom(X), !.
 
 'is-var'(A,R) :- var(A) -> R=true ; R=false.
 'is-expr'(A,R) :- is_list(A) -> R=true ; R=false.
+'is-space'(A,[ 'is-space', A]) :-
+    he_profile_enabled,
+    is_list(A), !.
 'is-space'(A,R) :- he_space_ref_atom(A) -> R=true ; R=false.
 
 %%% Function Type Application
@@ -287,7 +307,7 @@ he_fast_known_actual_type(true, 'Bool') :- !.
 he_fast_known_actual_type(false, 'Bool') :- !.
 he_fast_known_actual_type('True', 'Bool') :- !.
 he_fast_known_actual_type('False', 'Bool') :- !.
-he_fast_known_actual_type('&self', 'Space') :- !.
+he_fast_known_actual_type('&self', 'SpaceType') :- !.
 
 he_candidate_atom_type(Atom, Type) :-
     he_profile_enabled, !,
@@ -312,7 +332,7 @@ he_atom_types(true, ['Bool']) :- !.
 he_atom_types(false, ['Bool']) :- !.
 he_atom_types('True', ['Bool']) :- !.
 he_atom_types('False', ['Bool']) :- !.
-he_atom_types('&self', ['Space']) :- !.
+he_atom_types('&self', ['SpaceType']) :- !.
 he_atom_types(Atom, Types) :-
     findall(Type, he_candidate_atom_type(Atom, Type), Raw),
     alpha_list_to_set(Raw, Unique),
@@ -321,15 +341,12 @@ he_atom_types(Atom, Types) :-
     ; Types = Unique
     ).
 
-he_data_tuple_type(X, T) :-
+he_self_or_data_tuple_type(X, T) :-
+    once(he_self_type_fact(X, _)),
+    he_self_type_fact(X, T).
+he_self_or_data_tuple_type(X, T) :-
     is_list(X),
     maplist('get-type', X, T).
-
-he_self_or_data_tuple_type(X, T) :-
-    ( once(he_self_type_fact(X, _))
-    -> he_self_type_fact(X, T)
-    ;  he_data_tuple_type(X, T)
-    ).
 
 he_untyped_functor_application_type([Head, Elem], ['%Undefined%', ElemType]) :-
     atom(Head),
@@ -351,6 +368,11 @@ he_untyped_functor_tail_compatible(Tail, ElemType) :-
 
 he_blocks_data_tuple_type_fallback([Head|_]) :-
     he_head_may_denote_callable(Head), !.
+he_blocks_data_tuple_type_fallback(List) :-
+    member(Elem, List),
+    is_list(Elem),
+    Elem = [Head|_],
+    atom(Head), !.
 
 he_head_may_denote_callable(Head) :-
     is_list(Head),
@@ -359,6 +381,7 @@ he_head_may_denote_callable(Head) :-
     atom(Head),
     ( fun(Head)
     ; he_has_atom_head_equation(Head)
+    ; he_has_zero_arg_atom_head_equation(Head)
     ; catch(nb_getval(Head, Metas), _, fail),
       is_list(Metas),
       Metas \= []
@@ -392,6 +415,8 @@ he_match_types_live(Type1, Type2) :-
     he_match_types_live(Type1, Expected),
     Binder = Type1.
 he_match_types_live(Type1, Type2) :-
+    he_space_type_compatible(Type1, Type2), !.
+he_match_types_live(Type1, Type2) :-
     ( Type1 == '%Undefined%'
     ; Type1 == 'Atom'
     ; Type2 == '%Undefined%'
@@ -405,6 +430,12 @@ he_match_types_live(Type1, Type2) :-
 he_match_types_live(Type1, Type2) :-
     Type1 = Type2.
 
+he_space_type_compatible('SpaceType', 'Space').
+he_space_type_compatible('SpaceType', ['Space'|_]).
+he_space_type_compatible('Space', 'SpaceType').
+he_space_type_compatible(['Space'|_], 'SpaceType').
+he_space_type_compatible('SpaceType', 'SpaceType').
+
 %%% type_cast
 
 he_type_cast(Atom, Bindings, Type, _Space, Results) :-
@@ -414,6 +445,8 @@ he_type_cast(Atom, Bindings, Type, _Space, Results) :-
     -> Results = [(Atom, Bindings)]
     ; Results = [(['Error', Atom, ['BadType', Type, ActualMeta]], Bindings)]
     ), !.
+he_type_cast(Atom, Bindings, Type, _Space, Results) :-
+    he_untyped_zero_arity_constructor_cast(Atom, Bindings, Type, Results), !.
 he_type_cast(Atom, Bindings, Type, _Space, Results) :-
     he_atom_types(Atom, Types),
     findall((Atom, MatchedBindings),
@@ -434,6 +467,28 @@ he_type_cast(Atom, Bindings, Type, _Space, Results) :-
       )
     ).
 
+he_untyped_zero_arity_constructor_cast([Head], Bindings, Type, [([Head], Bindings)]) :-
+    atom(Head),
+    'get-type'(Head, '%Undefined%'),
+    he_unknown_unary_constructor_type(Type).
+
+he_unknown_unary_constructor_type(Type) :-
+    he_strip_type_binder(Type, CoreType),
+    nonvar(CoreType),
+    CoreType = [FunctorType, _ElemType],
+    he_type_is_fully_undefined_or_var(FunctorType).
+
+he_strip_type_binder(Type, CoreType) :-
+    nonvar(Type),
+    Type = [':', _Binder, Inner], !,
+    he_strip_type_binder(Inner, CoreType).
+he_strip_type_binder(Type, Type).
+
+he_type_is_fully_undefined_or_var(Type) :-
+    var(Type), !.
+he_type_is_fully_undefined_or_var(Type) :-
+    he_type_is_fully_undefined(Type).
+
 %%% metta / interpret_expression
 
 he_metta(Atom, Type, _Space, Bindings, Results) :-
@@ -449,9 +504,48 @@ he_metta(Atom, Type, Space, Bindings, Results) :-
     ; Results = Results0
     ).
 
-he_metta_one(Atom, Type, Space, Out) :-
-    he_metta(Atom, Type, Space, [], Results),
+he_metta_one(Atom, Type, _Space, Out) :-
+    he_metta_raw_result(Atom, Type, [], Results), !,
     member((Out, _), Results).
+he_metta_one(Atom, Type, Space, Out) :-
+    he_metta_casts_without_interpretation(Atom, Type), !,
+    he_type_cast(Atom, [], Type, Space, Results),
+    member((Out, _), Results).
+he_metta_one(Atom, Type, Space, Out) :-
+    he_metta_success_value(Atom, Type, Space, Out).
+he_metta_one(Atom, Type, Space, Out) :-
+    \+ he_metta_has_success_value(Atom, Type, Space),
+    he_metta_any_value(Atom, Type, Space, Out).
+he_metta_one(Atom, _Type, Space, []) :-
+    \+ he_metta_has_any_eval_value(Atom, Space).
+
+he_evalc_one(Atom, Space0, Out) :-
+    he_profile_enabled,
+    he_space_ref_atom(Space0),
+    \+ he_actual_space_target(Space0, _), !,
+    swrite([evalc, Atom, Space0], Found),
+    format(atom(Msg), 'expected: (evalc <atom> <space>), found: ~w', [Found]),
+    Out = ['Error', [evalc, Atom, Space0], Msg].
+he_evalc_one(Atom, Space0, Out) :-
+    he_resolve_space_ref(Space0, Space),
+    he_evalc_in_space(Atom, Space, Out).
+
+he_evalc_in_space(Atom, '&self', Out) :-
+    !,
+    he_metta_one(Atom, '%Undefined%', '&self', Out).
+he_evalc_in_space(Atom, Space, Out) :-
+    he_evalc_space_equation(Space, Atom, Out), !.
+he_evalc_in_space(Atom, _Space, Out) :-
+    he_metta_one(Atom, '%Undefined%', '&self', Out).
+
+he_evalc_space_equation(Space, Atom, Out) :-
+    is_list(Atom),
+    catch(match(Space, [=, Atom, Body], Body, _), _, fail), !,
+    he_evalc_in_space(Body, Space, Out).
+he_evalc_space_equation(Space, Atom, Out) :-
+    atom(Atom),
+    catch(match(Space, [=, Atom, Body], Body, _), _, fail), !,
+    he_evalc_in_space(Body, Space, Out).
 
 he_metta_raw_result(Atom, _Type, Bindings, [(Atom, Bindings)]) :-
     nonvar(Atom),
@@ -470,9 +564,9 @@ he_metta_casts_without_interpretation(Atom, _Type) :-
     ; Meta == 'Grounded'
     ).
 
-he_interpret_expression(Atom, Type, _Space, Bindings, Results) :-
+he_interpret_expression(Atom, Type, Space, Bindings, Results) :-
     findall((Out, Bindings),
-            ( catch(eval(Atom, Raw), _, fail),
+            ( he_eval_in_space_for_metta(Atom, Space, Raw),
               he_cast_result(Atom, Type, Raw, Out)
             ),
             RawResults),
@@ -481,15 +575,46 @@ he_interpret_expression(Atom, Type, _Space, Bindings, Results) :-
     ; Results = RawResults
     ).
 
+he_eval_in_space_for_metta(Atom, '&self', Raw) :-
+    !,
+    catch(he_eval_special(Atom, EvalRaw), _, fail),
+    he_metta_eval_special_raw(Atom, EvalRaw, Raw).
+he_eval_in_space_for_metta(Atom, Space, Raw) :-
+    he_evalc_in_space(Atom, Space, Raw).
+
+he_metta_eval_special_raw(Atom, [eval, Atom], Atom) :- !.
+he_metta_eval_special_raw(_Atom, EvalRaw, EvalRaw).
+
+he_metta_success_value(Atom, Type, Space, Out) :-
+    he_eval_in_space_for_metta(Atom, Space, Raw),
+    he_cast_result(Atom, Type, Raw, Out),
+    \+ he_error_atom(Out).
+
+he_metta_has_success_value(Atom, Type, Space) :-
+    once(he_metta_success_value(Atom, Type, Space, _)).
+
+he_metta_any_value(Atom, Type, Space, Out) :-
+    he_eval_in_space_for_metta(Atom, Space, Raw),
+    he_cast_result(Atom, Type, Raw, Out).
+
+he_metta_has_any_eval_value(Atom, Space) :-
+    once(he_eval_in_space_for_metta(Atom, Space, _)).
+
 he_success_pair((Atom, _)) :-
     \+ he_error_atom(Atom).
 
 he_error_atom(Atom) :-
     nonvar(Atom),
-    Atom = ['Error'|_].
+    Atom = [Head|_],
+    nonvar(Head),
+    Head == 'Error'.
 
 %%% Function Applicability / Argument Errors
 
+he_argument_matches_expected(Argument, ExpectedType) :-
+    nonvar(ExpectedType),
+    ExpectedType == 'Expression',
+    is_list(Argument), !.
 he_argument_matches_expected(Argument, ExpectedType) :-
     nonvar(ExpectedType),
     he_meta_type(ExpectedType), !,
@@ -655,9 +780,13 @@ he_builtin_type_symbol('Symbol').
 he_builtin_type_symbol('Expression').
 he_builtin_type_symbol('Grounded').
 he_builtin_type_symbol('Variable').
+he_builtin_type_symbol('SpaceType').
 he_builtin_type_symbol('Space').
 he_builtin_type_symbol('MorkSpace').
 he_builtin_type_symbol('StateMonad').
+
+he_ground_numeric_constant('PI', 3.141592653589793).
+he_ground_numeric_constant('EXP', 2.718281828459045).
 
 he_builtin_type('+', [->, 'Number', 'Number', 'Number']).
 he_builtin_type('-', [->, 'Number', 'Number', 'Number']).
@@ -690,6 +819,8 @@ he_builtin_type('get-state', [->, ['StateMonad', T], T]).
 he_builtin_type('change-state!', [->, ['StateMonad', T], T, ['StateMonad', T]]).
 he_builtin_type('system-cwd', [->, 'String']).
 he_builtin_type('system-has-args', [->, 'Bool']).
+he_builtin_type('PI', 'Number').
+he_builtin_type('EXP', 'Number').
 
 he_invalidate_all_function_typechain_cache :-
     retractall(he_function_typechains_cache(_, _)),
@@ -800,15 +931,25 @@ he_eval_if_expr(X, V) :-
     -> eval(X, V)
     ; V = X ).
 
-'pragma!'('type-check', auto, true) :-
+'pragma!'('type-check', auto, []) :-
     retractall(he_auto_typecheck(_)),
     assertz(he_auto_typecheck(true)),
     he_invalidate_all_function_typechain_cache, !.
-'pragma!'('type-check', off, true) :-
+'pragma!'('type-check', off, []) :-
     retractall(he_auto_typecheck(_)),
     assertz(he_auto_typecheck(false)),
     he_invalidate_all_function_typechain_cache, !.
-'pragma!'(_, _, true).
+'pragma!'(dialect, mettail, []) :- !.
+'pragma!'(interpreter, 'bare-minimal', []) :-
+    retractall(he_pragma_interpreter_mode(_)),
+    assertz(he_pragma_interpreter_mode('bare-minimal')), !.
+'pragma!'('max-stack-depth', Depth, []) :-
+    integer(Depth),
+    Depth >= 0,
+    \+ he_pragma_interpreter_mode('bare-minimal'), !.
+'pragma!'('search-table-mode', variant, []) :-
+    \+ he_pragma_interpreter_mode('bare-minimal'), !.
+'pragma!'(Key, Value, ['pragma!', Key, Value]).
 
 %%% Runtime Type Helpers
 
@@ -918,3 +1059,7 @@ he_actual_type(Arg, Type) :-
         ; 'get-metatype'(Arg, Meta),
           ( Meta == 'Variable' -> Type = '%Undefined%' ; Type = Meta ) )
     ; 'get-metatype'(Arg, Type) ).
+
+he_public_space_type('Space', 'SpaceType').
+he_public_space_type(['Space'|_], 'SpaceType').
+he_public_space_type(Type, Type).

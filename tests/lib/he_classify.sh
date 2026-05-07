@@ -21,12 +21,8 @@ strip_metta_comments() {
 
 cetta_uses_nonpetta_he_extension() {
     local file=$1
-    strip_metta_comments "$file" | grep -Eq \
-        '[(][[:space:]]*module-profile[[:space:]]+he_extended([[:space:])]|$)|'\
-'[(][[:space:]]*import!?[[:space:]]+&self[[:space:]]+(mork|fs|str|system)([[:space:])]|$)|'\
-'[(][[:space:]]*include[[:space:]]+(mork|fs|str|system)([[:space:])]|$)|'\
-'[(][[:space:]]*(runtime-stats!|reset-runtime-stats!|collect|reduce|fold|foldl|fold-by-key|select|search-policy|space-engine|space-match-backend|space-set-match-backend|module-provider-locator-kind|module-mount-source|size-atom)([[:space:])]|$)|'\
-'(mork:|fs-|str-|system-)'
+    local pattern='[(][[:space:]]*module-profile[[:space:]]+he_extended([[:space:])]|$)|[(][[:space:]]*import!?[[:space:]]+&self[[:space:]]+(mork|fs|str|system)([[:space:])]|$)|[(][[:space:]]*include[[:space:]]+(mork|fs|str|system)([[:space:])]|$)|[(][[:space:]]*(runtime-stats!|reset-runtime-stats!|collect|reduce|fold|foldl|fold-by-key|select|search-policy|space-engine|space-match-backend|space-set-match-backend|module-provider-locator-kind|module-mount-source|size-atom)([[:space:])]|$)|(mork:|fs-|str-|system-)'
+    strip_metta_comments "$file" | grep -Eq "$pattern"
 }
 
 he_corpus_skip_reason() {
@@ -34,11 +30,19 @@ he_corpus_skip_reason() {
     local file=$2
 
     case "$rel" in
+        */_tmp_*.metta|_tmp_*.metta)
+            printf '%s\n' 'cetta-fixture'
+            return 0
+            ;;
         cetta_tests/spec_module_inventory.metta|\
         cetta_tests/spec_print_mods_inventory.metta|\
         cetta_tests/support/profile_compile_module_inventory.metta|\
         cetta_tests/support/profile_module_inventory_runtime.metta)
             printf '%s\n' 'cetta-admin'
+            return 0
+            ;;
+        hyperon_scripts/f1_imports.metta)
+            printf '%s\n' 'he-no-python-env'
             return 0
             ;;
         cetta_tests/profile_he_prime_dependent_binders_compat.metta|\
@@ -63,6 +67,10 @@ he_corpus_skip_reason() {
         cetta_tests/spec_profile*.metta|\
         cetta_tests/support/profile_*.metta|\
         cetta_tests/support/runtime_stats_cli_probe.metta|\
+        cetta_tests/test_hash_space*.metta|\
+        cetta_tests/test_queue_space*.metta|\
+        cetta_tests/test_stack_space*.metta|\
+        cetta_tests/test_namespace_sugar_guardrails.metta|\
         cetta_tests/test_collect*.metta|\
         cetta_tests/test_fold*.metta|\
         cetta_tests/test_reduce*.metta|\
@@ -70,8 +78,11 @@ he_corpus_skip_reason() {
         cetta_tests/test_select*.metta|\
         cetta_tests/test_runtime_stats*.metta|\
         cetta_tests/test_closed_stream*.metta|\
+        cetta_tests/test_cverify_once_collapse_probe.metta|\
         cetta_tests/test_space_engine*.metta|\
         cetta_tests/test_step_space*.metta|\
+        cetta_tests/test_stdlib_helper_tranche.metta|\
+        cetta_tests/test_once.metta|\
         cetta_tests/test_fs*.metta|\
         cetta_tests/test_str*.metta|\
         cetta_tests/test_system*.metta|\
@@ -149,6 +160,15 @@ classify_case() {
             category=format-only
             div=DIV-004
             ;;
+        hyperon_scripts/f1_eval_match_probe.metta)
+            category=presentation
+            div=DIV-004
+            ;;
+        cetta_tests/test_print_alternatives.metta|\
+        cetta_tests/test_print_nondet_probe.metta)
+            category=format-only
+            div=DIV-004
+            ;;
         support/foreign_py_simple_probe.metta|*/support/foreign_py_simple_probe.metta)
             category=callable-head-gap
             div=DIV-008
@@ -157,7 +177,7 @@ classify_case() {
             category=support-more
             div=DIV-009
             ;;
-        *spec_profile_collect_extension.metta|*spec_profile_count_atoms.metta|*spec_profile_fold_by_key_extension.metta|*spec_profile_fold_extension.metta|*spec_profile_foldl_extension.metta|*spec_profile_once_alias_extension.metta|*spec_profile_reduce_extension.metta|*spec_profile_select_extension.metta|*spec_profile_size_extension.metta|*spec_profile_space_set_match_backend_extension.metta|support/profile_module_inventory_runtime.metta|*/support/profile_module_inventory_runtime.metta|support/pln_portable_min_probe.metta|*/support/pln_portable_min_probe.metta|support/oracle_evalcustom_probe.metta|*/support/oracle_evalcustom_probe.metta|support/oracle_import_syntax_probe.metta|*/support/oracle_import_syntax_probe.metta|support/oracle_import_syntax_deep_probe.metta|*/support/oracle_import_syntax_deep_probe.metta|support/oracle_once_match_env_probe.metta|*/support/oracle_once_match_env_probe.metta)
+        *spec_profile_collect_extension.metta|*spec_profile_count_atoms.metta|*spec_profile_fold_by_key_extension.metta|*spec_profile_fold_extension.metta|*spec_profile_foldl_extension.metta|*spec_profile_once_alias_extension.metta|*spec_profile_reduce_extension.metta|*spec_profile_select_extension.metta|*spec_profile_size_extension.metta|*spec_profile_space_set_match_backend_extension.metta|cetta_tests/test_disc_trie.metta|cetta_tests/test_py_ops_surface.metta|cetta_tests/spec_translation_delete_space_surface.metta|support/profile_module_inventory_runtime.metta|*/support/profile_module_inventory_runtime.metta|support/pln_portable_min_probe.metta|*/support/pln_portable_min_probe.metta|support/oracle_evalcustom_probe.metta|*/support/oracle_evalcustom_probe.metta|support/oracle_import_syntax_probe.metta|*/support/oracle_import_syntax_probe.metta|support/oracle_import_syntax_deep_probe.metta|*/support/oracle_import_syntax_deep_probe.metta|support/oracle_once_match_env_probe.metta|*/support/oracle_once_match_env_probe.metta)
             category=extension-helper-surface
             div=DIV-010
             ;;
@@ -177,6 +197,11 @@ classify_case() {
             category=extension
             div=DIV-002
             ;;
+        cetta_tests/test_import_cycle.metta|\
+        cetta_tests/test_import_foreign_pkg_error.metta|\
+        cetta_tests/test_import_parse_failure.metta|\
+        cetta_tests/test_import_transaction.metta|\
+        cetta_tests/test_search_machine_config_variant_backchain.metta|\
         support/import*|*/support/import*|support/*/import*|*/support/*/import*|support/petta_import_walk/*|*/support/petta_import_walk/*|*oracle_import_syntax*|*oracle_lib_he_assert_probe*)
             category=import-compat
             div=DIV-003
@@ -196,6 +221,22 @@ classify_case() {
     fi
 
     printf '%s\t%s\n' "$category" "$div"
+}
+
+upstream_only_kind() {
+    local rel=$1
+    case "$rel" in
+        cetta_tests/test_no_return_error.metta)
+            # Policy choice: keep the HE-spec-shaped NoReturn surface even
+            # though current upstream HE leaks a fresh variable here. The
+            # corpus runner should keep this visible without calling it a
+            # PeTTa regression.
+            printf '%s\n' 'oracle-quirk'
+            ;;
+        *)
+            printf '%s\n' 'regression'
+            ;;
+    esac
 }
 
 run_capture() {

@@ -8,5 +8,5 @@
 ; eval on grounded — calls native function
 !(assertEqual (eval (+ 1 2)) 3)
 
-; eval on non-reducible — returns unchanged
-!(assertEqualToResult (eval (no-equation x)) ((no-equation x)))
+; eval on non-reducible list-headed expressions keeps the eval wrapper
+!(assertEqualToResult (eval (no-equation x)) ((eval (no-equation x))))

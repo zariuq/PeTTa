@@ -60,7 +60,7 @@ he_normalize_state_term_seen(Term, Seen, Norm) :-
     maplist({Seen}/[X,Y]>>he_normalize_state_term_seen(X, Seen, Y), Args, ArgsNorm),
     Norm =.. [F|ArgsNorm].
 
-'bind!'(A, B, true) :-
+'bind!'(A, B, []) :-
     he_profile_enabled, !,
     he_eval_if_expr(B, V),
     nb_setval(A, V).

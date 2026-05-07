@@ -1,0 +1,14 @@
+; Translated from HE to PeTTa (20 atoms)
+; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_atomspace.metta
+
+!(import! &self ../../lib/lib_he.metta)
+!(add-atom &self (= (addnormal) (+ 1 3)))
+!(add-reduct &self (= (addreduct) (+ 1 3)))
+!(test (match &self (= (addnormal) $X) (quote $X)) (quote (+ 1 3)))
+!(test (match &self (= (addreduct) $X) (quote $X)) (quote (4)))
+!(get-type 1)
+(: a A)
+!(test (get-type-space &self a) A)
+(hello world)
+!(test (unify &self (hello world) Yes No) Yes)
+!(test (unify &self (hello dream) Yes No) No)

@@ -15,15 +15,52 @@ load_metta_file(Filename, Results, Space) :-
                                                                 erase(Ref)).
 load_metta_file(Filename, Results, Space) :- read_file_to_string(Filename, S, []),
                                              process_metta_string(S, Results, Space).
+load_metta_file_grouped(Filename, GroupedResults) :-
+    load_metta_file_grouped(Filename, GroupedResults, '&self').
+load_metta_file_grouped(Filename, GroupedResults, Space) :-
+                                             absolute_file_name(Filename, Path, [file_errors(fail)]), !,
+                                             file_directory_name(Path, Dir),
+                                             setup_call_cleanup(asserta(working_dir(Dir), Ref),
+                                                                ( read_file_to_string(Path, S, []),
+                                                                  process_metta_string_grouped(S, GroupedResults, Space) ),
+                                                                erase(Ref)).
+load_metta_file_grouped(Filename, GroupedResults, Space) :-
+                                             read_file_to_string(Filename, S, []),
+                                             process_metta_string_grouped(S, GroupedResults, Space).
 
 %Extract function definitions, call invocations, and S-expressions part of &self space:
 process_metta_string(S, Results) :- process_metta_string(S, Results, '&self').
-process_metta_string(S, Results, Space) :- string_codes(S, Cs),
-                                           strip(Cs, 0, Codes),
-                                           phrase(top_forms(Forms, 1), Codes),
-                                           maplist(parse_form, Forms, ParsedForms),
-                                           maplist(process_form(Space), ParsedForms, ResultsList), !,
+process_metta_string(S, Results, Space) :-
+                                           process_metta_string_grouped(S, ResultsList, Space),
                                            append(ResultsList, Results).
+process_metta_string_grouped(S, GroupedResults) :-
+                                           process_metta_string_grouped(S, GroupedResults, '&self').
+process_metta_string_grouped(S, GroupedResults, Space) :- string_codes(S, Cs),
+                                                          strip(Cs, 0, Codes),
+                                                          phrase(top_forms(Forms, 1), Codes),
+                                                          maplist(parse_form, Forms, ParsedForms),
+                                                          process_forms_grouped(Space, ParsedForms, GroupedResults), !.
+
+process_forms_grouped(_, [], []).
+process_forms_grouped(Space, [Parsed|Rest], [Result|GroupedRest]) :-
+    process_form(Space, Parsed, Result),
+    ( he_stop_after_grouped_result(Result)
+    -> GroupedRest = []
+    ;  process_forms_grouped(Space, Rest, GroupedRest)
+    ).
+
+he_stop_after_grouped_result([Only]) :-
+    he_profile_enabled,
+    nonvar(Only),
+    Only = ['Error'|_], !.
+he_stop_after_grouped_result(_) :-
+    fail.
+
+he_normalize_top_level_grouped_result(LocalTerm, [[]], '__he_empty_bag__') :-
+    he_profile_enabled,
+    nonvar(LocalTerm),
+    LocalTerm = [include|_], !.
+he_normalize_top_level_grouped_result(_, Result, Result).
 
 %First pass to convert MeTTa to Prolog Terms and register functions:
 parse_form(form(S), parsed(T, S, Term)) :- catch(sread(S, Term), _, fail),
@@ -59,11 +96,12 @@ process_form(Space, parsed(expression, _, Term), []) :- 'add-atom'(Space, Term, 
                                                                                  format("\e[33m^^^^^^^^^^^^^^^^^^^~n\e[0m") ).
 process_form(_, parsed(ignored, _, _), []).
 process_form(Space, parsed(runnable, FormStr, Term), Result) :- localize_space_term(Space, Term, LocalTerm),
-                                                            translate_expr([collapse, LocalTerm], Goals, Result),
+                                                            translate_expr([collapse, LocalTerm], Goals, RawResult),
                                                             ( silent(true) -> true ; format("\e[33m--> metta runnable  -->~n\e[36m!~w~n\e[33m-->  prolog goal  -->\e[35m ~n", [FormStr]),
                                                                                      forall(member(G, Goals), portray_clause((:- G))),
                                                                                      format("\e[33m^^^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ),
-                                                            he_bridge_run_runnable(Goals, Result).
+                                                            he_bridge_run_runnable(Goals, RawResult),
+                                                            he_normalize_top_level_grouped_result(LocalTerm, RawResult, Result).
 process_form(Space, parsed(function, FormStr, Term), []) :- add_sexp(Space, Term),
                                                             he_note_space_fact_added(Space, Term),
 	                                                            ( Space == '&self',

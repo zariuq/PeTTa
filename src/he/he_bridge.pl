@@ -94,6 +94,8 @@ he_bridge_match_override(_Space, Pattern, OutPattern, Result) :-
     he_match_runtime_counter(Pattern, OutPattern, Result).
 he_bridge_match_override(Space, Pattern, OutPattern, Result) :-
     he_match_state_semantic(Space, Pattern, OutPattern, Result).
+he_bridge_match_override(Space, Pattern, OutPattern, Result) :-
+    he_match_bind_capture(Space, Pattern, OutPattern, Result).
 he_bridge_match_override(Space, [=, Call, BodyPattern], OutPattern, Result) :-
     he_match_equation(Space, Call, BodyPattern, OutPattern, Result).
 he_bridge_match_override(Space, Pattern, OutPattern, Result) :-

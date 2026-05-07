@@ -1,5 +1,10 @@
+; CeTTa extension lane: public structural (Bindings ...) payloads are treated
+; as user-facing values here even though the official HE spec only describes
+; bindings semantically, not as a clearly standardized public concrete syntax.
+(module-profile he_extended)
+
 ; Residual equality constraints should round-trip structurally through the
-; collapse-bind / superpose-bind boundary.
+; CeTTa public collapse-bind / superpose-bind payload boundary.
 !(assertEqualToResult
   (let $r ((token (Bindings () (((pair $x) (pair a))))))
     (collapse-bind (superpose-bind $r)))

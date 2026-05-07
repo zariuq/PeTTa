@@ -1,0 +1,6 @@
+!(bind! &shape (new-space))
+!(add-atom &shape fact1)
+!(add-atom &shape fact2)
+!(assertEqualToResult (match &shape $x $x) (fact1 fact2))
+!(remove-atom &shape fact1)
+!(assertEqualToResult (match &shape $x $x) (fact2))

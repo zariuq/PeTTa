@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+TOOLS_DIR="$SCRIPT_DIR/tools"
 
 # shellcheck source=lib/he_classify.sh
 . "$SCRIPT_DIR/lib/he_classify.sh"
@@ -19,10 +20,17 @@ RUN_SH=${RUN_SH:-"$ROOT/run.sh"}
 HE_METTA_BIN=${HE_METTA_BIN:-$(command -v metta || true)}
 HE_ORACLE_HOME=${HE_ORACLE_HOME:-"$ROOT/.he-home"}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
-LIMIT_KB=${LIMIT_KB:-10485760}
+LIMIT_KB=${LIMIT_KB:-6291456}
+SWIPL_STACK_LIMIT=${SWIPL_STACK_LIMIT:-4g}
+SWIPL_THREADS=${SWIPL_THREADS:-false}
 HE_LOG_DIR=${HE_LOG_DIR:-"$ROOT/.he-logs"}
 LOG=${LOG:-"$HE_LOG_DIR/petta_he_corpus_$(date -u +%Y%m%dT%H%M%SZ).log"}
 FAILLOG=${FAILLOG:-"$HE_LOG_DIR/petta_he_corpus_failures_$(date -u +%Y%m%dT%H%M%SZ).log"}
+log_base=$(basename -- "$LOG")
+log_stamp=${log_base#petta_he_corpus_}
+log_stamp=${log_stamp%.log}
+HE_CORE_SEVERITY_SCRIPT=${HE_CORE_SEVERITY_SCRIPT:-"$TOOLS_DIR/generate_he_core_severity_tsv.sh"}
+HE_CORE_SEVERITY_TSV=${HE_CORE_SEVERITY_TSV:-"$HE_LOG_DIR/he_core_severity_${log_stamp}.tsv"}
 STRICT_HE_CORE=${STRICT_HE_CORE:-0}
 STRICT_ALL=${STRICT_ALL:-0}
 
@@ -35,14 +43,45 @@ collect_files() {
     find "$CORPUS_ROOT" -type f -name '*.metta' | sort
 }
 
+canonical_mirror_duplicates() {
+    local cetta_dir=$CORPUS_ROOT/cetta_tests
+    local canon_dir=$CORPUS_ROOT/hyperon_scripts
+    [ -d "$cetta_dir" ] || return 0
+    [ -d "$canon_dir" ] || return 0
+    local file base canon
+    while IFS= read -r file; do
+        base=${file##*/}
+        base=${base#he_}
+        canon=$canon_dir/$base
+        if [ -f "$canon" ] && cmp -s "$file" "$canon"; then
+            printf '%s\n' "${file#$CORPUS_ROOT/}"
+        fi
+    done < <(find "$cetta_dir" -maxdepth 1 -type f -name 'he_*.metta' | sort)
+}
+
 mkdir -p "$(dirname -- "$LOG")" "$(dirname -- "$FAILLOG")" "$HE_ORACLE_HOME"
 : > "$LOG"
 : > "$FAILLOG"
+
+mirror_dups=$(canonical_mirror_duplicates || true)
+if [ -n "$mirror_dups" ]; then
+    {
+        printf 'ERROR: duplicate canonical HE mirror files are stored under cetta_tests.\n'
+        printf 'Remove or prune these copies before running the HE corpus:\n'
+        printf '%s\n' "$mirror_dups"
+    } | tee -a "$LOG" >&2
+    exit 2
+fi
+
+ulimit -v "$LIMIT_KB"
+export SWIPL_STACK_LIMIT
+export SWIPL_THREADS
 
 total=0
 skipped=0
 skipped_fixture=0
 skipped_admin=0
+skipped_env=0
 skipped_workload=0
 skipped_nonpetta_extension=0
 hyperon_seen=0
@@ -65,6 +104,7 @@ timed_out_files=()
 crashed_files=()
 assert_fail_files=()
 upstream_only_files=()
+oracle_quirk_files=()
 
 # Detect a halt(1) from he_assert_same_results / he_assert_set_results.
 # Anchored at start of line so it does not false-match on files that
@@ -120,6 +160,7 @@ while IFS= read -r file; do
         skipped=$((skipped + 1))
         case "$reason" in
             cetta-admin) skipped_admin=$((skipped_admin + 1)) ;;
+            he-no-python-env) skipped_env=$((skipped_env + 1)) ;;
             cetta-workload) skipped_workload=$((skipped_workload + 1)) ;;
             cetta-nonpetta-he-extension) skipped_nonpetta_extension=$((skipped_nonpetta_extension + 1)) ;;
             *) skipped_fixture=$((skipped_fixture + 1)) ;;
@@ -201,8 +242,9 @@ while IFS= read -r file; do
     #        error atom). This covers both hard-failing upstream (rc != 0)
     #        and soft-failing upstream (rc == 0 with error-atom output).
     #   2. Upstream produced a real answer AND PeTTa produced an error
-    #      atom → UPSTREAM_ONLY (PeTTa regressed on something upstream
-    #      handles — a real divergence to investigate).
+    #      atom → either UPSTREAM_ONLY (true regression) or
+    #      UPSTREAM_QUIRK (known oracle oddity where PeTTa keeps the
+    #      spec-shaped surface).
     #   3. Outputs identical → FULL_MATCH.
     #   4. Both produced real outputs that disagree → EXTENSION_OUTPUT_SHAPE.
     he_errored=0
@@ -218,12 +260,18 @@ while IFS= read -r file; do
         petta_supports_more=$((petta_supports_more + 1))
         label='PETTA_SUPPORTS_MORE'
     elif [ "$he_errored" = 0 ] && [ "$petta_errored" = 1 ]; then
-        # Upstream handled it; PeTTa returned an error atom. This is
-        # the one direction where PeTTa is losing surface coverage to
-        # upstream. Track as a separate line in the summary.
         output_shape_differs=$((output_shape_differs + 1))
-        upstream_only_files+=("$rel")
-        label='UPSTREAM_ONLY'
+        kind=$(upstream_only_kind "$rel")
+        case "$kind" in
+            oracle-quirk)
+                oracle_quirk_files+=("$rel")
+                label='UPSTREAM_QUIRK'
+                ;;
+            *)
+                upstream_only_files+=("$rel")
+                label='UPSTREAM_ONLY'
+                ;;
+        esac
         class_pair=$(classify_case "$rel" diff "$he_out" "$petta_out")
         category=${class_pair%%$'\t'*}
         remember_category "$category" diff
@@ -257,7 +305,7 @@ shape_diff_type=${cat_diff[type-behavior]:-0}
 shape_diff_state=${cat_diff[state-surface]:-0}
 shape_diff_doc=${cat_diff[doc-surface]:-0}
 shape_diff_presentation=${cat_diff[presentation]:-0}
-shape_diff_core=${cat_diff[he-core]:-0}
+shape_diff_core_raw=${cat_diff[he-core]:-0}
 shape_diff_format=${cat_diff[format-only]:-0}
 shape_diff_helper=${cat_diff[extension-helper-surface]:-0}
 shape_diff_support_more=${cat_diff[support-more]:-0}
@@ -266,12 +314,14 @@ shape_diff_extension=${cat_diff[extension]:-0}
 shape_diff_workload=${cat_diff[workload]:-0}
 shape_diff_support=${cat_diff[support-probe]:-0}
 shape_diff_import=${cat_diff[import-compat]:-0}
-
-shape_diff_format_total=$((shape_diff_format + shape_diff_presentation))
+oracle_quirk_count=${#oracle_quirk_files[@]}
+shape_diff_core=$((shape_diff_core_raw - oracle_quirk_count))
+if [ "$shape_diff_core" -lt 0 ]; then
+    shape_diff_core=0
+fi
 
 petta_ran_clean=$((full_match + petta_supports_more + output_shape_differs + no_oracle_clean))
 exact_other=$((full_match - he_core_match))
-extension_surface_observations=$((shape_diff_extension + shape_diff_workload + shape_diff_support + shape_diff_import))
 
 {
     printf '\n'
@@ -292,15 +342,19 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
         printf '              (extensions, CeTTa-added imports, workload helpers).\n'
         if [ "$output_shape_differs" -gt 0 ]; then
             printf '\n'
-            printf 'Extension/support observations where both engines ran: %s files.\n' "$output_shape_differs"
-            [ "$shape_diff_format_total" -gt 0 ] && \
-                printf '  · %s files: format-only output shape (variable names / pretty output).\n' "$shape_diff_format_total"
+            printf 'Non-exact observations where both engines ran: %s files.\n' "$output_shape_differs"
+            [ "$shape_diff_presentation" -gt 0 ] && \
+                printf '  · %s files: presentation-only output shape (alpha-renaming / trailing empty bags).\n' "$shape_diff_presentation"
+            [ "$shape_diff_format" -gt 0 ] && \
+                printf '  · %s files: pretty-output formatting only.\n' "$shape_diff_format"
             [ "$shape_diff_helper" -gt 0 ] && \
                 printf '  · %s files: CeTTa/PeTTa extension helpers — PeTTa evaluates or commits\n     more directly where upstream leaves raw helper forms.\n' "$shape_diff_helper"
             [ "$shape_diff_support_more" -gt 0 ] && \
                 printf '  · %s files: support wins — PeTTa finds answers upstream leaves empty.\n' "$shape_diff_support_more"
             [ "$shape_diff_callable_gap" -gt 0 ] && \
                 printf '  · %s files: callable-head gap (currently the py-atom probe).\n' "$shape_diff_callable_gap"
+            [ "$oracle_quirk_count" -gt 0 ] && \
+                printf '  · %s files: upstream-oracle quirk(s) — PeTTa keeps the spec-shaped result\n     where upstream currently leaks an odd surface.\n' "$oracle_quirk_count"
             [ "$shape_diff_core" -gt 0 ] && \
                 printf '  · %s files: HE-core semantic disagreement(s) — investigate immediately.\n' "$shape_diff_core"
             [ "$shape_diff_type" -gt 0 ] && \
@@ -309,17 +363,14 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
                 printf '  · %s files: state/unit-result output-shape observations.\n' "$shape_diff_state"
             [ "$shape_diff_doc" -gt 0 ] && \
                 printf '  · %s files: doc-surface observations.\n' "$shape_diff_doc"
-            if [ "$extension_surface_observations" -gt 0 ]; then
-                printf '  · %s files: other extension/support observations where both sides ran.\n' "$extension_surface_observations"
-                [ "$shape_diff_extension" -gt 0 ] && \
-                    printf '      %s extension lane(s).\n' "$shape_diff_extension"
-                [ "$shape_diff_workload" -gt 0 ] && \
-                    printf '      %s workload lane(s).\n' "$shape_diff_workload"
-                [ "$shape_diff_support" -gt 0 ] && \
-                    printf '      %s support/probe lane(s).\n' "$shape_diff_support"
-                [ "$shape_diff_import" -gt 0 ] && \
-                    printf '      %s import-compat lane(s).\n' "$shape_diff_import"
-            fi
+            [ "$shape_diff_import" -gt 0 ] && \
+                printf '  · %s files: import-compat observations.\n' "$shape_diff_import"
+            [ "$shape_diff_extension" -gt 0 ] && \
+                printf '  · %s files: extension-lane observations.\n' "$shape_diff_extension"
+            [ "$shape_diff_workload" -gt 0 ] && \
+                printf '  · %s files: workload-lane observations.\n' "$shape_diff_workload"
+            [ "$shape_diff_support" -gt 0 ] && \
+                printf '  · %s files: support/probe observations.\n' "$shape_diff_support"
         fi
     else
         printf '(No upstream HE oracle configured; HE_METTA_BIN is unset.)\n'
@@ -331,6 +382,13 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
         printf '\n'
         printf 'PeTTa regressions (upstream HE handled it; PeTTa returned an error atom):\n'
         for f in "${upstream_only_files[@]}"; do
+            printf '  · %s\n' "$f"
+        done
+    fi
+    if [ "${#oracle_quirk_files[@]}" -gt 0 ]; then
+        printf '\n'
+        printf 'Oracle quirks (upstream differs; PeTTa keeps the spec-shaped surface):\n'
+        for f in "${oracle_quirk_files[@]}"; do
             printf '  · %s\n' "$f"
         done
     fi
@@ -374,6 +432,9 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
     if [ "$skipped_admin" -gt 0 ]; then
         printf '  · %s CeTTa administrative/profile-inventory probe(s), kept out of PeTTa --he conformance.\n' "$skipped_admin"
     fi
+    if [ "$skipped_env" -gt 0 ]; then
+        printf '  · %s environment-specific file(s) that require Python-enabled module layout.\n' "$skipped_env"
+    fi
     if [ "$skipped_workload" -gt 0 ]; then
         printf '  · %s CeTTa benchmark/workload file(s), kept out of the correctness lane.\n' "$skipped_workload"
     fi
@@ -384,6 +445,11 @@ extension_surface_observations=$((shape_diff_extension + shape_diff_workload + s
     printf 'LOG %s\n' "$LOG"
     printf 'FAILLOG %s\n' "$FAILLOG"
 } | tee -a "$LOG"
+
+if [ -x "$HE_CORE_SEVERITY_SCRIPT" ]; then
+    "$HE_CORE_SEVERITY_SCRIPT" "$LOG" "$HE_CORE_SEVERITY_TSV"
+    printf 'SEVERITY_TSV %s\n' "$HE_CORE_SEVERITY_TSV" | tee -a "$LOG"
+fi
 
 # Exit-code gating.
 #   - Default: exit nonzero only for PeTTa-side health problems (crashed,

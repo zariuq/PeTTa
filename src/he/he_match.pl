@@ -9,6 +9,7 @@ he_match_runtime_counter(Pattern, OutPattern, Result) :-
 
 he_fast_plain_self_matchable(Pattern) :-
     nonvar(Pattern),
+    \+ he_pattern_has_bind_capture(Pattern),
     he_fast_plain_self_root(Pattern).
 
 he_fast_plain_self_root([Head, _, _]) :-
@@ -99,26 +100,36 @@ he_match_state_semantic(Space, Pattern, OutPattern, Result) :-
     he_match_requires_state_semantics(Pattern), !,
     he_match_semantic(Space, Pattern, OutPattern, Result).
 
+he_match_bind_capture(Space, Pattern, OutPattern, Result) :-
+    he_pattern_has_bind_capture(Pattern),
+    he_space_atom(Space, Stored),
+    he_clause_pattern_equiv(Pattern, Stored),
+    \+ cyclic_term(OutPattern),
+    Result = OutPattern.
+
 he_match_equation(Space, Call, BodyPattern, OutPattern, Result) :-
     Space == '&self',
     Call = [Fun|CallArgs],
     atom(Fun),
     length(CallArgs, Arity),
-    he_eq_fact(Fun, Arity, HeadArgs, StoredBody0), !,
+    he_eq_fact(Fun, Arity, HeadArgs0, StoredBody0), !,
+    copy_term(HeadArgs0-StoredBody0, HeadArgs-StoredBody),
     HeadArgs = CallArgs,
     ( ground(Call)
-    -> he_eval_or_raw(StoredBody0, BodyPattern)
-    ; BodyPattern = StoredBody0
+    -> he_eval_or_raw(StoredBody, BodyPattern)
+    ; BodyPattern = StoredBody
     ),
     \+ cyclic_term(OutPattern),
     Result = OutPattern.
 he_match_equation(Space, Call, BodyPattern, OutPattern, Result) :-
-    \+ ( Call = [Fun|_], atom(Fun) ),
+    ( Space \== '&self'
+    ; \+ ( Call = [Fun|_], atom(Fun) )
+    ),
     is_list(Call),
-    Call = [_|CallArgs],
-    CallArgs \= [],
+    Call = [_|_],
     ( ground(Call) -> GroundCall = true ; GroundCall = false ),
-    he_space_atom(Space, [=, StoredHead, StoredBody]),
+    he_space_atom(Space, [=, StoredHead0, StoredBody0]),
+    copy_term(StoredHead0-StoredBody0, StoredHead-StoredBody),
     is_list(StoredHead),
     StoredHead = Call,
     ( GroundCall == true
@@ -130,8 +141,7 @@ he_match_equation(Space, Call, BodyPattern, OutPattern, Result) :-
 
 he_blocks_generic_equation_match(Call) :-
     is_list(Call),
-    Call = [_|CallArgs],
-    CallArgs \= [].
+    Call = [_|_].
 
 he_match_generic_list(Space, Pattern, OutPattern, Result) :-
     is_list(Pattern),
@@ -201,3 +211,19 @@ he_match_semantic(Space, Pattern, OutPattern, Result) :-
 
 he_generic_list_pattern([Rel|_]) :- var(Rel), !.
 he_generic_list_pattern([Rel|_]) :- \+ atom(Rel).
+
+he_pattern_has_bind_capture(Term) :-
+    nonvar(Term),
+    is_list(Term),
+    Term = [Head|_],
+    Head == 'superpose-bind', !.
+he_pattern_has_bind_capture(Term) :-
+    nonvar(Term),
+    is_list(Term),
+    Term = [_|Args],
+    he_pattern_has_bind_capture_list(Args).
+
+he_pattern_has_bind_capture_list([Elem|_]) :-
+    he_pattern_has_bind_capture(Elem), !.
+he_pattern_has_bind_capture_list([_|Elems]) :-
+    he_pattern_has_bind_capture_list(Elems).

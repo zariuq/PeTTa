@@ -32,6 +32,14 @@ he_clause_pattern_equiv(Expected, Actual) :-
 he_clause_pattern_equiv(Expected, Actual) :-
     atomic(Expected), !,
     Expected = Actual.
+he_clause_pattern_equiv(Expected, Actual) :-
+    nonvar(Expected),
+    Expected = [Head, Packet],
+    nonvar(Head),
+    Head == 'superpose-bind',
+    nonvar(Actual),
+    is_list(Actual), !,
+    Packet = Actual.
 he_clause_pattern_equiv([Head|ExpectedArgs], Actual) :-
     atom(Head),
     he_call_is_partial_arity(Head, ExpectedArgs),
@@ -109,10 +117,18 @@ reduce([F|Args], Out) :- nonvar(F), atom(F), fun(F)
 agg_reduce(AF, Acc, Val, NewAcc) :- reduce([AF, Acc, Val], NewAcc).
 
 %Combined expr translation to goals list
+translate_expr_to_conj(Input, Conj, Out) :-
+        he_profile_enabled,
+        atom(Input),
+        he_zero_arg_user_callable_atom(Input), !,
+        Conj = he_eval_or_reduce([Input], Out).
 translate_expr_to_conj(Input, Conj, Out) :- translate_expr(Input, Goals, Out),
                                             goals_list_to_conj(Goals, Conj).
 
 %Special stream operation rewrite rules before main translation
+rewrite_streamops(['trace!', Arg1, Arg2],
+                  ['trace!', Arg1, Arg2]) :-
+    he_profile_enabled, !.
 rewrite_streamops(['trace!', Arg1, Arg2],
                   [progn, ['println!', Arg1], Arg2]).
 rewrite_streamops([unique, Arg],
@@ -133,10 +149,23 @@ safe_rewrite_streamops(In, Out) :- ( compound(In), In = [Op|_], atom(Op) -> rewr
                                                                           ; Out = In).
 
 %Turn MeTTa code S-expression into goals list:
+translate_expr(X, [], Value) :-
+        he_profile_enabled,
+        atom(X),
+        he_ground_numeric_constant(X, Value), !.
 translate_expr(X, [], X)          :- ((var(X) ; atomic(X)) ; X = partial(_,_)), !.
 translate_expr([H0|T0], Goals, Out) :-
         safe_rewrite_streamops([H0|T0],[H|T]),
-        translate_expr(H, GsH, HV),
+        ( he_profile_enabled,
+          nonvar(H),
+          H = ['superpose-bind', PayloadExpr],
+          T \= []
+        -> translate_expr(PayloadExpr, GsPayload, Payload),
+           translate_args(T, GsArgs, AVs),
+           append([GsPayload, GsArgs, [he_superpose_bind_apply(Payload, AVs, Out)]], Goals)
+        ;
+        translate_expr(H, GsH, HV0),
+        he_namespace_sugar_alias(HV0, HV),
         %--- Translator rules ---:
         ( nonvar(HV), translator_rule(HV) -> ( catch(match('&self', [':', HV, TypeChain], TypeChain, TypeChain), _, fail)
                                                -> TypeChain = [->|Xs],
@@ -150,6 +179,9 @@ translate_expr([H0|T0], Goals, Out) :-
                                              translate_expr(Gs, GsE, Out),
                                              append([GsH,GsT,GsE],Goals)
         %--- Non-determinism ---:
+        ; HV == superpose, T = [Args], is_list(Args), he_profile_enabled
+          -> he_superpose_effect_branches(Args, Branches),
+             append(GsH, [he_run_superpose_branches(Branches, Out)], Goals)
         ; HV == superpose, T = [Args], is_list(Args) -> build_superpose_branches(Args, Out, Branches),
                                                         disj_list(Branches, Disj),
                                                         append(GsH, [Disj], Goals)
@@ -159,6 +191,9 @@ translate_expr([H0|T0], Goals, Out) :-
           ( Body == true ; Body == 'True' )
           -> translate_expr(SpaceExpr, GsS, S),
              append([GsH, GsS, [he_match_once_truth_list(S, Pattern, Out)]], Goals)
+        ; HV == collapse, T = [E], he_profile_enabled
+          -> translate_expr_to_conj(E, Conj, EV),
+             append(GsH, [he_collect_visible_results(Conj, EV, Out)], Goals)
         ; HV == collapse, T = [E] -> translate_expr_to_conj(E, Conj, EV),
                                      append(GsH, [findall(EV, Conj, Out)], Goals)
         ; he_pre_builtin_dispatch(HV, T, GsH, Out, Goals)
@@ -176,6 +211,12 @@ translate_expr([H0|T0], Goals, Out) :-
 		  nonvar(L), is_list(L)
 		  -> build_hyperpose_once_branches(L, Out, Branches),
 		     append(GsH, [first_solution(Out, Branches, [on_fail(continue)])], Goals)
+		; HV == once, T = [X], he_profile_enabled
+		  -> translate_expr_to_conj(X, Conj, Value),
+		     append(GsH, [he_once_visible_result(Conj, Value, Out)], Goals)
+		; HV == once, he_profile_enabled
+		  -> Out = [once|T],
+		     Goals = GsH
 		; HV == once, T = [X] -> translate_expr_to_conj(X, Conj, Out),
 			                                 append(GsH, [once(Conj)], Goals)
 		; HV == hyperpose, T = [L]
@@ -217,12 +258,14 @@ translate_expr([H0|T0], Goals, Out) :-
                                                     subsumes_term(['Empty', _], Found0),
                                                     Found0 = ['Empty', DefaultExpr],
                                                     NormalCases = Rest0
-                                                    -> translate_expr_to_conj(KeyExpr, GkConj, Kv),
+                                                     -> translate_expr_to_conj(KeyExpr, GkConj, Kv),
                                                        translate_case(NormalCases, Kv, Out, CaseGoal, KeyGoal),
                                                        translate_expr_to_conj(DefaultExpr, ConD, DOut),
                                                        build_branch(ConD, DOut, Out, DefaultThen),
-                                                       Combined = ( (GkConj, CaseGoal) ;
-                                                                    \+ GkConj, DefaultThen ),
+                                                       ( GkConj == true
+                                                       -> Combined = ( CaseGoal ; DefaultThen )
+                                                       ;  Combined = ( GkConj, ( CaseGoal ; DefaultThen ) )
+                                                       ),
                                                        append([GsH, KeyGoal, [Combined]], Goals)
                                                      ; translate_expr(KeyExpr, Gk, Kv),
                                                        translate_case(PairsExpr, Kv, Out, IfGoal, KeyGoal),
@@ -233,8 +276,10 @@ translate_expr([H0|T0], Goals, Out) :-
                                                            append([GsH,[(Pv=V)],Gp,Gv,Gi], Goals)
         ; HV == 'let*', T = [Binds, Body] -> letstar_to_rec_let(Binds,Body,RecLet),
                                              translate_expr(RecLet,  Goals, Out)
+        ; HV == sealed, T = [Vars, Expr], he_profile_enabled
+          -> append(GsH, ['sealed'(Vars, Expr, Out)], Goals)
         ; HV == sealed, T = [Vars, Expr] -> translate_expr_to_conj(Expr, Con, Val),
-                                            Goals = [copy_term(Vars,[Con,Val],_,[Ncon,Out]),Ncon]
+                                           Goals = [copy_term(Vars,[Con,Val],_,[Ncon,Out]),Ncon]
         %--- Iterating over non-deterministic generators without reification ---:
         ; HV == 'forall', T = [GF, TF]
           -> ( is_list(GF) -> GF = [GFH|GFA],
@@ -309,10 +354,15 @@ translate_expr([H0|T0], Goals, Out) :-
         ; ( HV == 'add-atom' ; HV == 'remove-atom' ), T = [_,_] -> append(T, [Out], RawArgs),
                                                                    Goal =.. [HV|RawArgs],
                                                                    append(GsH, [Goal], Goals)
+        ; HV == match, T = [Space, Pattern, Body], he_profile_enabled
+          -> translate_expr(Space, G1, S),
+             translate_expr_to_conj(Body, BodyConj, BodyOut),
+             % Preserve the raw body term at the match boundary so HE match/4
+             % can reject cyclic rational-tree captures before body evaluation.
+             append(G1, [match(S, Pattern, Body, _), BodyConj, (Out = BodyOut)], Goals)
         ; HV == match, T = [Space, Pattern, Body] -> translate_expr(Space, G1, S),
-                                                     translate_expr(Body, GsB, Out),
-                                                     append(G1, [match(S, Pattern, Out, Out)], G2),
-                                                     append(G2, GsB, Goals)
+                                                     translate_expr_to_conj(Body, BodyConj, BodyOut),
+                                                     append(G1, [match(S, Pattern, _, _), BodyConj, (Out = BodyOut)], Goals)
         %--- Predicate to compiled goal ---:
         ; HV == translatePredicate, T = [Expr] -> Expr = [S|Args],
                                                   translate_args(Args, GsArgs, ArgsOut),
@@ -342,6 +392,10 @@ translate_expr([H0|T0], Goals, Out) :-
                                    he_bridge_eval_goal(Arg, Out, Goal),
                                    append(Inner, [Goal], Goals)
         %Force arg to remain data/list:
+        ; HV == quote, T = [Expr], he_profile_enabled
+          -> append(GsH, [], Inner),
+             Out = [quote, Expr],
+             Goals = Inner
         ; HV == quote, T = [Expr] -> append(GsH, [], Inner),
                                      Out = Expr,
                                      Goals = Inner
@@ -355,8 +409,19 @@ translate_expr([H0|T0], Goals, Out) :-
                                                       ; Out = ['Error', Exception])),
           append(Inner, [Goal], Goals)
         ; he_post_builtin_dispatch(HV, T, GsH, Out, Goals)
+        ; he_profile_enabled,
+          he_dynamic_head_needs_raw_dispatch(HV),
+          \+ ( is_list(H),
+               \+ he_callable_data_head(H)
+             )
+          -> append(GsH, [he_dynamic_call_raw(HV, T, Out)], Goals)
+        ; he_profile_enabled,
+          atom(HV),
+          he_symbolic_data_functor(HV)
+          -> eval_data_list([HV|T], Gd, Out),
+             append(GsH, Gd, Goals)
         %--- Automatic 'smart' dispatch, translator deciding when to create a predicate call, data list, or dynamic dispatch: ---
-        ; translate_args(T, GsT, AVs),
+        ; translate_args_for_head(HV, T, GsT, AVs),
           %HE list-headed data tuple: preserve the head expression structurally,
           % but keep evaluating the remaining tuple elements.
           ( he_profile_enabled,
@@ -384,7 +449,7 @@ translate_expr([H0|T0], Goals, Out) :-
                            append(Inner, Gd, Goals),
                            Out = [HV1|AVs]
           %Unknown head (var/compound) => runtime dispatch:
-                           ; append(Inner, [reduce([HV|AVs], Out)], Goals) ))).
+                           ; append(Inner, [reduce([HV|AVs], Out)], Goals) )))).
 
 %Generate actual function call or partial if arity not complete:
 build_call_or_partial(Fun, AVs, Out, Inner, Extra, Goals) :- length(AVs, N),
@@ -427,6 +492,7 @@ translate_args_by_type([A|As], [T|Ts], GsOut, [AV|AVs]) :-
 eval_data_term(X, [], X) :- (var(X); atomic(X)), !.
 eval_data_term(Expr, Goals, Val) :-
     Expr = [Special|_],
+    nonvar(Special),
     memberchk(Special, [quote, call]), !,
     translate_expr(Expr, Goals, Val).
 eval_data_term([F|As], Goals, Val) :- he_bridge_eval_data_term([F|As], Goals, Val).
@@ -465,6 +531,74 @@ translate_case([[K,VExpr]|Rs], Kv, Out, Goal, KGo) :- translate_expr_to_conj(VEx
                                                       append([Gc,KGi], KGo).
 
 %Translate arguments recursively:
+translate_args_for_head('=', Args, Goals, OutArgs) :-
+    he_profile_enabled, !,
+    translate_args(Args, Goals, OutArgs).
+translate_args_for_head(Fun, Args, Goals, OutArgs) :-
+    he_profile_enabled,
+    atom(Fun),
+    catch(nb_getval(Fun, Metas), _, fail),
+    is_list(Metas),
+    Metas \= [], !,
+    translate_fun_args(Fun, Args, 1, Goals, OutArgs).
+translate_args_for_head(_, Args, Goals, OutArgs) :-
+    translate_args(Args, Goals, OutArgs).
+
+translate_fun_args(_, [], _, [], []).
+translate_fun_args(Fun, [Arg|Args], Index, Goals, [Out|OutArgs]) :-
+    ( he_fun_arg_prefers_raw(Fun, Index, Arg)
+    -> G1 = [],
+       Out = Arg
+    ;  translate_expr(Arg, G1, Out)
+    ),
+    Index1 is Index + 1,
+    translate_fun_args(Fun, Args, Index1, G2, OutArgs),
+    append(G1, G2, Goals).
+
+he_fun_arg_prefers_raw(_Fun, _Index, Arg) :-
+    he_profile_enabled,
+    nonvar(Arg),
+    is_list(Arg),
+    Arg = [Head|_],
+    atom(Head),
+    he_constructor_symbol(Head), !.
+he_fun_arg_prefers_raw(Fun, Index, Arg) :-
+    catch(nb_getval(Fun, Metas), _, fail),
+    member(fun_meta(PatternArgs, _), Metas),
+    nth1(Index, PatternArgs, Pattern),
+    he_fun_arg_raw_pattern(Pattern),
+    he_fun_arg_is_data_surface(Arg), !.
+
+he_fun_arg_raw_pattern(Pattern) :-
+    nonvar(Pattern),
+    is_list(Pattern),
+    Pattern = [Head|_],
+    atom(Head).
+
+he_fun_arg_is_data_surface(Arg) :-
+    var(Arg), !.
+he_fun_arg_is_data_surface(Arg) :-
+    atomic(Arg), !.
+he_fun_arg_is_data_surface(Arg) :-
+    is_list(Arg),
+    Arg = [Head|_],
+    ( var(Head)
+    ; is_list(Head),
+      \+ he_callable_data_head(Head)
+    ; atom(Head),
+      \+ fun(Head),
+      \+ he_head_may_denote_callable(Head)
+    ).
+
+he_zero_arg_user_callable_atom(Head) :-
+    atom(Head),
+    \+ he_constructor_symbol(Head),
+    ( he_has_zero_arg_atom_head_equation(Head)
+    ; catch(nb_getval(Head, Metas), _, fail),
+      is_list(Metas),
+      Metas \= []
+    ), !.
+
 translate_args([], [], []).
 translate_args([X|Xs], Goals, [V|Vs]) :- translate_expr(X, G1, V),
                                          translate_args(Xs, G2, Vs),

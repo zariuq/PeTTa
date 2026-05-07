@@ -1,0 +1,3 @@
+oracle-quirk
+rel_path	class	severity	note
+cetta_tests/test_no_return_error.metta	oracle-quirk	medium	Upstream currently yields a fresh result variable here while PeTTa returns the spec-shaped NoReturn error.

@@ -81,8 +81,65 @@ he_resolve_space_ref(Space, Resolved) :-
     Resolved = Bound.
 he_resolve_space_ref(Space, Space).
 
+he_actual_space_target('&self', '&self') :- !.
+he_actual_space_target(Space0, Space) :-
+    he_resolve_space_ref(Space0, Space),
+    Space \== Space0,
+    ( Space == '&self'
+    ; he_space_type(Space, _)
+    ), !.
+he_actual_space_target(Space, Space) :-
+    he_space_type(Space, _).
+
 'str-length'(S, N) :- string_length(S, N).
+'str-concat'(A, B, Out) :-
+    term_atom_string(A, SA),
+    term_atom_string(B, SB),
+    string_concat(SA, SB, Out).
+'str-split'(Sep, S, Parts) :-
+    term_atom_string(Sep, SSep),
+    term_atom_string(S, Text),
+    atom_string(SepAtom, SSep),
+    atom_string(TextAtom, Text),
+    atomic_list_concat(PartAtoms, SepAtom, TextAtom),
+    maplist(atom_string, PartAtoms, Parts).
 'str-split-whitespace'(S, Parts) :- split_string(S, " \t\n\r", " \t\n\r", Parts).
+'str-join'(Sep, Parts, Out) :-
+    term_atom_string(Sep, SSep),
+    maplist(term_atom_string, Parts, StringParts),
+    atomics_to_string(StringParts, SSep, Out).
+'str-slice'(S, Start, End, Out) :-
+    term_atom_string(S, Text),
+    integer(Start),
+    integer(End),
+    Start >= 0,
+    End >= Start,
+    string_length(Text, Len0),
+    SliceStart is min(Start, Len0),
+    SliceEnd is min(End, Len0),
+    SliceLen is max(0, SliceEnd - SliceStart),
+    sub_string(Text, SliceStart, SliceLen, _, Out).
+'str-find'(S, Needle, Out) :-
+    term_atom_string(S, Text),
+    term_atom_string(Needle, Pattern),
+    ( sub_string(Text, Index, _, _, Pattern)
+    -> Out = Index
+    ;  Out = 'Empty'
+    ).
+'str-starts-with?'(S, Prefix, Out) :-
+    term_atom_string(S, Text),
+    term_atom_string(Prefix, Wanted),
+    ( sub_string(Text, 0, _, _, Wanted)
+    -> Out = true
+    ;  Out = false
+    ).
+'str-ends-with?'(S, Suffix, Out) :-
+    term_atom_string(S, Text),
+    term_atom_string(Suffix, Wanted),
+    ( string_concat(_, Wanted, Text)
+    -> Out = true
+    ;  Out = false
+    ).
 'str-trim'(S, Out) :-
     string_codes(S, Codes),
     trim_space_codes(Codes, Trimmed),
@@ -108,6 +165,16 @@ drop_space_prefix(Cs, Cs).
     read_file_to_string(Path, Text, []),
     split_string(Text, "\n", "\r", Raw),
     drop_final_empty(Raw, Lines).
+'fs-read-text'(Spec, Text) :-
+    term_atom_string(Spec, S),
+    resolve_existing_data_file(S, Path),
+    read_file_to_string(Path, Text, []).
+'fs-resolve-path'(Spec, Path) :-
+    term_atom_string(Spec, S),
+    ( resolve_existing_data_file(S, Resolved)
+    -> Path = Resolved
+    ;  Path = S
+    ).
 
 drop_final_empty(Lines, Trimmed) :-
     append(Trimmed, [""], Lines), !.
@@ -156,6 +223,11 @@ he_space_may_have_match(Space, Pattern) :-
 he_space_may_have_match(_, _).
 
 he_count_atoms(Space0, Count) :-
+    he_profile_enabled,
+    he_space_ref_atom(Space0),
+    \+ he_actual_space_target(Space0, _), !,
+    Count = ['count-atoms', Space0].
+he_count_atoms(Space0, Count) :-
     he_resolve_space_ref(Space0, Space),
     findall(Atom, he_space_atom(Space, Atom), Atoms),
     length(Atoms, Count).
@@ -166,6 +238,144 @@ size(Space, Count) :-
     he_count_atoms(Space, Count).
 size(List, Count) :- is_list(List), !, length(List, Count).
 size(_, 1).
+
+he_space_kind(Space, Kind) :-
+    ( he_space_type(Space, ['Space', Kind0])
+    -> Kind = Kind0
+    ; he_space_type(Space, 'Space')
+    -> Kind = plain
+    ; Kind = plain
+    ).
+
+he_ordered_space_kind(queue).
+he_ordered_space_kind(stack).
+
+he_ordered_space_empty_error(queue, 'EmptyQueueSpace').
+he_ordered_space_empty_error(stack, 'EmptyStackSpace').
+
+he_space_atoms_list(Space0, Atoms) :-
+    he_resolve_space_ref(Space0, Space),
+    findall(Atom, he_space_atom(Space, Atom), Atoms).
+
+he_replace_space_atoms(Space0, NewAtoms) :-
+    he_resolve_space_ref(Space0, Space),
+    he_space_atoms_list(Space, OldAtoms),
+    forall(member(Atom, OldAtoms),
+           ( remove_sexp(Space, Atom),
+             he_note_space_fact_removed(Space, Atom)
+           )),
+    forall(member(Atom, NewAtoms),
+           ( add_sexp(Space, Atom),
+             he_note_space_fact_added(Space, Atom)
+           )).
+
+he_ordered_space_resolved(Space0, Surface, Space, Kind) :-
+    he_resolve_space_ref(Space0, Space),
+    he_space_kind(Space, Kind),
+    ( he_ordered_space_kind(Kind)
+    -> true
+    ;  throw(he_surface_error(['Error', [Surface, Space0], 'UnsupportedSpaceKind']))
+    ).
+
+he_nonnegative_index(Index) :-
+    integer(Index),
+    Index >= 0.
+
+'space-len'(Space0, Count) :-
+    he_count_atoms(Space0, Count).
+
+'space-push'(Space0, Term, Out) :-
+    catch(
+        ( he_ordered_space_resolved(Space0, 'space-push', Space, _Kind),
+          add_sexp(Space, Term),
+          he_note_space_fact_added(Space, Term),
+          he_bridge_result([], true, Out)
+        ),
+        he_surface_error(Error),
+        Out = Error
+    ).
+
+'space-peek'(Space0, Out) :-
+    catch(
+        ( he_ordered_space_resolved(Space0, 'space-peek', Space, Kind),
+          he_space_atoms_list(Space, Atoms),
+          ( Kind == queue
+          -> ( Atoms = [Out|_] -> true ; true )
+          ;  ( append(_, [Out], Atoms) -> true ; true )
+          )
+        ),
+        he_surface_error(Error),
+        Out = Error
+    ),
+    ( var(Out)
+    -> he_ordered_space_resolved(Space0, 'space-peek', _, Kind),
+       he_ordered_space_empty_error(Kind, EmptyError),
+       Out = ['Error', ['space-peek', Space0], EmptyError]
+    ; true
+    ).
+
+'space-pop'(Space0, Out) :-
+    catch(
+        ( he_ordered_space_resolved(Space0, 'space-pop', Space, Kind),
+          he_space_atoms_list(Space, Atoms),
+          ( Kind == queue
+          -> ( Atoms = [Out|Rest] -> true ; Rest = Atoms )
+          ;  ( append(Rest, [Out], Atoms) -> true ; Rest = Atoms )
+          ),
+          ( var(Out)
+          -> true
+          ;  he_replace_space_atoms(Space, Rest)
+          )
+        ),
+        he_surface_error(Error),
+        Out = Error
+    ),
+    ( var(Out)
+    -> he_ordered_space_resolved(Space0, 'space-pop', _, Kind),
+       he_ordered_space_empty_error(Kind, EmptyError),
+       Out = ['Error', ['space-pop', Space0], EmptyError]
+    ; true
+    ).
+
+'space-get'(Space0, Index, Out) :-
+    catch(
+        ( he_ordered_space_resolved(Space0, 'space-get', Space, _Kind),
+          ( he_nonnegative_index(Index)
+          -> he_space_atoms_list(Space, Atoms),
+             ( nth0(Index, Atoms, Out)
+             -> true
+             ;  Out = ['Error', ['space-get', Space0, Index], 'IndexOutOfBounds']
+             )
+          ;  Out = ['Error', ['space-get', Space0, Index], 'ExpectedNonNegativeIndex']
+          )
+        ),
+        he_surface_error(Error),
+        Out = Error
+    ).
+
+'space-truncate'(Space0, Index, Out) :-
+    catch(
+        ( he_ordered_space_resolved(Space0, 'space-truncate', Space, _Kind),
+          ( he_nonnegative_index(Index)
+          -> he_space_atoms_list(Space, Atoms),
+             length(Atoms, Len),
+             ( Index =< Len
+             -> length(Kept, Index),
+                append(Kept, _, Atoms),
+                he_replace_space_atoms(Space, Kept),
+                he_bridge_result([], true, Out)
+             ;  Out = ['Error', ['space-truncate', Space0, Index], 'IndexOutOfBounds']
+             )
+          ;  Out = ['Error', ['space-truncate', Space0, Index], 'ExpectedNonNegativeIndex']
+          )
+        ),
+        he_surface_error(Error),
+        Out = Error
+    ).
+
+'sealed'(_Vars, Expr, Out) :-
+    he_profile_enabled,
+    copy_term(Expr, Out).
 
 'add-atom-nodup'(Space0, Term, Out) :-
     he_resolve_space_ref(Space0, Space),
@@ -208,10 +418,22 @@ he_make_space_snapshot(Space0, Snapshot) :-
     he_make_space(Type, Snapshot),
     forall(he_space_atom(Space, Atom), add_sexp(Snapshot, Atom)).
 
+he_valid_snapshot_space(Space0, Space) :-
+    he_resolve_space_ref(Space0, Space),
+    ( Space == '&self'
+    ; he_space_ref_atom(Space)
+    ).
+
 he_with_space_snapshot(Snapshot, Space, BodyConj, BodyOut, Out) :-
     he_make_space_snapshot(Space, Snapshot),
     BodyConj,
     Out = BodyOut.
+
+he_with_space_snapshot_or_self(Snapshot, _SpaceExpr, Space0, _BodyExpr, BodyConj, BodyOut, Out) :-
+    he_valid_snapshot_space(Space0, Space), !,
+    he_with_space_snapshot(Snapshot, Space, BodyConj, BodyOut, Out).
+he_with_space_snapshot_or_self(Snapshot, SpaceExpr, _Space0, BodyExpr, _BodyConj, _BodyOut, Out) :-
+    Out = ['with-space-snapshot', Snapshot, SpaceExpr, BodyExpr].
 
 'mork:new-space'(Space) :- he_make_space('MorkSpace', Space).
 'mork:new-space'(_, Space) :- he_make_space('MorkSpace', Space).

@@ -1,4 +1,5 @@
 :- dynamic he_auto_typecheck/1.
+:- dynamic he_stdlib_loaded/0.
 :- dynamic installed_surface/2.
 
 profile_feature(he, native_he_core).
@@ -8,9 +9,15 @@ profile_feature(he, native_he_core).
 
 he_surface(assertEqual, 2, native(he_native_assert_equal), core).
 he_surface(assertAlphaEqual, 2, native(he_native_assert_alpha_equal), core).
+he_surface(assert, 1, native(he_native_assert), core).
 he_surface(assertEqualToResult, 2, special(assert_equal_to_result), core).
 he_surface(assertAlphaEqualToResult, 2, special(assert_alpha_equal_to_result), core).
+he_surface(assertEqualMsg, 3, special(assert_equal_msg), compat).
+he_surface(assertEqualToResultMsg, 3, special(assert_equal_to_result_msg), compat).
+he_surface(assertAlphaEqualMsg, 3, special(assert_alpha_equal_msg), compat).
+he_surface(assertAlphaEqualToResultMsg, 3, special(assert_alpha_equal_to_result_msg), compat).
 he_surface(assertPeTTaTest, 2, special(assert_petta_test), compat).
+he_surface(assertIncludes, 2, special(assert_includes), compat).
 he_surface(unify, 4, special(unify), core).
 he_surface('add-reduct', 2, special(add_reduct), core).
 he_surface(evalc, 2, special(evalc), core).
@@ -25,6 +32,26 @@ he_surface('is-function', 1, native(he_native_is_function), core).
 he_surface('get-type-space', 2, native(he_native_get_type_space), core).
 he_surface('match-types', 4, native(he_native_match_types), core).
 he_surface('match-type-or', 3, native(he_native_match_type_or), core).
+he_surface('get-doc', 1, native(he_native_get_doc), core).
+he_surface('help!', 1, native(he_native_help), core).
+he_surface(capture, 1, native(capture), core).
+he_surface('format-args', 2, native(he_native_format_args), core).
+he_surface('println!', 1, native(he_native_println), core).
+he_surface('trace!', 2, native(he_native_trace), core).
+he_surface('print-alternatives!', 2, native('print-alternatives!'), extension).
+he_surface('_collapse-add-next-atom-from-collapse-bind-result', 2,
+           native(he_native_collapse_add_next), compat).
+he_surface('unique-atom', 1, native('unique-atom'), compat).
+he_surface('union-atom', 2, native('union-atom'), compat).
+he_surface('intersection-atom', 2, native('intersection-atom'), compat).
+he_surface('subtraction-atom', 2, native('subtraction-atom'), compat).
+he_surface('space-len', 1, native('space-len'), extension).
+he_surface('space-push', 2, native('space-push'), extension).
+he_surface('space-peek', 1, native('space-peek'), extension).
+he_surface('space-pop', 1, native('space-pop'), extension).
+he_surface('space-get', 2, native('space-get'), extension).
+he_surface('space-truncate', 2, native('space-truncate'), extension).
+he_surface('add-atoms', 2, native('add-atoms'), extension).
 he_surface(quot, 2, native(quot), extension).
 he_surface(rem, 2, native(rem), extension).
 he_surface(divmod, 2, native(divmod), extension).
@@ -53,7 +80,8 @@ he_compat_helper_signature(Name, OutArity) :-
 install_profile(he) :-
     !,
     forall(he_surface(Name, InArity, _Kind, _Scope),
-           install_surface(he, Name, InArity)).
+           install_surface(he, Name, InArity)),
+    ensure_he_stdlib_loaded.
 install_profile(_).
 
 install_surface(Profile, Name, InArity) :-
@@ -64,6 +92,18 @@ install_surface(Profile, Name, InArity) :-
       ( arity(Name, OutArity) -> true ; assertz(arity(Name, OutArity)) ),
       assertz(installed_surface(Profile, Name/OutArity))
     ).
+
+ensure_he_stdlib_loaded :-
+    he_stdlib_loaded, !.
+ensure_he_stdlib_loaded :-
+    \+ current_predicate(load_metta_file/2), !.
+ensure_he_stdlib_loaded :-
+    he_boot_dir(HeDir),
+    directory_file_path(HeDir, '..', SrcDir),
+    directory_file_path(SrcDir, '..', RootDir),
+    directory_file_path(RootDir, 'lib/stdlib.metta', Stdlib),
+    load_metta_file(Stdlib, _),
+    assertz(he_stdlib_loaded).
 
 he_profile_result(HeOut, _DefaultOut, HeOut) :-
     he_profile_enabled, !.

@@ -1,0 +1,1 @@
+!(get-type-space &self)

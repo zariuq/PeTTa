@@ -1,18 +1,14 @@
-; Spec-driven: superpose-bind restores atoms from the structural
-; (Bindings ...) payload used by collapse-bind.
+; Strict HE lane: superpose-bind should consume payloads actually produced by
+; collapse-bind in the same runtime.
 !(assertEqualToResult
-  (superpose-bind ((x (Bindings () ()))))
-  (x))
-
-; The restored environment must thread into later tuple elements.
-!(assertEqualToResult
-  ((superpose-bind ((token (Bindings ((x a)) ())))) $x)
-  ((token a)))
+  (let $r (collapse-bind 1)
+    (superpose-bind $r))
+  (1))
 
 (= marker a)
 
-; The round-trip needs a binder because superpose-bind is specified over the
-; encoded expression itself, not over an unevaluated (collapse-bind ...) call.
+; The restored environment must thread into later tuple elements when the
+; payload comes from an actual collapse-bind witness.
 !(assertEqualToResult
   (let $r (collapse-bind ((match &self (= marker $x) $x) $x))
     ((superpose-bind $r) $x))

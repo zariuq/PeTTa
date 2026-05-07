@@ -1,3 +1,6 @@
-python/__pycache__
-python/HE/__pycache__
-python/tests/__pycache__
+.he-home/
+.he-logs/
+corpus/hyperon_scripts/_tmp_*.metta
+tests/he_tmp_*.metta
+tests/tmp_debug_*.metta
+tests/support/he_tmp_*.metta

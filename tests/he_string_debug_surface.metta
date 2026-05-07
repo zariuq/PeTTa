@@ -1,0 +1,10 @@
+!(assertEqualToResult (format-args "{} + {}" (A B)) ("A + B"))
+!(assertEqualToResult (format-args "{} {}" (A)) ("A "))
+!(assertEqualToResult (format-args "{} {}") ((Error (format-args "{} {}") IncorrectNumberOfArguments)))
+!(assertEqualToResult (println! A B) ((Error (println! A B) IncorrectNumberOfArguments)))
+!(assertEqualToResult (trace! 1) ((Error (trace! 1) IncorrectNumberOfArguments)))
+!(assertEqualToResult (sealed () (+ 1 2)) ((+ 1 2)))
+!(assertEqualToResult
+  (let (quote ($sv $st)) (sealed () (quote ($x (output $x))))
+    (let $sv (input $x) $st))
+  ((output (input $x))))

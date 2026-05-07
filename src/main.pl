@@ -28,10 +28,18 @@ main :- current_prolog_flag(argv, Args),
                            mork_test
         ; strip_runtime_args(Args, [File|_]) -> file_directory_name(File, Dir),
                                                 assertz(working_dir(Dir)),
-                                                load_metta_file(File,Results),
-                                                maplist(swrite,Results,ResultsR),
-                                                maplist(format("~w~n"), ResultsR)
+                                                load_metta_file_grouped(File, GroupedResults),
+                                                forall(member(ResultBag, GroupedResults),
+                                                       emit_result_bag(ResultBag))
         ),
         halt.
+
+emit_result_bag('__he_empty_bag__') :-
+    !,
+    format("[]~n", []).
+emit_result_bag([]) :- !.
+emit_result_bag(ResultBag) :-
+    swrite_result_bag(ResultBag, Text),
+    format("~w~n", [Text]).
 
 :- initialization(main, main).

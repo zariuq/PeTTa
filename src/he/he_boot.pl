@@ -171,6 +171,26 @@ ensure_he_state_loaded :-
     ensure_loaded(State),
     assertz(he_state_loaded).
 
+he_namespace_sugar_alias(Name, Alias) :-
+    he_profile_enabled,
+    atom(Name),
+    \+ sub_atom(Name, _, _, _, ':'),
+    \+ sub_atom(Name, _, _, _, '/'),
+    \+ current_predicate(Name/_),
+    \+ catch(arity(Name, _), _, fail),
+    sub_atom(Name, Dot, 1, After, '.'),
+    Dot > 0,
+    sub_atom(Name, 0, Dot, _, Root),
+    Start is Dot + 1,
+    sub_atom(Name, Start, After, 0, Rest),
+    atomic_list_concat([Root, Rest], ':', Alias),
+    ( current_predicate(Alias/_)
+    ; catch(arity(Alias, _), _, fail)
+    ; catch(nb_getval(Alias, _), _, fail)
+    ),
+    !.
+he_namespace_sugar_alias(Name, Name).
+
 register_he_compat_helper(Name, Arity) :-
     register_fun(Name),
     ( arity(Name, Arity) -> true ; assertz(arity(Name, Arity)) ).
@@ -241,6 +261,10 @@ he_invalidate_all_function_typechain_cache :-
     ensure_he_types_loaded, !,
     'is-space'(X, R).
 
+he_bridge_import(Space, File, Out) :-
+    he_profile_enabled,
+    ensure_he_import_loaded, !,
+    he_import_surface(Space, File, Out).
 he_bridge_import(Space, File, true) :-
     ensure_he_import_loaded,
     catch(importer_helper(Space, File), _, fail), !.

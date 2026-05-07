@@ -34,6 +34,7 @@ LABEL_HE_EXAMPLES_SH=${LABEL_HE_EXAMPLES_SH:-"$ROOT/tests/tools/label_petta_he_e
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
 WITNESS_TIMEOUT_SECONDS=${WITNESS_TIMEOUT_SECONDS:-20}
 LIMIT_KB=${LIMIT_KB:-10485760}
+SWIPL_THREADS=${SWIPL_THREADS:-false}
 HE_LOG_DIR=${HE_LOG_DIR:-"$ROOT/.he-logs"}
 GENERATED_DIR=${GENERATED_DIR:-"$ROOT/examples/he_translated"}
 INVENTORY=${INVENTORY:-"$HE_LOG_DIR/he_translation_inventory.tsv"}
@@ -64,6 +65,7 @@ if [ "$RESUME" != 1 ] && [ "${HE_SURVEY_OVERWRITE:-0}" != 1 ] &&
 fi
 
 ulimit -v "$LIMIT_KB"
+export SWIPL_THREADS
 mkdir -p "$HE_LOG_DIR" "$GENERATED_DIR" "$GAPS_DIR"
 : > "$LOG"
 
@@ -398,7 +400,7 @@ classify_and_record() {
             rel_gen_parallel=${generated_parallel#"$ROOT"/}
 
             local parallel_pkt
-            parallel_pkt=$(run_capture he-parallel "$RUN_SH" --he "$generated_parallel" --silent)
+            parallel_pkt=$(SWIPL_THREADS=true run_capture he-parallel "$RUN_SH" --he "$generated_parallel" --silent)
             parallel_he_rc=${parallel_pkt%%$'\t'*}
             rest1=${parallel_pkt#*$'\t'}
             parallel_he_wall=${rest1%%$'\t'*}

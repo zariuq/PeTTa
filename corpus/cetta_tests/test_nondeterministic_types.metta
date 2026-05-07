@@ -10,5 +10,8 @@
 (: Add (-> Nat Nat Nat))
 (= (Add $x Z) $x)
 
-; Ten matches Nat for Add — should succeed
-!(assertEqual (Add Z Ten) Ten)
+; Ten matches Nat for Add, so the application is accepted by the
+; interpreter, but canonical HE still leaves the expression unreduced.
+!(assertEqualToResult
+  (Add Z Ten)
+  ((Add Z Ten)))
