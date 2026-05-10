@@ -98,6 +98,22 @@ he_assert_same_results_or_error(Subject, Actuals, Expecteds, Msg, Out) :-
     ;  Out = ['Error', Subject, Msg]
     ).
 
+he_collect_assert_result_sets(ExprConj, ExprVal, ExpConj, ExpVal, Actuals, Expecteds) :-
+    he_collect_visible_results(ExprConj, ExprVal, Actuals),
+    he_collect_visible_results(ExpConj, ExpVal, Expecteds).
+
+he_collect_assert_result_set_or_singleton(ExprConj, ExprVal, ExpConj, ExpVal, Actuals, Expecteds) :-
+    he_collect_visible_results(ExprConj, ExprVal, Actuals),
+    he_collect_visible_results(ExpConj, ExpVal, Expecteds0),
+    ( Expecteds0 == []
+    -> Expecteds = [ExpVal]
+    ;  Expecteds = Expecteds0
+    ).
+
+he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds) :-
+    he_collect_visible_results(ExprConj, ExprVal, Actuals),
+    he_expected_tuple_results(ExpectedTuple, Expecteds).
+
 he_assert_set_results_or_error(Subject, Actuals, Expecteds, Msg, Out) :-
     ( he_same_result_set(Actuals, Expecteds)
     -> Out = []

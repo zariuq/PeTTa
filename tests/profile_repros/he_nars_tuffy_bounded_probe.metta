@@ -1,9 +1,10 @@
-; Reduced HE witness for the nars_tuffy query path.
-; This keeps the imported lib_nars + Sentence-space + NARS.Query surface, but
-; uses explicit small bounds so profiling gets real counters instead of only
-; the outer timeout result.
+; Tiny HE witness for the NARS.Query path with explicit bounds.
+; This is for profiling/runtime characterization, not full nars_tuffy parity.
 
 !(import! &self ../../lib/lib_nars.metta)
+
+; Silence derivation trace noise during profiling.
+(= (println! $x) True)
 
 (= (kb)
    ((Sentence ((==> (--> $1 ([] smokes))

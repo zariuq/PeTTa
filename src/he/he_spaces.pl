@@ -33,6 +33,14 @@ he_space_pattern_key([Rel|Args], Rel, Arity) :-
     length(Args, TailArity),
     Arity is TailArity + 1.
 
+he_space_candidate_pattern(Pattern) :-
+    nonvar(Pattern),
+    \+ is_list(Pattern), !.
+he_space_candidate_pattern([Rel|_]) :-
+    nonvar(Rel),
+    atom(Rel),
+    Rel \== ','.
+
 he_space_fact_count_inc(Space, Key, Arity) :-
     ( retract(he_space_key_count(Space, Key, Arity, Count0))
     -> Count is Count0 + 1
@@ -222,6 +230,37 @@ he_space_may_have_match(Space, Pattern) :-
     Count > 0.
 he_space_may_have_match(_, _).
 
+he_space_exact_member(Space, Pattern) :-
+    he_perf_counter_inc(space_exact_member_calls),
+    ground(Pattern),
+    he_space_may_have_match(Space, Pattern),
+    ( is_list(Pattern)
+    -> Term =.. [Space|Pattern]
+    ;  Term =.. [Space, Pattern]
+    ),
+    catch(call(Term), _, fail),
+    he_perf_counter_inc(space_exact_member_hits).
+
+he_space_candidate_atom(Space, Pattern, Candidate) :-
+    he_space_candidate_pattern(Pattern),
+    he_space_may_have_match(Space, Pattern), !,
+    copy_term(Pattern, Candidate),
+    ( is_list(Candidate)
+    -> Term =.. [Space|Candidate]
+    ;  Term =.. [Space, Candidate]
+    ),
+    catch(call(Term), _, fail),
+    he_perf_counter_inc(space_candidate_index_hits).
+he_space_candidate_atom(Space, _Pattern, Candidate) :-
+    he_perf_counter_inc(space_candidate_scan_fallbacks),
+    he_space_atom(Space, Candidate).
+
+he_space_candidate_equation(Space, Call, StoredHead, StoredBody) :-
+    he_space_candidate_atom(Space,
+                            [=, Call, StoredBody],
+                            [=, StoredHead, StoredBody]),
+    is_list(StoredHead).
+
 he_count_atoms(Space0, Count) :-
     he_profile_enabled,
     he_space_ref_atom(Space0),
@@ -379,15 +418,18 @@ he_nonnegative_index(Index) :-
 
 'add-atom-nodup'(Space0, Term, Out) :-
     he_resolve_space_ref(Space0, Space),
-    ( once(match(Space, Term, Term, _))
-    -> true
-    ; 'add-atom'(Space, Term, _)
+    ( he_space_exact_member(Space, Term)
+    -> he_perf_counter_inc(space_add_if_absent_exact_present)
+    ; once(match(Space, Term, Term, _))
+    -> he_perf_counter_inc(space_add_if_absent_match_present)
+    ; 'add-atom'(Space, Term, _),
+      he_perf_counter_inc(space_add_if_absent_added)
     ),
     ( he_profile_enabled -> Out = [] ; Out = true ).
 
 he_match_once_truth_list(Space0, Pattern, Out) :-
     he_resolve_space_ref(Space0, Space),
-    ( he_space_has_ground_atom(Space, Pattern)
+    ( he_space_exact_member(Space, Pattern)
     -> Out = [true]
     ; once(match(Space, Pattern, true, _))
     -> Out = [true]
@@ -395,19 +437,22 @@ he_match_once_truth_list(Space0, Pattern, Out) :-
     ).
 
 he_space_has_ground_atom(Space, Pattern) :-
-    ground(Pattern),
-    he_space_may_have_match(Space, Pattern),
-    ( is_list(Pattern)
-    -> Term =.. [Space|Pattern]
-    ;  Term =.. [Space, Pattern]
-    ),
-    catch(call(Term), _, fail).
+    he_space_exact_member(Space, Pattern).
 
 he_match_once_truth_empty(Space0, Pattern, Out) :-
     he_resolve_space_ref(Space0, Space),
-    ( he_space_has_ground_atom(Space, Pattern)
+    ( he_space_exact_member(Space, Pattern)
     -> Out = false
     ; once(match(Space, Pattern, true, _))
+    -> Out = false
+    ; Out = true
+    ).
+
+he_match_once_pattern_empty(Space0, Pattern, Out) :-
+    he_resolve_space_ref(Space0, Space),
+    ( he_space_exact_member(Space, Pattern)
+    -> Out = false
+    ; once(match(Space, Pattern, Pattern, _))
     -> Out = false
     ; Out = true
     ).

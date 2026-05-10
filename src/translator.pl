@@ -185,6 +185,16 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == superpose, T = [Args], is_list(Args) -> build_superpose_branches(Args, Out, Branches),
                                                         disj_list(Branches, Disj),
                                                         append(GsH, [Disj], Goals)
+        ; HV == length, T = [Arg], he_profile_enabled,
+          nonvar(Arg),
+          Arg = [collapse, E]
+          -> translate_expr_to_conj(E, Conj, EV),
+             append(GsH, [he_count_visible_results(Conj, EV, Out)], Goals)
+        ; HV == 'size-atom', T = [Arg], he_profile_enabled,
+          nonvar(Arg),
+          Arg = [collapse, E]
+          -> translate_expr_to_conj(E, Conj, EV),
+             append(GsH, [he_count_visible_results(Conj, EV, Out)], Goals)
         ; HV == collapse,
           T = [[once, [match, SpaceExpr, Pattern, Body]]],
           he_profile_enabled,

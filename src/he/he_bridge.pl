@@ -6,6 +6,7 @@
                   'he_assertions',
                   'he_natives',
                   'he_state',
+                  'he_answers',
                   'he_call',
                   'he_translator',
                   'he_match',

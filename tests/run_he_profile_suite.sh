@@ -130,10 +130,20 @@ run_case 'PeTTa --he translated PeTTa test compatibility' "$RUN_SH" --he "$ROOT/
 run_case 'PeTTa --he dynamic callable returns' "$RUN_SH" --he "$ROOT/tests/he_dynamic_callable_return.metta" --silent
 run_case 'PeTTa --he expression-head callables' "$RUN_SH" --he "$ROOT/tests/he_expression_head_callable.metta" --silent
 run_case 'PeTTa --he destructured let expression patterns' "$RUN_SH" --he "$ROOT/tests/he_destructured_let_expr_pattern.metta" --silent
+run_case 'PeTTa --he collapse count surfaces' "$RUN_SH" --he "$ROOT/tests/he_collapse_count_surface.metta" --silent
+run_case 'PeTTa --he collapse streaming if/car characterization' "$RUN_SH" --he "$ROOT/tests/he_collapse_first_surface.metta" --silent
+run_case 'PeTTa --he case-bound size-atom regression' "$RUN_SH" --he "$ROOT/tests/he_case_bound_size_atom_regression.metta" --silent
+run_case 'PeTTa --he bind-visible laziness regression' "$RUN_SH" --he "$ROOT/tests/he_bind_visible_laziness_regression.metta" --silent
+run_case 'PeTTa --he assertEqualMsg expected single evaluation' "$RUN_SH" --he "$ROOT/tests/he_assert_equal_msg_expected_single_eval.metta" --silent
+run_case 'PeTTa --he match-once echo emptiness surface' "$RUN_SH" --he "$ROOT/tests/he_match_once_pattern_empty_surface.metta" --silent
+run_case 'PeTTa --he effectful tuple head regression' "$RUN_SH" --he "$ROOT/tests/he_effectful_data_tuple_head_regression.metta" --silent
 run_case 'PeTTa --he singleton expression space patterns' "$RUN_SH" --he "$ROOT/tests/he_space_singleton_pattern.metta" --silent
 run_case 'PeTTa --he collapse in data tuples' "$RUN_SH" --he "$ROOT/tests/he_collapse_in_data_tuple.metta" --silent
 run_case 'PeTTa --he typed nondeterministic bool dispatch' "$RUN_SH" --he "$ROOT/tests/he_typed_nondet_bool.metta" --silent
 run_case 'PeTTa --he foldl compatibility' "$RUN_SH" --he "$ROOT/tests/he_foldl_compat.metta" --silent
+run_case 'PeTTa --he foldl over collapse streaming surface' "$RUN_SH" --he "$ROOT/tests/he_foldl_collapse_stream_surface.metta" --silent
+run_case 'PeTTa --he foldl over bound collapse streaming surface' "$RUN_SH" --he "$ROOT/tests/he_foldl_bound_collapse_stream_surface.metta" --silent
+run_case 'PeTTa --he foldl over nested bound collapse streaming surface' "$RUN_SH" --he "$ROOT/tests/he_foldl_bound_collapse_nested_stream_surface.metta" --silent
 run_case 'PeTTa --he higher-order curry full application' "$RUN_SH" --he "$ROOT/tests/he_higherorder_curry_call.metta" --silent
 run_case 'PeTTa --he higher-order fmap empty constructor tail' "$RUN_SH" --he "$ROOT/tests/he_higherorder_fmap_empty_constructor.metta" --silent
 run_case 'PeTTa --he chain cut side effects' "$RUN_SH" --he "$ROOT/tests/he_chain_cut_side_effect.metta" --silent

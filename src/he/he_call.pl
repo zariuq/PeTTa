@@ -117,10 +117,78 @@ he_select_typed_call(Call, TypeChains, Args, err(TypeChain, Errors, Args)) :-
 he_typechain_return_type([->|TypeItems], ReturnType) :-
     append(_, [ReturnType], TypeItems).
 
+he_note_typed_visible_or_all_row(Row, RawOut, State) :-
+    ( he_visible_result(RawOut)
+    -> arg(1, State, Mode),
+       ( Mode == no_visible
+       -> nb_setarg(1, State, visible),
+          nb_setarg(2, State, [])
+       ;  true
+       ),
+       arg(3, State, VisibleAcc0),
+       nb_setarg(3, State, [Row|VisibleAcc0])
+    ; arg(1, State, no_visible)
+    -> arg(2, State, RawAcc0),
+       nb_setarg(2, State, [Row|RawAcc0])
+    ;  true
+    ).
+
+he_finalize_typed_visible_or_all_rows(State, Rows) :-
+    arg(1, State, Mode),
+    ( Mode == visible
+    -> arg(3, State, VisibleAcc),
+       reverse(VisibleAcc, Rows)
+    ;  arg(2, State, RawAcc),
+       reverse(RawAcc, Rows)
+    ).
+
+he_collect_typed_visible_or_all_raw_rows(Fun, Args, Rows) :-
+    State = state(no_visible, [], []),
+    ( catch(( copy_term(Args, ArgsCopy),
+              he_invoke_typed(Fun, ArgsCopy, Raw0),
+              copy_term(Raw0, BoundRaw0),
+              he_note_typed_visible_or_all_row(BoundRaw0, Raw0, State),
+              fail
+            ),
+            _,
+            fail)
+    ; he_finalize_typed_visible_or_all_rows(State, Rows)
+    ).
+
+he_collect_typed_visible_or_all_arg_rows(Fun, Args, Rows) :-
+    State = state(no_visible, [], []),
+    ( catch(( copy_term(Args, ArgsCopy),
+              he_invoke_typed(Fun, ArgsCopy, Raw0),
+              copy_term(ArgsCopy-Raw0, BoundArgs-BoundRaw0),
+              he_note_typed_visible_or_all_row(BoundArgs-BoundRaw0, Raw0, State),
+              fail
+            ),
+            _,
+            fail)
+    ; he_finalize_typed_visible_or_all_rows(State, Rows)
+    ).
+
+he_collect_typed_visible_or_all_display_rows(Fun, Args, DisplayArgs, Rows) :-
+    State = state(no_visible, [], []),
+    ( catch(( copy_term(Args-DisplayArgs, ArgsCopy-DisplayCopy),
+              he_invoke_typed(Fun, ArgsCopy, Raw0),
+              copy_term(ArgsCopy-DisplayCopy-Raw0,
+                        BoundArgs-BoundDisplay-BoundRaw0),
+              he_note_typed_visible_or_all_row(BoundArgs-BoundDisplay-BoundRaw0,
+                                               Raw0,
+                                               State),
+              fail
+            ),
+            _,
+            fail)
+    ; he_finalize_typed_visible_or_all_rows(State, Rows)
+    ).
+
 he_finish_typed_call_selections('get-type', Args, DisplayArgs, Selections, Out) :-
     !,
+    he_collect_typed_visible_or_all_raw_rows('get-type', Args, RawRows0),
     findall(Candidate,
-            ( he_invoke_typed_visible_or_all('get-type', Args, Raw0),
+            ( member(Raw0, RawRows0),
               member(ok(_, ReturnType), Selections),
               he_cast_typed_raw_result('get-type', Args, DisplayArgs, ReturnType, Raw0, Candidate)
             ),
@@ -145,15 +213,31 @@ he_finish_typed_call_selections(Fun, Args, DisplayArgs, Selections, Out) :-
     he_finish_typed_call(Fun, Args, DisplayArgs, Selection, Out), !.
 
 he_collect_typed_nonerror_solutions(Fun, Args, DisplayArgs, Selections, Solutions) :-
+    he_perf_counter_inc(typed_nonerror_solution_collections),
+    he_collect_typed_visible_or_all_display_rows(Fun, Args, DisplayArgs, Rows0),
     findall(BoundArgs-Candidate,
-            he_typed_nonerror_solution(Fun, Args, DisplayArgs, Selections, BoundArgs, Candidate),
+            ( member(ok(TypeChain, ReturnType), Selections),
+              TypeChain = [->|_],
+              member(BoundArgs-BoundDisplay-Raw0, Rows0),
+              he_cast_typed_raw_result(Fun, BoundArgs, BoundDisplay, ReturnType, Raw0, Candidate),
+              \+ he_error_atom(Candidate)
+            ),
             Solutions0),
+    length(Solutions0, SolutionCount),
+    he_perf_counter_add(typed_nonerror_solution_rows, SolutionCount),
     alpha_list_to_set(Solutions0, Solutions).
 
 he_collect_relaxed_runtime_solutions(Fun, Args, Solutions) :-
+    he_perf_counter_inc(relaxed_runtime_solution_collections),
+    he_collect_typed_visible_or_all_arg_rows(Fun, Args, Rows0),
     findall(BoundArgs-Candidate,
-            he_relaxed_runtime_solution(Fun, Args, BoundArgs, Candidate),
+            ( member(BoundArgs-Candidate, Rows0),
+              \+ he_error_atom(Candidate),
+              \+ Candidate = [Fun|BoundArgs]
+            ),
             Solutions0),
+    length(Solutions0, SolutionCount),
+    he_perf_counter_add(relaxed_runtime_solution_rows, SolutionCount),
     alpha_list_to_set(Solutions0, Solutions).
 
 he_relaxed_runtime_allowed(Args, _Selections) :-
@@ -170,23 +254,6 @@ he_args_runtime_relaxation_candidate([_|Args]) :-
     he_args_runtime_relaxation_candidate(Args).
 he_args_runtime_relaxation_candidate([]) :-
     fail.
-
-he_relaxed_runtime_solution(Fun, Args, BoundArgs, Candidate) :-
-    copy_term(Args, ArgsCopy),
-    he_invoke_typed_visible_or_all(Fun, ArgsCopy, Raw0),
-    \+ he_error_atom(Raw0),
-    \+ Raw0 = [Fun|ArgsCopy],
-    BoundArgs = ArgsCopy,
-    Candidate = Raw0.
-
-he_typed_nonerror_solution(Fun, Args, DisplayArgs, Selections, BoundArgs, Candidate) :-
-    copy_term(Args-DisplayArgs, ArgsCopy-DisplayCopy),
-    member(ok(TypeChain, ReturnType), Selections),
-    TypeChain = [->|_],
-    he_invoke_typed_visible_or_all(Fun, ArgsCopy, Raw0),
-    he_cast_typed_raw_result(Fun, ArgsCopy, DisplayCopy, ReturnType, Raw0, Candidate),
-    \+ he_error_atom(Candidate),
-    BoundArgs = ArgsCopy.
 
 he_cast_typed_raw_result(Fun, Args, DisplayArgs, ReturnType, Raw0, Out) :-
     he_maybe_eval_typed_return(ReturnType, Raw0, RawOut),
@@ -361,6 +428,7 @@ he_maybe_eval_typed_return(ReturnType, In, Out) :-
 he_maybe_eval_typed_return(_, In, In).
 
 he_invoke_typed_visible_or_all(Fun, Args, RawOut) :-
+    he_perf_counter_inc(typed_visible_or_all_calls),
     State = state(no_visible),
     ( catch((he_invoke_typed(Fun, Args, RawOut),
              he_visible_result(RawOut),
@@ -368,6 +436,7 @@ he_invoke_typed_visible_or_all(Fun, Args, RawOut) :-
             _,
             fail)
     ; arg(1, State, no_visible),
+      he_perf_counter_inc(typed_visible_or_all_replays),
       catch(he_invoke_typed(Fun, Args, RawOut), _, fail)
     ).
 
@@ -636,8 +705,12 @@ he_dynamic_call_raw(Head, RawArgs, Out) :-
     Head == capture, !,
     he_runtime_special_call(capture, RawArgs, Out).
 he_dynamic_call_raw(Head, RawArgs, Out) :-
-    he_eval_runtime_args(RawArgs, EvalArgs),
-    he_eval_or_reduce([Head|EvalArgs], Out).
+    ( he_noncallable_runtime_head(Head)
+    -> once(he_eval_runtime_args(RawArgs, EvalArgs)),
+       Out = [Head|EvalArgs]
+    ;  he_eval_runtime_args(RawArgs, EvalArgs),
+       he_eval_or_reduce([Head|EvalArgs], Out)
+    ).
 
 he_runtime_special_call(Head, RawArgs, Out) :-
     length(RawArgs, Arity),
@@ -660,6 +733,17 @@ he_eval_runtime_arg(Arg, Eval) :-
       Eval = Arg
     ).
 he_eval_runtime_arg(Arg, Arg).
+
+he_noncallable_runtime_head(Head) :-
+    nonvar(Head),
+    \+ ( compound(Head),
+         Head = partial(_, _)
+       ),
+    \+ he_py_callable_head(Head),
+    \+ he_runtime_callable_head(Head),
+    \+ ( is_list(Head),
+         he_callable_data_head(Head)
+       ).
 
 he_runtime_arg_has_eval_solution(Arg) :-
     copy_term(Arg, Probe),
@@ -817,16 +901,54 @@ he_single_equation_call([Fun|Args]) :-
     findall(1, he_eq_fact(Fun, Arity, _, _), Matches),
     Matches = [_].
 
-he_compiled_equation_goal_results(Call, Goal, Out, VisibleResults, RawResults) :-
-    findall(BoundCall-BoundOut,
-            catch((call(Goal), copy_term(Call-Out, BoundCall-BoundOut)), _, fail),
-            RawResults0),
-    include([_-Candidate]>>he_visible_result(Candidate), RawResults0, VisibleResults0),
+he_compiled_equation_note_result(Pair, State) :-
+    Pair = _-Candidate,
+    arg(4, State, RawCount0),
+    RawCount is RawCount0 + 1,
+    nb_setarg(4, State, RawCount),
+    ( he_visible_result(Candidate)
+    -> arg(5, State, VisibleCount0),
+       VisibleCount is VisibleCount0 + 1,
+       nb_setarg(5, State, VisibleCount),
+       arg(1, State, Mode),
+       ( Mode == no_visible
+       -> nb_setarg(1, State, visible),
+          nb_setarg(2, State, [])
+       ;  true
+       ),
+       arg(3, State, VisibleAcc0),
+       nb_setarg(3, State, [Pair|VisibleAcc0])
+    ; arg(1, State, no_visible)
+    -> arg(2, State, RawAcc0),
+       nb_setarg(2, State, [Pair|RawAcc0])
+    ;  true
+    ).
+
+he_finalize_compiled_equation_goal_results(Call, State, VisibleResults, RawResults) :-
+    arg(4, State, RawCount),
+    he_perf_counter_add(compiled_equation_goal_raw_rows, RawCount),
+    arg(5, State, VisibleCount),
+    he_perf_counter_add(compiled_equation_goal_visible_rows, VisibleCount),
+    arg(3, State, VisibleAcc),
+    arg(2, State, RawAcc),
     ( he_single_equation_call(Call)
-    -> reverse(VisibleResults0, VisibleResults)
-    ;  VisibleResults = VisibleResults0
+    -> VisibleResults = VisibleAcc
+    ;  reverse(VisibleAcc, VisibleResults)
     ),
-    RawResults = RawResults0.
+    reverse(RawAcc, RawResults).
+
+he_compiled_equation_goal_results(Call, Goal, Out, VisibleResults, RawResults) :-
+    he_perf_counter_inc(compiled_equation_goal_result_collections),
+    State = state(no_visible, [], [], 0, 0),
+    ( catch(( call(Goal),
+              copy_term(Call-Out, BoundCall-BoundOut),
+              he_compiled_equation_note_result(BoundCall-BoundOut, State),
+              fail
+            ),
+            _,
+            fail)
+    ; he_finalize_compiled_equation_goal_results(Call, State, VisibleResults, RawResults)
+    ).
 
 he_call_compiled_or_self(Call, Goal, Out) :-
     he_call_has_equation(Call), !,

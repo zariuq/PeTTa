@@ -187,93 +187,6 @@ he_callable_data_head_functor(Head) :-
     ; memberchk(Head, [if, let, chain, 'let*', eval, collapse])
     ).
 
-he_empty_result(Value) :-
-    nonvar(Value),
-    Value == 'Empty'.
-he_empty_result([Head|_]) :-
-    nonvar(Head),
-    Head == 'Empty'.
-
-he_visible_result(Value) :-
-    \+ he_empty_result(Value).
-
-he_error_result([Head|_]) :-
-    nonvar(Head),
-    Head == 'Error'.
-
-he_prefer_success_results(RawResults, Results) :-
-    exclude(he_error_result, RawResults, Successes),
-    ( Successes == []
-    -> Results = RawResults
-    ;  Results = Successes
-    ).
-
-he_collect_visible_results(Conj, Value, Results) :-
-    findall(Public,
-            ( Conj,
-              he_visible_result(Value),
-              he_public_result(Value, Public)
-            ),
-            RawResults),
-    he_prefer_success_results(RawResults, Results).
-
-he_bind_packet(Value, Vars, [Value, ['__he_bindings__'|Vars]]).
-
-he_collect_bind_packets(Conj, Value, Vars, Results) :-
-    findall(Packet,
-            ( Conj,
-              he_visible_result(Value),
-              copy_term(Value-Vars, ValueCopy-VarsCopy),
-              he_bind_packet(ValueCopy, VarsCopy, Packet)
-            ),
-            Results).
-
-he_superpose_bind_packet_list([]).
-he_superpose_bind_packet_list([Packet|Packets]) :-
-    he_superpose_bind_explicit_packet(Packet),
-    he_superpose_bind_packet_list(Packets).
-
-he_superpose_bind_explicit_packet([_Value, ['__he_bindings__'|_]]).
-
-he_superpose_bind_member(PacketList, Out) :-
-    he_superpose_bind_packet_list(PacketList), !,
-    member(Packet, PacketList),
-    he_superpose_bind_packet_value(Packet, Out).
-he_superpose_bind_member(Packet, Out) :-
-    is_list(Packet), !,
-    he_superpose_bind_packet_value(Packet, Out).
-he_superpose_bind_member(Arg, ['Error', ['superpose-bind', Arg], ['BadArgType', 1, 'Expression', 'Number']]) :-
-    number(Arg), !.
-he_superpose_bind_member(Arg, ['Error', ['superpose-bind', Arg], ['BadArgType', 1, 'Expression', 'Atom']]) :-
-    atomic(Arg), !.
-he_superpose_bind_member(Arg, ['Error', ['superpose-bind', Arg], ['BadArgType', 1, 'Expression', 'Grounded']]).
-
-he_superpose_bind_packet_value([Value, ['__he_bindings__'|_]], Value) :- !.
-he_superpose_bind_packet_value(Value, Value).
-
-he_superpose_bind_apply(PacketList, Args, Out) :-
-    he_superpose_bind_packet_list(PacketList), !,
-    member(Packet, PacketList),
-    he_superpose_bind_packet_apply(Packet, Args, Out).
-he_superpose_bind_apply(Packet, Args, Out) :-
-    is_list(Packet), !,
-    he_superpose_bind_packet_apply(Packet, Args, Out).
-he_superpose_bind_apply(Arg, _Args, ['Error', ['superpose-bind', Arg], ['BadArgType', 1, 'Expression', 'Number']]) :-
-    number(Arg), !.
-he_superpose_bind_apply(Arg, _Args, ['Error', ['superpose-bind', Arg], ['BadArgType', 1, 'Expression', 'Atom']]) :-
-    atomic(Arg), !.
-he_superpose_bind_apply(Arg, _Args, ['Error', ['superpose-bind', Arg], ['BadArgType', 1, 'Expression', 'Grounded']]).
-
-he_superpose_bind_packet_apply([Value, ['__he_bindings__'|BoundVals]], Args, Out) :-
-    same_length(Args, BoundVals),
-    Args = BoundVals,
-    Out = [Value|Args], !.
-he_superpose_bind_packet_apply(Value, Args, Out) :-
-    ( he_apply_callable_result(Value, Args, Out)
-    -> true
-    ; Out = [Value|Args]
-    ).
-
 he_nonself_get_atoms_collapse_goal(he_collect_visible_results('get-atoms'(Space, Atom), Atom, Value),
                                    Space,
                                    Value) :-
@@ -364,15 +277,6 @@ he_block_nonself_equation_body_binding(ValConj, Value) :-
     atom(Head),
     \+ memberchk(Head, [=, ':', ',', 'Error']).
 
-he_once_visible_result(Conj, Value, Out) :-
-    ( once(( Conj,
-             he_visible_result(Value),
-             Out = Value
-           ))
-    -> true
-    ;  Out = 'Empty'
-    ).
-
 he_bind_visible_results(he_eval_special(Arg, Value), Value, Pattern, PatConj, InConj, InValue, Out) :-
     he_eval_likely_singleton(Arg), !,
     once((
@@ -419,6 +323,18 @@ he_bind_visible_results(ValConj, Value, Pattern, PatConj, InConj, InValue, Out) 
 he_eval_likely_singleton(Arg) :-
     ground(Arg),
     \+ he_expr_may_be_nondet(Arg).
+
+% Keep the HE-spec-shaped NoReturn boundary explicit at the function surface.
+% The strict harness classifies the upstream variable-leak witness as an
+% accepted oracle quirk rather than changing this runtime contract.
+he_function_no_return_result(SubjectBody, ['Error', [function, SubjectBody], 'NoReturn']).
+
+he_function_body_or_no_return(BodyConj, SubjectBody, BodyOut, Out) :-
+    ( BodyConj
+    -> he_function_no_return_result(SubjectBody, Out)
+    ;  he_function_no_return_result(SubjectBody, Out)
+    ),
+    ignore(BodyOut == BodyOut).
 
 he_expr_may_be_nondet(Expr) :-
     var(Expr), !.
@@ -524,11 +440,11 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == '==',
     T = [[], [collapse, [once, [match, SpaceExpr, Pattern, Body]]]], !,
-    he_translate_match_once_truth_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals).
+    he_translate_match_once_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == '==',
     T = [[collapse, [once, [match, SpaceExpr, Pattern, Body]]], []], !,
-    he_translate_match_once_truth_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals).
+    he_translate_match_once_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == unify,
     T = [A, B, Then, Else], !,
@@ -566,6 +482,104 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     Goals = GsH.
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == let,
+    T = [Pat, CollapseExpr, SizeExpr],
+    var(Pat),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    nonvar(SizeExpr),
+    SizeExpr = ['size-atom', SizeArg],
+    SizeArg == Pat, !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    append(GsH, [he_count_visible_results(ExprConj, ExprVal, Out)], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == let,
+    T = [Pat, CollapseExpr, FoldExpr],
+    var(Pat),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    nonvar(FoldExpr),
+    FoldExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat, !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals, [he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, Out)], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == let,
+    T = [Pat, CollapseExpr, In],
+    var(Pat),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    nonvar(In),
+    In = [let, FoldPat, FoldExpr, Rest],
+    var(FoldPat),
+    nonvar(FoldExpr),
+    FoldExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat, !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    translate_expr_to_conj(Rest, RestConj, RestValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals,
+           [ he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, FoldValue),
+             FoldPat = FoldValue,
+             RestConj,
+             Out = RestValue
+           ],
+           Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == chain,
+    T = [CollapseExpr, Pat, SizeExpr],
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    var(Pat),
+    nonvar(SizeExpr),
+    SizeExpr = ['size-atom', SizeArg],
+    SizeArg == Pat, !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    append(GsH, [he_count_visible_results(ExprConj, ExprVal, Out)], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == chain,
+    T = [CollapseExpr, Pat, FoldExpr],
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    var(Pat),
+    nonvar(FoldExpr),
+    FoldExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat, !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals, [he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, Out)], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == chain,
+    T = [CollapseExpr, Pat, In],
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    var(Pat),
+    nonvar(In),
+    In = [let, FoldPat, FoldExpr, Rest],
+    var(FoldPat),
+    nonvar(FoldExpr),
+    FoldExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat, !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    translate_expr_to_conj(Rest, RestConj, RestValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals,
+           [ he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, FoldValue),
+             FoldPat = FoldValue,
+             RestConj,
+             Out = RestValue
+           ],
+           Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == let,
     T = [Pat, Val, In], !,
     he_constrain_args(Pat, Pv, Gp),
     translate_expr_to_conj(Val, ValConj, V),
@@ -585,51 +599,43 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     T = [Expr, Expected], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
     translate_expr_to_conj(Expected, ExpConj, ExpVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_collect_visible_results(ExpConj, ExpVal, Expecteds),
+    Goal = ( he_collect_assert_result_sets(ExprConj, ExprVal, ExpConj, ExpVal, Actuals, Expecteds),
              he_assert_set_results([assertEqual, Expr, Expected], Actuals, Expecteds, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertEqualToResult,
     T = [Expr, ExpectedTuple], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_expected_tuple_results(ExpectedTuple, Expecteds),
+    Goal = ( he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds),
              he_assert_same_results([assertEqualToResult, Expr, ExpectedTuple], Actuals, Expecteds, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertAlphaEqualToResult,
     T = [Expr, ExpectedTuple], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_expected_tuple_results(ExpectedTuple, Expecteds),
+    Goal = ( he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds),
              he_assert_same_results([assertAlphaEqualToResult, Expr, ExpectedTuple], Actuals, Expecteds, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertIncludes,
     T = [Expr, ExpectedTuple], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_expected_tuple_results(ExpectedTuple, Expecteds),
+    Goal = ( he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds),
              he_assert_includes_results([assertIncludes, Expr, ExpectedTuple], Actuals, Expecteds, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertEqualMsg,
     T = [Expr, Expected, Msg], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    translate_expr(Expected, ExpGoals, ExpVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_collect_visible_results((goals_list_to_conj(ExpGoals, ExpConj), ExpConj), ExpVal, Expecteds0),
-             ( Expecteds0 == [] -> Expecteds = [ExpVal] ; Expecteds = Expecteds0 ),
+    translate_expr_to_conj(Expected, ExpConj, ExpVal),
+    Goal = ( he_collect_assert_result_set_or_singleton(ExprConj, ExprVal, ExpConj, ExpVal, Actuals, Expecteds),
              he_assert_set_results_or_error([assertEqualMsg, Expr, Expected], Actuals, Expecteds, Msg, Out) ),
-    append(GsH, ExpGoals, GsMid),
-    append(GsMid, [Goal], Goals).
+    append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertEqualToResultMsg,
     T = [Expr, ExpectedTuple, Msg], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_expected_tuple_results(ExpectedTuple, Expecteds),
+    Goal = ( he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds),
              he_assert_same_results_or_error([assertEqualToResultMsg, Expr, ExpectedTuple], Actuals, Expecteds, Msg, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
@@ -637,16 +643,14 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     T = [Expr, Expected, Msg], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
     translate_expr_to_conj(Expected, ExpConj, ExpVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_collect_visible_results(ExpConj, ExpVal, Expecteds),
+    Goal = ( he_collect_assert_result_sets(ExprConj, ExprVal, ExpConj, ExpVal, Actuals, Expecteds),
              he_assert_same_results_or_error([assertAlphaEqualMsg, Expr, Expected], Actuals, Expecteds, Msg, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertAlphaEqualToResultMsg,
     T = [Expr, ExpectedTuple, Msg], !,
     translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    Goal = ( he_collect_visible_results(ExprConj, ExprVal, Actuals),
-             he_expected_tuple_results(ExpectedTuple, Expecteds),
+    Goal = ( he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds),
              he_assert_same_results_or_error([assertAlphaEqualToResultMsg, Expr, ExpectedTuple], Actuals, Expecteds, Msg, Out) ),
     append(GsH, [Goal], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
@@ -663,6 +667,15 @@ he_translate_match_once_truth_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals) :
     ( Body == true ; Body == 'True' ),
     translate_expr(SpaceExpr, GsS, S),
     append([GsH, GsS, [he_match_once_truth_empty(S, Pattern, Out)]], Goals).
+
+he_translate_match_once_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals) :-
+    ( Body == true ; Body == 'True' ),
+    !,
+    he_translate_match_once_truth_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals).
+he_translate_match_once_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals) :-
+    Body == Pattern,
+    translate_expr(SpaceExpr, GsS, S),
+    append([GsH, GsS, [he_match_once_pattern_empty(S, Pattern, Out)]], Goals).
 
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == 'Error', !,
@@ -685,6 +698,17 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     append(GsH, [once((Conj, Out = Val))], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == foldl,
+    T = [Func, ListExpr, InitExpr],
+    he_profile_enabled,
+    nonvar(ListExpr),
+    ListExpr = [collapse, ListBody], !,
+    translate_expr_to_conj(ListBody, ListConj, ListValue),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals, [he_fold_visible_results(ListConj, ListValue, Func, InitValue, Out)], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == foldl,
     T = [Func, ListExpr, InitExpr], !,
     translate_expr_to_conj(ListExpr, ListConj, ListValue),
     translate_expr_to_conj(InitExpr, InitConj, InitValue),
@@ -696,11 +720,7 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     T = [Body], !,
     copy_term(Body, SubjectBody),
     translate_expr_to_conj(Body, BodyConj, BodyOut),
-    Goal = catch(( ( BodyConj
-                   -> Out = ['Error', [function, SubjectBody], 'NoReturn']
-                   ;  Out = ['Error', [function, SubjectBody], 'NoReturn']
-                   ),
-                   ignore(BodyOut == BodyOut) ),
+    Goal = catch(he_function_body_or_no_return(BodyConj, SubjectBody, BodyOut, Out),
                  he_return(Returned),
                  Out = Returned),
     append(GsH, [Goal], Goals).

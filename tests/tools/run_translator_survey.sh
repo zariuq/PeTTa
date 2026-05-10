@@ -3,9 +3,11 @@
 #
 # For each examples/*.metta (maxdepth 1):
 #   1. Run default PeTTa, capture wall/rss/exit.
-#   2. If translation-eligible: run translator, run --he, capture
-#      wall/rss/exit.
-#   3. Classify the row using the vocabulary from the brief at
+#   2. If translation-eligible: run the pure portable HE translation,
+#      then run --he and capture wall/rss/exit.
+#   3. For hyperpose-bearing sources, also run the preserve-hyperpose
+#      compatibility lane.
+#   4. Classify the row using the vocabulary from the brief at
 #      tmp/hepetta_examples_translation_bench_instructions_20260425.md
 #      (translated_passes, correct_but_perf_gap, translator_gap_*,
 #       he_runtime_gap_*, portable_extension_lowered,
@@ -21,7 +23,7 @@
 # reproducible.
 # Ordinary portable outputs use:
 #   examples/he_translated/*_he.metta
-# Hyperpose-using sources also get an explicit portability split:
+# Hyperpose-using sources also get an explicit compatibility split:
 #   examples/he_translated/*_he_sequential.metta
 #   examples/he_translated/*_he_parallel.metta
 
@@ -79,8 +81,8 @@ if [ "$RESUME" = 1 ] && [ -s "$INVENTORY" ]; then
     printf 'RESUME mode: skipping %s already-processed rows\n' "${#RESUME_DONE[@]}" | tee -a "$LOG"
 else
     # Headers (overwrite for fresh runs).
-    printf 'source\tportable_category\tportable_translated\tdefault_exit\tportable_he_exit\tportable_reason\tportable_next_action\tparallel_category\tparallel_translated\tparallel_he_exit\tparallel_reason\tparallel_next_action\n' > "$INVENTORY"
-    printf 'source\tportable_translated\tparallel_translated\tdefault_wall\tdefault_rss\tportable_wall\tportable_rss\tparallel_wall\tparallel_rss\tportable_ratio_wall\tparallel_ratio_wall\tportable_category\tparallel_category\tnotes\n' > "$BENCH"
+    printf 'source\tpure_portable_category\tpure_portable_translated\tdefault_exit\tpure_portable_he_exit\tpure_portable_reason\tpure_portable_next_action\tpreserve_hyperpose_category\tpreserve_hyperpose_translated\tpreserve_hyperpose_he_exit\tpreserve_hyperpose_reason\tpreserve_hyperpose_next_action\n' > "$INVENTORY"
+    printf 'source\tpure_portable_translated\tpreserve_hyperpose_translated\tdefault_wall\tdefault_rss\tpure_portable_wall\tpure_portable_rss\tpreserve_hyperpose_wall\tpreserve_hyperpose_rss\tpure_portable_ratio_wall\tpreserve_hyperpose_ratio_wall\tpure_portable_category\tpreserve_hyperpose_category\tnotes\n' > "$BENCH"
     declare -A RESUME_DONE=()
 fi
 
@@ -333,7 +335,7 @@ classify_and_record() {
         fi
     fi
 
-    # ----- Run --he on portable translated output -----
+    # ----- Run --he on pure portable translated output -----
     local he_pkt he_rc he_wall he_rss he_stdout he_stderr
     he_pkt=$(run_capture he "$RUN_SH" --he "$generated" --silent)
     he_rc=${he_pkt%%$'\t'*}
@@ -345,7 +347,7 @@ classify_and_record() {
     he_stdout=${rest3%%$'\037'*}
     he_stderr=${rest3#*$'\037'}
 
-    # ----- Classify portable lane -----
+    # ----- Classify pure portable HE lane -----
     local portable_category portable_reason portable_next_action
     local portable_extension_lowered=0
     if [ "$he_rc" = 0 ] && ! has_assert_failure "$he_stdout" && ! has_assert_failure "$he_stderr"; then
@@ -355,8 +357,8 @@ classify_and_record() {
     else
         if [ "$parallel_lane_kind" = hyperpose ]; then
             portable_category=he_runtime_extension_gap
-            portable_reason='source uses hyperpose; portable translation lowered it to sequential superpose and that workload still fails under --he'
-            portable_next_action='compare against _he_parallel or direct PeTTa --he hyperpose behavior on a reduced repro'
+            portable_reason='source uses hyperpose; pure portable translation lowered it to sequential superpose and that workload still fails under --he'
+            portable_next_action='compare against the preserve-hyperpose lane or direct PeTTa --he hyperpose behavior on a reduced repro'
             portable_extension_lowered=1
         elif is_timeout_rc "$he_rc" && [ "$witness_passed" = 1 ]; then
             portable_category=correct_but_perf_gap
@@ -384,7 +386,7 @@ classify_and_record() {
         cp -- "$generated" "$GAPS_DIR/${base}.translated.metta"
     fi
 
-    # ----- Optional HE++ parallel lane for hyperpose sources -----
+    # ----- Optional preserve-hyperpose compatibility lane -----
     local parallel_category=- parallel_reason=- parallel_next_action=-
     local parallel_he_rc=- parallel_he_wall=NA parallel_he_rss=NA
     local parallel_stdout= parallel_stderr=
@@ -448,7 +450,7 @@ classify_and_record() {
         case "$parallel_category" in
             translated_passes|correct_but_perf_gap)
                 portable_category=portable_extension_lowered
-                portable_reason='portable _he_sequential translation intentionally sequentializes hyperpose; preserved-hyperpose lane carries the semantic compatibility claim'
+                portable_reason='pure portable _he_sequential translation intentionally sequentializes hyperpose; the preserve-hyperpose lane carries the semantic compatibility claim'
                 portable_next_action='-'
                 ;;
         esac
@@ -479,14 +481,14 @@ classify_and_record() {
             >> "$BENCH"
     fi
     if [ -n "$witness_path" ]; then
-        printf 'portable[%s] parallel[%s] %s default(rc=%s w=%s r=%s) witness(rc=%s w=%s r=%s) portable(rc=%s w=%s r=%s) parallel(rc=%s w=%s r=%s)\n' \
+        printf 'pure_portable[%s] preserve_hyperpose[%s] %s default(rc=%s w=%s r=%s) witness(rc=%s w=%s r=%s) pure_portable(rc=%s w=%s r=%s) preserve_hyperpose(rc=%s w=%s r=%s)\n' \
             "$portable_category" "$parallel_category" "$rel" \
             "$default_rc" "$default_wall" "$default_rss" \
             "$witness_rc" "$witness_wall" "$witness_rss" \
             "$he_rc" "$he_wall" "$he_rss" \
             "$parallel_he_rc" "$parallel_he_wall" "$parallel_he_rss" | tee -a "$LOG"
     else
-        printf 'portable[%s] parallel[%s] %s default(rc=%s w=%s r=%s) portable(rc=%s w=%s r=%s) parallel(rc=%s w=%s r=%s)\n' \
+        printf 'pure_portable[%s] preserve_hyperpose[%s] %s default(rc=%s w=%s r=%s) pure_portable(rc=%s w=%s r=%s) preserve_hyperpose(rc=%s w=%s r=%s)\n' \
             "$portable_category" "$parallel_category" "$rel" \
             "$default_rc" "$default_wall" "$default_rss" \
             "$he_rc" "$he_wall" "$he_rss" \
@@ -517,20 +519,20 @@ count_cat_col() {
 
 {
     printf '\n--- inventory summary ---\n'
-    printf '  portable_translated_passes: %s\n' "$(count_cat_col translated_passes 2)"
-    printf '  portable_correct_but_perf_gap: %s\n' "$(count_cat_col correct_but_perf_gap 2)"
-    printf '  portable_extension_lowered: %s\n' "$(count_cat_col portable_extension_lowered 2)"
-    printf '  portable_he_runtime_gap_core: %s\n' "$(count_cat_col he_runtime_gap_core 2)"
-    printf '  portable_he_runtime_extension_gap: %s\n' "$(count_cat_col he_runtime_extension_gap 2)"
-    printf '  portable_translator_gap_core: %s\n' "$(count_cat_col translator_gap_core 2)"
-    printf '  portable_petta_specific_no_translation: %s\n' "$(count_cat_col petta_specific_no_translation 2)"
-    printf '  portable_external_or_interactive: %s\n' "$(count_cat_col external_or_interactive 2)"
-    printf '  portable_already_he: %s\n' "$(count_cat_col already_he 2)"
-    printf '  portable_default_source_fails: %s\n' "$(count_cat_col default_source_fails 2)"
+    printf '  pure_portable_translated_passes: %s\n' "$(count_cat_col translated_passes 2)"
+    printf '  pure_portable_correct_but_perf_gap: %s\n' "$(count_cat_col correct_but_perf_gap 2)"
+    printf '  petta_he_extended_needed: %s\n' "$(count_cat_col portable_extension_lowered 2)"
+    printf '  pure_portable_he_runtime_gap_core: %s\n' "$(count_cat_col he_runtime_gap_core 2)"
+    printf '  pure_portable_he_runtime_extension_gap: %s\n' "$(count_cat_col he_runtime_extension_gap 2)"
+    printf '  pure_portable_translator_gap_core: %s\n' "$(count_cat_col translator_gap_core 2)"
+    printf '  pure_portable_petta_specific_no_translation: %s\n' "$(count_cat_col petta_specific_no_translation 2)"
+    printf '  pure_portable_external_or_interactive: %s\n' "$(count_cat_col external_or_interactive 2)"
+    printf '  pure_portable_already_he: %s\n' "$(count_cat_col already_he 2)"
+    printf '  pure_portable_default_source_fails: %s\n' "$(count_cat_col default_source_fails 2)"
     printf '\n'
     for c in translated_passes correct_but_perf_gap \
              he_runtime_extension_gap translator_gap_core; do
-        printf '  parallel_%s: %s\n' "$c" "$(count_cat_col "$c" 8)"
+        printf '  preserve_hyperpose_%s: %s\n' "$c" "$(count_cat_col "$c" 8)"
     done
     printf '\nINVENTORY %s\n' "$INVENTORY"
     printf 'BENCH     %s\n' "$BENCH"

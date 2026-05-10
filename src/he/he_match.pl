@@ -128,7 +128,7 @@ he_match_equation(Space, Call, BodyPattern, OutPattern, Result) :-
     is_list(Call),
     Call = [_|_],
     ( ground(Call) -> GroundCall = true ; GroundCall = false ),
-    he_space_atom(Space, [=, StoredHead0, StoredBody0]),
+    he_space_candidate_equation(Space, Call, StoredHead0, StoredBody0),
     copy_term(StoredHead0-StoredBody0, StoredHead-StoredBody),
     is_list(StoredHead),
     StoredHead = Call,
@@ -186,6 +186,7 @@ he_space_atom(Space, Atom) :-
     functor(Head, Space, Arity),
     clause(Head, true),
     Head =.. [Space|Args],
+    he_perf_counter_inc(space_atom_scan_rows),
     ( Args = [Rel|Rest]
       -> ( Rest == [] -> Atom = Rel ; Atom = [Rel|Rest] )
       ; Atom = [] ).
@@ -202,7 +203,7 @@ he_eval_or_raw(Expr, Expr) :-
     \+ catch(once(eval(Expr, _)), _, fail).
 
 he_match_semantic(Space, Pattern, OutPattern, Result) :-
-    he_space_atom(Space, Stored),
+    he_space_candidate_atom(Space, Pattern, Stored),
     he_normalize_state_term(Pattern, PatternN),
     he_normalize_state_term(Stored, StoredN),
     PatternN = StoredN,

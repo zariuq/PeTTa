@@ -1,4 +1,6 @@
 :- dynamic he_auto_typecheck/1.
+:- dynamic he_perf_counter/2.
+:- dynamic he_perf_counters_enabled/0.
 :- dynamic he_stdlib_loaded/0.
 :- dynamic installed_surface/2.
 
@@ -108,3 +110,55 @@ ensure_he_stdlib_loaded :-
 he_profile_result(HeOut, _DefaultOut, HeOut) :-
     he_profile_enabled, !.
 he_profile_result(_HeOut, DefaultOut, DefaultOut).
+
+he_perf_counters_enable :-
+    he_perf_counters_reset,
+    ( he_perf_counters_enabled -> true
+    ; assertz(he_perf_counters_enabled)
+    ).
+
+he_perf_counters_disable :-
+    retractall(he_perf_counters_enabled).
+
+he_perf_counters_reset :-
+    retractall(he_perf_counter(_, _)).
+
+he_perf_counter_inc(Name) :-
+    he_perf_counter_add(Name, 1).
+
+he_perf_counter_add(_Name, Delta) :-
+    ( var(Delta)
+    ; \+ integer(Delta)
+    ; Delta =< 0
+    ), !.
+he_perf_counter_add(_Name, _Delta) :-
+    \+ he_perf_counters_enabled, !.
+he_perf_counter_add(Name, Delta) :-
+    with_mutex(he_perf_counter,
+               ( ( retract(he_perf_counter(Name, Prev))
+                 -> Next is Prev + Delta
+                 ;  Next = Delta
+                 ),
+                 assertz(he_perf_counter(Name, Next))
+               )).
+
+he_perf_counter_value(Name, Count) :-
+    ( he_perf_counter(Name, Count)
+    -> true
+    ;  Count = 0
+    ).
+
+he_perf_counter_snapshot(Pairs) :-
+    findall(Count-Name, he_perf_counter(Name, Count), Raw),
+    keysort(Raw, Asc),
+    reverse(Asc, Desc),
+    findall(Name-Count,
+            member(Count-Name, Desc),
+            Pairs).
+
+he_perf_counters_report(Stream) :-
+    format(Stream, 'HE_PERF_COUNTERS_BEGIN~n', []),
+    he_perf_counter_snapshot(Pairs),
+    forall(member(Name-Count, Pairs),
+           format(Stream, '~w\t~w~n', [Name, Count])),
+    format(Stream, 'HE_PERF_COUNTERS_END~n', []).
