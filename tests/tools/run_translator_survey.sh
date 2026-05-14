@@ -126,7 +126,7 @@ translation_witness_for_source() {
             printf '%s\n' 'tests/profile_repros/he_matespace2_demo_4_witness.metta'
             ;;
         examples/matespacefast.metta)
-            printf '%s\n' 'tests/profile_repros/he_matespacefast_demo_6_witness.metta'
+            printf '%s\n' 'tests/profile_repros/he_matespacefast_translated_demo_6_witness.metta'
             ;;
         examples/nars_tuffy.metta)
             printf '%s\n' 'tests/profile_repros/he_nars_tuffy_smallkb_witness.metta'

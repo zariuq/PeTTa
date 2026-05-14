@@ -95,10 +95,15 @@ goals_list_to_conj([], true)      :- !.
 goals_list_to_conj([G], G)        :- !.
 goals_list_to_conj([G|Gs], (G,R)) :- goals_list_to_conj(Gs, R).
 
-call_clause_functor(F, Arity, F) :-
+he_runtime_call_clause_available(F, Arity) :-
     he_profile_enabled,
+    he_runtime_direct_predicate_plan(F, Arity, runtime_predicate), !.
+he_runtime_call_clause_available(F, Arity) :-
     current_predicate(F/Arity),
-    \+ (current_op(_, _, F), Arity =< 2), !.
+    \+ (current_op(_, _, F), Arity =< 2).
+
+call_clause_functor(F, Arity, F) :-
+    he_runtime_call_clause_available(F, Arity), !.
 call_clause_functor(F, _Arity, ClauseF) :-
     he_clause_functor(F, ClauseF).
 
@@ -206,6 +211,12 @@ translate_expr([H0|T0], Goals, Out) :-
              append(GsH, [he_collect_visible_results(Conj, EV, Out)], Goals)
         ; HV == collapse, T = [E] -> translate_expr_to_conj(E, Conj, EV),
                                      append(GsH, [findall(EV, Conj, Out)], Goals)
+        ; he_profile_enabled,
+          var(H),
+          \+ ( is_list(H),
+               \+ he_callable_data_head(H)
+             )
+          -> append(GsH, [he_dynamic_var_head_call_raw(HV, T, Out)], Goals)
         ; he_pre_builtin_dispatch(HV, T, GsH, Out, Goals)
         ; HV == cut, T = [] -> append(GsH, [(!)], Goals),
                                Out = true
@@ -364,6 +375,10 @@ translate_expr([H0|T0], Goals, Out) :-
         ; ( HV == 'add-atom' ; HV == 'remove-atom' ), T = [_,_] -> append(T, [Out], RawArgs),
                                                                    Goal =.. [HV|RawArgs],
                                                                    append(GsH, [Goal], Goals)
+        ; HV == match, T = [Space, Pattern, Body], he_profile_enabled,
+          he_match_identity_body(Pattern, Body)
+          -> translate_expr(Space, G1, S),
+             append(G1, [match(S, Pattern, Body, _), (Out = Body)], Goals)
         ; HV == match, T = [Space, Pattern, Body], he_profile_enabled
           -> translate_expr(Space, G1, S),
              translate_expr_to_conj(Body, BodyConj, BodyOut),
@@ -466,8 +481,10 @@ build_call_or_partial(Fun, AVs, Out, Inner, Extra, Goals) :- length(AVs, N),
                                                              Arity is N + 1,
                                                              ( maybe_specialize_call(Fun, AVs, Out, Goal)
                                                                -> append(Inner, [Goal|Extra], Goals)
-                                                                ; ( ( current_predicate(Fun/Arity) ; catch(arity(Fun, Arity), _, fail) ),
-                                                                     \+ ( current_op(_, _, Fun), Arity =< 2 ) )
+                                                                ; ( he_runtime_call_clause_available(Fun, Arity)
+                                                                  ; catch(arity(Fun, Arity), _, fail),
+                                                                    \+ ( current_op(_, _, Fun), Arity =< 2 )
+                                                                  )
                                                                   -> append(AVs, [Out], Args),
                                                                      Goal =.. [Fun|Args],
                                                                      append(Inner, [Goal|Extra], Goals)

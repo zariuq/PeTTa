@@ -1,0 +1,20 @@
+!(bind! &dupfold1 (new-space))
+
+(= (step a) 1)
+(= (step a) 1)
+(= (step a) 2)
+
+!(assertEqual (let $ln (collapse (let* (($n (step a))
+                                        ($u (add-unique-or-fail &dupfold1 $n)))
+                                   $n))
+                 (foldl + $ln 0))
+              3)
+!(assertEqual (size &dupfold1) 2)
+
+!(bind! &dupfold2 (new-space))
+!(assertEqual (let $ln (collapse (let* (($n (step z))
+                                        ($u (add-unique-or-fail &dupfold2 $n)))
+                                   $n))
+                 (foldl + $ln 10))
+              10)
+!(assertEqual (size &dupfold2) 0)

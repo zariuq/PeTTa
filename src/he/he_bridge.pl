@@ -57,7 +57,9 @@ he_bridge_reduce(F, Args, Out) :-
 he_bridge_reduce(F, Args, Out) :-
     length(Args, N),
     Arity is N + 1,
+    he_perf_counter_inc(current_predicate_bridge_reduce_checks),
     current_predicate(F/Arity),
+    he_perf_counter_inc(current_predicate_bridge_reduce_hits),
     \+ (current_op(_, _, F), Arity =< 2), !,
     he_reduce_known_fun(F, Args, Out).
 he_bridge_reduce(F, Args, Out) :-

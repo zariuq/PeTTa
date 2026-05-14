@@ -1,6 +1,7 @@
 :- dynamic he_space_type/2.
 :- dynamic he_eq_fact/4.
 :- dynamic he_space_key_count/4.
+:- dynamic he_space_repr_trie_handle/2.
 :- dynamic mork_dump_cache/2.
 
 he_space_fact_key(Term, '$atom', 1) :-
@@ -41,12 +42,16 @@ he_space_candidate_pattern([Rel|_]) :-
     atom(Rel),
     Rel \== ','.
 
-he_space_fact_count_inc(Space, Key, Arity) :-
+he_space_fact_count_add(Space, Key, Arity, Delta) :-
+    Delta > 0,
     ( retract(he_space_key_count(Space, Key, Arity, Count0))
-    -> Count is Count0 + 1
-    ;  Count = 1
+    -> Count is Count0 + Delta
+    ;  Count = Delta
     ),
     assertz(he_space_key_count(Space, Key, Arity, Count)).
+
+he_space_fact_count_inc(Space, Key, Arity) :-
+    he_space_fact_count_add(Space, Key, Arity, 1).
 
 he_space_fact_count_dec(Space, Key, Arity) :-
     ( retract(he_space_key_count(Space, Key, Arity, Count0))
@@ -58,13 +63,60 @@ he_space_fact_count_dec(Space, Key, Arity) :-
     ;  true
     ).
 
+he_space_repr_trie(Space, Trie) :-
+    he_space_repr_trie_handle(Space, Trie), !.
+he_space_repr_trie(Space, Trie) :-
+    trie_new(Trie),
+    assertz(he_space_repr_trie_handle(Space, Trie)).
+
+he_space_repr_trie_inc(Space, Repr) :-
+    he_space_repr_trie(Space, Trie),
+    ( trie_lookup(Trie, Repr, Count0)
+    -> Count is Count0 + 1,
+       trie_update(Trie, Repr, Count)
+    ;  trie_insert(Trie, Repr, 1)
+    ).
+
+he_space_repr_trie_dec(Space, Repr) :-
+    he_space_repr_trie_handle(Space, Trie),
+    ( trie_lookup(Trie, Repr, Count0)
+    -> Count is Count0 - 1,
+       ( Count > 0
+       -> trie_update(Trie, Repr, Count)
+       ;  trie_delete(Trie, Repr, _)
+       )
+    ;  true
+    ).
+
 he_space_fact_added_hook(Space, Term) :-
     he_space_fact_key(Term, Key, Arity),
     he_space_fact_count_inc(Space, Key, Arity).
 
+he_space_fact_added_hook(Space, [s, Repr]) :-
+    atomic(Repr),
+    he_space_repr_trie_inc(Space, Repr).
+
+he_space_terms_share_fact_key([Term|Terms], Key, Arity) :-
+    he_space_fact_key(Term, Key, Arity),
+    forall(member(Other, Terms),
+           he_space_fact_key(Other, Key, Arity)).
+
+he_note_space_data_fact_added_batch(Space, Terms) :-
+    Terms = [_|_],
+    he_space_terms_share_fact_key(Terms, Key, Arity), !,
+    length(Terms, Delta),
+    he_space_fact_count_add(Space, Key, Arity, Delta).
+he_note_space_data_fact_added_batch(Space, Terms) :-
+    forall(member(Term, Terms),
+           he_note_space_fact_added(Space, Term)).
+
 he_space_fact_removed_hook(Space, Term) :-
     he_space_fact_key(Term, Key, Arity),
     he_space_fact_count_dec(Space, Key, Arity).
+
+he_space_fact_removed_hook(Space, [s, Repr]) :-
+    atomic(Repr),
+    he_space_repr_trie_dec(Space, Repr).
 
 he_space_fact_added_hook('&self', [=, [Fun|HeadArgs], Body]) :-
     atom(Fun), !,
@@ -230,6 +282,19 @@ he_space_may_have_match(Space, Pattern) :-
     Count > 0.
 he_space_may_have_match(_, _).
 
+he_space_exact_repr_member(Space, Repr) :-
+    he_perf_counter_inc(space_exact_repr_trie_calls),
+    he_space_repr_trie_handle(Space, Trie),
+    trie_lookup(Trie, Repr, Count),
+    Count > 0,
+    he_perf_counter_inc(space_exact_repr_trie_hits).
+
+he_space_exact_member(Space, Pattern) :-
+    Pattern = [s, Repr],
+    ground(Repr), !,
+    he_perf_counter_inc(space_exact_member_calls),
+    he_space_exact_repr_member(Space, Repr),
+    he_perf_counter_inc(space_exact_member_hits).
 he_space_exact_member(Space, Pattern) :-
     he_perf_counter_inc(space_exact_member_calls),
     ground(Pattern),
@@ -240,6 +305,20 @@ he_space_exact_member(Space, Pattern) :-
     ),
     catch(call(Term), _, fail),
     he_perf_counter_inc(space_exact_member_hits).
+
+he_space_add_unique_public(Space0, Public, Added, AddOut) :-
+    he_perf_counter_inc(space_add_unique_public_calls),
+    he_resolve_space_ref(Space0, Space),
+    repra(Public, Repr),
+    ( he_space_exact_repr_member(Space, Repr)
+    -> Added = false,
+       he_perf_counter_inc(space_add_unique_public_duplicate_skips)
+    ;  Stored = [s, Repr],
+       Added = true,
+       he_perf_counter_inc(space_add_unique_public_added),
+       he_perf_counter_inc(native_datastructure_add_unique_hits),
+       'add-atom'(Space, Stored, AddOut)
+    ).
 
 he_space_candidate_atom(Space, Pattern, Candidate) :-
     he_space_candidate_pattern(Pattern),
@@ -260,6 +339,25 @@ he_space_candidate_equation(Space, Call, StoredHead, StoredBody) :-
                             [=, Call, StoredBody],
                             [=, StoredHead, StoredBody]),
     is_list(StoredHead).
+
+he_space_pattern_open_key_count([Rel|Args], Rel, Arity) :-
+    atom(Rel),
+    maplist(var, Args),
+    length(Args, TailArity),
+    Arity is TailArity + 1.
+
+he_space_pattern_result_count(Space0, Pattern, Count) :-
+    he_perf_counter_inc(space_match_count_calls),
+    he_resolve_space_ref(Space0, Space),
+    ( he_space_pattern_open_key_count(Pattern, Key, Arity)
+    -> ( he_space_key_count(Space, Key, Arity, Count)
+       -> true
+       ;  Count = 0
+       ),
+       he_perf_counter_inc(space_match_count_key_hits)
+    ; aggregate_all(count, he_space_candidate_atom(Space, Pattern, _), Count),
+      he_perf_counter_add(space_match_count_scan_rows, Count)
+    ).
 
 he_count_atoms(Space0, Count) :-
     he_profile_enabled,

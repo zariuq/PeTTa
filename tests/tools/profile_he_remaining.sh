@@ -16,9 +16,27 @@ Usage: tests/tools/profile_he_remaining.sh [--case NAME]
 
 Profiles reduced HE repros with SWI's profiler and writes one log per case:
   tilepuzzle        tests/profile_repros/he_tilepuzzle_bfs_500_witness.metta
+  tilepuzzle_unseeded tests/profile_repros/he_tilepuzzle_unseeded_bfs_500_witness.metta
+  tilepuzzle_full   tests/profile_repros/he_tilepuzzle_full_measure.metta
+  tilepuzzle_imported tests/profile_repros/he_tilepuzzle_imported_bfs_500_witness.metta
+  tilepuzzle_imported_large tests/profile_repros/he_tilepuzzle_imported_bfs_50000_witness.metta
   peano             tests/profile_repros/he_peano_demo_50_witness.metta
-  matespacefast     tests/profile_repros/he_matespacefast_demo_6_measure.metta
+  matespacefast     tests/profile_repros/he_matespacefast_translated_demo_6_measure.metta
+  matespacefast_medium tests/profile_repros/he_matespacefast_translated_demo_10_measure.metta
+  matespacefast_large tests/profile_repros/he_matespacefast_translated_demo_16_measure.metta
   holbenchmark      tests/profile_repros/he_holbenchmark_witness.metta
+  holbenchmark_full tests/profile_repros/he_holbenchmark_full_measure.metta
+  holbenchmark_mapflat tests/profile_repros/he_holbenchmark_mapflat_range_measure.metta
+  holbenchmark_mapflat_mid tests/profile_repros/he_holbenchmark_mapflat_mid_measure.metta
+  holbenchmark_mapflat_large tests/profile_repros/he_holbenchmark_mapflat_large_measure.metta
+  holbenchmark_mapflat_full tests/profile_repros/he_holbenchmark_mapflat_full_measure.metta
+  holbenchmark_fold_nested tests/profile_repros/he_holbenchmark_fold_nested_measure.metta
+  holbenchmark_fold_nested_mid tests/profile_repros/he_holbenchmark_fold_nested_mid_measure.metta
+  holbenchmark_fold_nested_large tests/profile_repros/he_holbenchmark_fold_nested_large_measure.metta
+  holbenchmark_fold_nested_full tests/profile_repros/he_holbenchmark_fold_nested_full_measure.metta
+  holbenchmark_recursive tests/profile_repros/he_holbenchmark_recursive_call_measure.metta
+  holbenchmark_apply_many_full tests/profile_repros/he_holbenchmark_apply_many_full_measure.metta
+  holbenchmark_poly_full tests/profile_repros/he_holbenchmark_poly_full_measure.metta
   nars_tuffy        tests/profile_repros/he_nars_tuffy_smallkb_witness.metta
   pln_roman         tests/profile_repros/he_pln_roman_step10.metta
   hyperpose_primes  tests/profile_repros/he_hyperpose_primes_once_reduced.metta
@@ -57,9 +75,27 @@ done
 
 CASES='
 tilepuzzle tests/profile_repros/he_tilepuzzle_bfs_500_witness.metta
+tilepuzzle_unseeded tests/profile_repros/he_tilepuzzle_unseeded_bfs_500_witness.metta
+tilepuzzle_full tests/profile_repros/he_tilepuzzle_full_measure.metta
+tilepuzzle_imported tests/profile_repros/he_tilepuzzle_imported_bfs_500_witness.metta
+tilepuzzle_imported_large tests/profile_repros/he_tilepuzzle_imported_bfs_50000_witness.metta
 peano tests/profile_repros/he_peano_demo_50_witness.metta
-matespacefast tests/profile_repros/he_matespacefast_demo_6_measure.metta
+matespacefast tests/profile_repros/he_matespacefast_translated_demo_6_measure.metta
+matespacefast_medium tests/profile_repros/he_matespacefast_translated_demo_10_measure.metta
+matespacefast_large tests/profile_repros/he_matespacefast_translated_demo_16_measure.metta
 holbenchmark tests/profile_repros/he_holbenchmark_witness.metta
+holbenchmark_full tests/profile_repros/he_holbenchmark_full_measure.metta
+holbenchmark_mapflat tests/profile_repros/he_holbenchmark_mapflat_range_measure.metta
+holbenchmark_mapflat_mid tests/profile_repros/he_holbenchmark_mapflat_mid_measure.metta
+holbenchmark_mapflat_large tests/profile_repros/he_holbenchmark_mapflat_large_measure.metta
+holbenchmark_mapflat_full tests/profile_repros/he_holbenchmark_mapflat_full_measure.metta
+holbenchmark_fold_nested tests/profile_repros/he_holbenchmark_fold_nested_measure.metta
+holbenchmark_fold_nested_mid tests/profile_repros/he_holbenchmark_fold_nested_mid_measure.metta
+holbenchmark_fold_nested_large tests/profile_repros/he_holbenchmark_fold_nested_large_measure.metta
+holbenchmark_fold_nested_full tests/profile_repros/he_holbenchmark_fold_nested_full_measure.metta
+holbenchmark_recursive tests/profile_repros/he_holbenchmark_recursive_call_measure.metta
+holbenchmark_apply_many_full tests/profile_repros/he_holbenchmark_apply_many_full_measure.metta
+holbenchmark_poly_full tests/profile_repros/he_holbenchmark_poly_full_measure.metta
 nars_tuffy tests/profile_repros/he_nars_tuffy_smallkb_witness.metta
 pln_roman tests/profile_repros/he_pln_roman_step10.metta
 hyperpose_primes tests/profile_repros/he_hyperpose_primes_once_reduced.metta

@@ -182,7 +182,9 @@ he_term_has_state_list([_|Elems]) :-
     he_term_has_state_list(Elems).
 
 he_space_atom(Space, Atom) :-
+    he_perf_counter_inc(current_predicate_space_atom_checks),
     current_predicate(Space/Arity),
+    he_perf_counter_inc(current_predicate_space_atom_hits),
     functor(Head, Space, Arity),
     clause(Head, true),
     Head =.. [Space|Args],
@@ -192,7 +194,9 @@ he_space_atom(Space, Atom) :-
       ; Atom = [] ).
 
 he_space_atom_list_form(Space, Atom) :-
+    he_perf_counter_inc(current_predicate_space_atom_list_checks),
     current_predicate(Space/Arity),
+    he_perf_counter_inc(current_predicate_space_atom_list_hits),
     functor(Head, Space, Arity),
     clause(Head, true),
     Head =.. [Space|Atom].
