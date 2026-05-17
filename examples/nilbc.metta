@@ -2,8 +2,9 @@
 ;; [demo0.mm](https://github.com/zariuq/mmverify.py/blob/metta/examples/demo0.mm)
 ;; to MeTTa using dependent types.
 ;;
-;; Zar: Mostly written by Nil @ https://github.com/ngeiswei/chaining/blob/metamath-xt/experimental/metamath/demo0.metta
-;; I prefer expanded variable names :-p
+;; Adapted from Nil Geisweiller's demo0.metta:
+;; https://github.com/ngeiswei/chaining/blob/metamath-xt/experimental/metamath/demo0.metta
+;; Variable names are expanded for readability.
 ;;
 ;; Nil: In the hard version, the major premise of modus ponens comes
 ;; first to speed up proof search.
@@ -94,7 +95,7 @@
 
 ;; Base cases
 
-;; Claude Opus 4.1 rewrote the variable names :D
+;; Variable names normalized for readability.
 
 ;; Match the knowledge base
 (= (bc $knowledge_base $_ (: $proof $theorem)) (match $knowledge_base (: $proof $theorem) (: $proof $theorem)))

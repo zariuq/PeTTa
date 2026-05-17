@@ -1,12 +1,32 @@
 % HE-profile overrides for PeTTa's internal MeTTa -> Prolog runtime compiler.
 % This is not the canonical file-to-file PeTTa <-> HE translator; that lives
-% in /home/zar/claude/hyperon/translators/.
+% in the sibling translators/ project.
 
 :- discontiguous he_translate_special/5.
-
+:- discontiguous he_native_helper_dispatch/5.
 he_clause_constrains_args(ConstrainArgs) :-
     ConstrainArgs.
 
+he_with_clause_head_args(Args, Goal) :-
+    setup_call_cleanup(
+        ( ( nb_current(he_clause_head_args_context_stack, Prev)
+          -> true
+          ;  Prev = []
+          ),
+          b_setval(he_clause_head_args_context_stack, [Args|Prev])
+        ),
+        Goal,
+        b_setval(he_clause_head_args_context_stack, Prev)
+    ).
+
+he_clause_head_arg_var(Var) :-
+    var(Var),
+    nb_current(he_clause_head_args_context_stack, [HeadArgs|_]),
+    member(Candidate, HeadArgs),
+    Candidate == Var.
+
+he_lower_clause_body(Expr, Goals, Out) :-
+    he_clause_tuple_body(Expr, Out, Goals), !.
 he_lower_clause_body(Expr, Goals, Out) :-
     he_clause_data_skeleton(Expr, Out, Goals), !.
 
@@ -28,6 +48,33 @@ he_clause_data_arg(Expr, Out, Goals) :-
 he_clause_data_arg(Expr, Out, Goals) :-
     translate_expr(Expr, Goals, Out).
 
+he_clause_tuple_body(Expr, Out, Goals) :-
+    nonvar(Expr),
+    Expr = [Head|Tail],
+    is_list(Head),
+    Tail \= [],
+    he_clause_tuple_tail_requires_tuple(Tail), !,
+    he_clause_tuple_items(Expr, Out, Goals).
+
+he_clause_tuple_tail_requires_tuple([Item|_]) :-
+    nonvar(Item),
+    ( is_list(Item)
+    ; compound(Item)
+    ), !.
+he_clause_tuple_tail_requires_tuple([_|Rest]) :-
+    he_clause_tuple_tail_requires_tuple(Rest).
+
+he_clause_tuple_items([], [], []).
+he_clause_tuple_items([Item|Items], [OutItem|OutItems], Goals) :-
+    he_clause_tuple_item(Item, OutItem, G1),
+    he_clause_tuple_items(Items, OutItems, G2),
+    append(G1, G2, Goals).
+
+he_clause_tuple_item(Item, Out, Goals) :-
+    he_clause_data_skeleton(Item, Out, Goals), !.
+he_clause_tuple_item(Item, Out, Goals) :-
+    translate_expr(Item, Goals, Out).
+
 he_clause_noncallable_head(Head) :-
     atom(Head),
     \+ he_clause_callable_head(Head).
@@ -44,9 +91,8 @@ he_clause_callable_head(Head) :-
                'filter-atom', '|->', match, translatePredicate, call,
                reduce, eval, quote, 'catch', function, return, lambda,
                switch, metta, select, 'context-space', 'search-policy',
-               'Error', assertEqualToResult, assertAlphaEqualToResult,
-               assertPeTTaTest, unify, 'add-reduct', evalc, unquote,
-               'noreduce-eq']).
+               'Error', assertEqualToEval, assertEqualToResult, assertAlphaEqualToResult,
+               unify, 'add-reduct', evalc, unquote, 'noreduce-eq']).
 
 he_reduce_known_fun(F, Args, Out) :-
     he_profile_enabled,
@@ -134,7 +180,7 @@ he_unknown_head_dispatch(HV, AVs, Out, Inner, Goals) :-
 
 he_callable_head_dispatch(HV, AVs, Out, Inner, Goals) :-
     he_profile_enabled,
-    \+ ( atomic(HV), \+ atom(HV) ),
+    he_py_callable_head(HV),
     append(Inner, [py_call_callable(HV, AVs, Out)], Goals).
 
 he_partial_or_data(Fun, AVs, Out) :-
@@ -151,6 +197,11 @@ he_eval_data_term([F|As], Goals, Val) :-
     atom(F),
     he_symbolic_data_functor(F), !,
     eval_data_list([F|As], Goals, Val).
+he_eval_data_term([F|As], Goals, Val) :-
+    he_profile_enabled,
+    atom(F),
+    he_data_position_compat_callable(F), !,
+    translate_expr([F|As], Goals, Val).
 he_eval_data_term([F|As], Goals, Val) :-
     he_profile_enabled,
     nonvar(F),
@@ -195,6 +246,8 @@ he_callable_data_head_functor(Head) :-
     ; Head == lambda
     ; memberchk(Head, [if, let, chain, 'let*', eval, collapse])
     ).
+
+he_data_position_compat_callable('quoted-syntax').
 
 he_nonself_get_atoms_collapse_goal(he_collect_visible_results('get-atoms'(Space, Atom), Atom, Value),
                                    Space,
@@ -418,9 +471,55 @@ he_match_identity_body(Pattern, Body) :-
     compound_name_arguments(Body, Name, BArgs),
     he_match_identity_body(PArgs, BArgs).
 
+he_goal_contains_cut(!) :- !.
+he_goal_contains_cut((Left, Right)) :-
+    !,
+    ( he_goal_contains_cut(Left)
+    ; he_goal_contains_cut(Right)
+    ).
+he_goal_contains_cut((Left ; Right)) :-
+    !,
+    ( he_goal_contains_cut(Left)
+    ; he_goal_contains_cut(Right)
+    ).
+he_goal_contains_cut((Cond -> Then ; Else)) :-
+    !,
+    ( he_goal_contains_cut(Cond)
+    ; he_goal_contains_cut(Then)
+    ; he_goal_contains_cut(Else)
+    ).
+he_goal_contains_cut((Cond -> Then)) :-
+    !,
+    ( he_goal_contains_cut(Cond)
+    ; he_goal_contains_cut(Then)
+    ).
+
+he_bind_visible_inline_goal(ValConj, V, Pattern, PatConj, InConj, InValue, Out, Goal) :-
+    Goal =
+        ( State = state(no_success),
+          ( ValConj,
+            \+ he_error_atom(V),
+            \+ he_block_nonself_equation_body_binding(ValConj, V),
+            nb_setarg(1, State, success),
+            Pattern = V,
+            PatConj,
+            InConj,
+            Out = InValue
+          ; arg(1, State, no_success),
+            ValConj,
+            he_error_atom(V),
+            Out = V
+          )
+        ).
+
 he_bind_visible_or_cut_goals(GsH, !, V, Pattern, PatConj, InConj, InValue, Out, Goals) :-
     !,
     append([GsH, [!, Pattern = V, PatConj, InConj, Out = InValue]], Goals).
+he_bind_visible_or_cut_goals(GsH, ValConj, V, Pattern, PatConj, InConj, InValue, Out, Goals) :-
+    he_goal_contains_cut(InConj),
+    !,
+    he_bind_visible_inline_goal(ValConj, V, Pattern, PatConj, InConj, InValue, Out, Goal),
+    append(GsH, [Goal], Goals).
 he_bind_visible_or_cut_goals(GsH, ValConj, V, Pattern, PatConj, InConj, InValue, Out, Goals) :-
     append([GsH, [he_bind_visible_results(ValConj, V, Pattern, PatConj, InConj, InValue, Out)]], Goals).
 
@@ -444,13 +543,28 @@ he_constrain_args([F, A, B], Out, Goals) :-
 he_constrain_args([F|Args], Var, Goals) :-
     atom(F),
     ( fun(F)
+    ; he_head_may_denote_callable(F)
     ; memberchk(F, [if, let, chain, 'let*', eval, collapse])
     ), !,
     translate_expr([F|Args], GoalsExpr, Var),
     flatten(GoalsExpr, Goals).
+he_constrain_args([F|Args], Var, Goals) :-
+    atom(F),
+    \+ he_constructor_symbol(F), !,
+    maplist(he_constrain_args, Args, ConstrainedArgs, NestedGoalsList),
+    flatten(NestedGoalsList, NestedGoals),
+    append(NestedGoals,
+           [he_runtime_pattern_call_or_unify(F, ConstrainedArgs, Var)],
+           Goals).
 he_constrain_args(In, Out, Goals) :-
     maplist(he_constrain_args, In, Out, NestedGoalsList),
     flatten(NestedGoalsList, Goals), !.
+
+he_runtime_pattern_call_or_unify(F, Args, Var) :-
+    ( he_head_may_denote_callable(F)
+    -> he_eval_or_reduce([F|Args], Var)
+    ;  he_unify_clause_pattern([F|Args], Var)
+    ).
 
 he_unique_space_fold_producer_call(ProducerCall) :-
     nonvar(ProducerCall),
@@ -510,6 +624,128 @@ he_count_eval_call_fun(Fun) :-
     BodyExpr = [let, Pat, [eval, ArgExpr], ['size-atom', Pat]],
     ArgExpr == Arg.
 
+% Narrow backend-contract detectors used by he_translate_special/5.
+% Each detector recognizes one semantically defended lowering shape and leaves
+% everything else on the ordinary translation/fallback path.
+
+he_detect_bound_consumer_contract(let, [Pat, BoundExpr, ConsumerExpr],
+                                  Pat, BoundExpr, ConsumerExpr) :-
+    var(Pat).
+he_detect_bound_consumer_contract(chain, [BoundExpr, Pat, ConsumerExpr],
+                                  Pat, BoundExpr, ConsumerExpr) :-
+    var(Pat).
+
+he_detect_count_eval_contract(HV, T, Expr) :-
+    T = [Expr],
+    he_count_eval_call_fun(HV),
+    he_count_eval_expr_fastable(Expr).
+he_detect_count_eval_contract(HV, T, Expr) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, Expr, ConsumerExpr),
+    nonvar(ConsumerExpr),
+    ConsumerExpr = [Fun, BoundExpr],
+    BoundExpr == Pat,
+    he_count_eval_call_fun(Fun),
+    he_count_eval_expr_fastable(Expr).
+
+he_detect_bound_count_visible_contract(HV, T, Expr) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, CollapseExpr, ConsumerExpr),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    nonvar(ConsumerExpr),
+    ConsumerExpr = ['size-atom', SizeArg],
+    SizeArg == Pat.
+
+he_detect_bound_eval_size_contract(HV, T, Expr) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, EvalExpr, ConsumerExpr),
+    nonvar(EvalExpr),
+    EvalExpr = [eval, Expr],
+    nonvar(ConsumerExpr),
+    ConsumerExpr = ['size-atom', SizeArg],
+    SizeArg == Pat.
+
+he_detect_bound_unique_space_fold_contract(HV, T, Expr, SpaceExpr, ProducerCall,
+                                           Func, InitExpr) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, CollapseExpr, ConsumerExpr),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    he_unique_space_fold_expr(Expr, SpaceExpr, ProducerCall),
+    nonvar(ConsumerExpr),
+    ConsumerExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat.
+
+he_detect_bound_visible_fold_contract(HV, T, Expr, Func, InitExpr) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, CollapseExpr, ConsumerExpr),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    nonvar(ConsumerExpr),
+    ConsumerExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat.
+
+he_detect_bound_unique_space_fold_rest_contract(HV, T, Expr, SpaceExpr,
+                                                ProducerCall, Func, InitExpr,
+                                                FoldPat, Rest) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, CollapseExpr, ConsumerExpr),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    he_unique_space_fold_expr(Expr, SpaceExpr, ProducerCall),
+    nonvar(ConsumerExpr),
+    ConsumerExpr = [let, FoldPat, FoldExpr, Rest],
+    var(FoldPat),
+    nonvar(FoldExpr),
+    FoldExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat.
+
+he_detect_bound_visible_fold_rest_contract(HV, T, Expr, Func, InitExpr,
+                                           FoldPat, Rest) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, CollapseExpr, ConsumerExpr),
+    nonvar(CollapseExpr),
+    CollapseExpr = [collapse, Expr],
+    nonvar(ConsumerExpr),
+    ConsumerExpr = [let, FoldPat, FoldExpr, Rest],
+    var(FoldPat),
+    nonvar(FoldExpr),
+    FoldExpr = [foldl, Func, FoldArg, InitExpr],
+    FoldArg == Pat.
+
+he_detect_effect_only_unused_binding_contract(HV, T, Val, In) :-
+    he_detect_bound_consumer_contract(HV, T, Pat, Val, In),
+    he_var_unused_in_expr(Pat, In),
+    he_effect_only_safe_root_expr(Val).
+
+he_detect_clause_head_eval_binding_contract(let, [Pat, Val, In], Pat, Val, In) :-
+    he_clause_head_arg_var(Val).
+he_detect_clause_head_eval_binding_contract(chain, [Val, Pat, In], Pat, Val, In) :-
+    he_clause_head_arg_var(Val).
+
+he_translate_count_visible_contract(Expr, GsH, Out, Goals) :-
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    append(GsH, [he_count_visible_results(ExprConj, ExprVal, Out)], Goals).
+
+he_translate_count_eval_contract(Expr, GsH, Out, Goals) :-
+    append(GsH, [he_count_eval_expr(Expr, Out)], Goals).
+
+he_translate_visible_fold_contract(Expr, Func, InitExpr, GsH, Out, Goals) :-
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals, [he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, Out)], Goals).
+
+he_translate_visible_fold_rest_contract(Expr, Func, InitExpr, FoldPat, Rest,
+                                        GsH, Out, Goals) :-
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr_to_conj(InitExpr, InitConj, InitValue),
+    translate_expr_to_conj(Rest, RestConj, RestValue),
+    exclude(==(true), [InitConj], VisibleConjs),
+    append(GsH, VisibleConjs, MidGoals),
+    append(MidGoals,
+           [ he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, FoldValue),
+             FoldPat = FoldValue,
+             RestConj,
+             Out = RestValue
+           ],
+           Goals).
+
 he_translate_special(HV, T, GsH, Out, Goals) :-
     he_profile_enabled,
     atom(HV),
@@ -520,30 +756,8 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     Out = ['Error', [HV|T], 'IncorrectNumberOfArguments'],
     Goals = GsH.
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    T = [Expr],
-    he_count_eval_call_fun(HV),
-    he_count_eval_expr_fastable(Expr), !,
-    append(GsH, [he_count_eval_expr(Expr, Out)], Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, Expr, In],
-    var(Pat),
-    nonvar(In),
-    In = [Fun, BoundExpr],
-    BoundExpr == Pat,
-    he_count_eval_call_fun(Fun),
-    he_count_eval_expr_fastable(Expr), !,
-    append(GsH, [he_count_eval_expr(Expr, Out)], Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [Expr, Pat, In],
-    var(Pat),
-    nonvar(In),
-    In = [Fun, BoundExpr],
-    BoundExpr == Pat,
-    he_count_eval_call_fun(Fun),
-    he_count_eval_expr_fastable(Expr), !,
-    append(GsH, [he_count_eval_expr(Expr, Out)], Goals).
+    he_detect_count_eval_contract(HV, T, Expr), !,
+    he_translate_count_eval_contract(Expr, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == 'collapse-bind',
     T = [E],
@@ -599,187 +813,46 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     ( A == B -> Out = true ; Out = false ),
     Goals = GsH.
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, CollapseExpr, SizeExpr],
-    var(Pat),
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    nonvar(SizeExpr),
-    SizeExpr = ['size-atom', SizeArg],
-    SizeArg == Pat, !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    append(GsH, [he_count_visible_results(ExprConj, ExprVal, Out)], Goals).
+    he_detect_bound_count_visible_contract(HV, T, Expr), !,
+    he_translate_count_visible_contract(Expr, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, EvalExpr, SizeExpr],
-    var(Pat),
-    nonvar(EvalExpr),
-    EvalExpr = [eval, Expr],
-    nonvar(SizeExpr),
-    SizeExpr = ['size-atom', SizeArg],
-    SizeArg == Pat, !,
-    append(GsH, [he_count_eval_expr(Expr, Out)], Goals).
+    he_detect_bound_eval_size_contract(HV, T, Expr), !,
+    he_translate_count_eval_contract(Expr, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, CollapseExpr, FoldExpr],
-    var(Pat),
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    he_unique_space_fold_expr(Expr, SpaceExpr, ProducerCall),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
+    he_detect_bound_unique_space_fold_contract(HV, T, _Expr, SpaceExpr, ProducerCall,
+                                               Func, InitExpr), !,
     he_translate_unique_space_fold(SpaceExpr, ProducerCall, Func, InitExpr, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, CollapseExpr, FoldExpr],
-    var(Pat),
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    translate_expr_to_conj(InitExpr, InitConj, InitValue),
-    exclude(==(true), [InitConj], VisibleConjs),
-    append(GsH, VisibleConjs, MidGoals),
-    append(MidGoals, [he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, Out)], Goals).
+    he_detect_bound_visible_fold_contract(HV, T, Expr, Func, InitExpr), !,
+    he_translate_visible_fold_contract(Expr, Func, InitExpr, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, CollapseExpr, In],
-    var(Pat),
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    he_unique_space_fold_expr(Expr, SpaceExpr, ProducerCall),
-    nonvar(In),
-    In = [let, FoldPat, FoldExpr, Rest],
-    var(FoldPat),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
+    he_detect_bound_unique_space_fold_rest_contract(HV, T, _Expr, SpaceExpr,
+                                                    ProducerCall, Func, InitExpr,
+                                                    FoldPat, Rest), !,
     he_translate_unique_space_fold_rest(SpaceExpr, ProducerCall, Func, InitExpr, FoldPat, Rest, GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, CollapseExpr, In],
-    var(Pat),
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    nonvar(In),
-    In = [let, FoldPat, FoldExpr, Rest],
-    var(FoldPat),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    translate_expr_to_conj(InitExpr, InitConj, InitValue),
-    translate_expr_to_conj(Rest, RestConj, RestValue),
-    exclude(==(true), [InitConj], VisibleConjs),
-    append(GsH, VisibleConjs, MidGoals),
-    append(MidGoals,
-           [ he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, FoldValue),
-             FoldPat = FoldValue,
-             RestConj,
-             Out = RestValue
-           ],
-           Goals).
+    he_detect_bound_visible_fold_rest_contract(HV, T, Expr, Func, InitExpr,
+                                               FoldPat, Rest), !,
+    he_translate_visible_fold_rest_contract(Expr, Func, InitExpr, FoldPat, Rest,
+                                            GsH, Out, Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [CollapseExpr, Pat, SizeExpr],
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    var(Pat),
-    nonvar(SizeExpr),
-    SizeExpr = ['size-atom', SizeArg],
-    SizeArg == Pat, !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    append(GsH, [he_count_visible_results(ExprConj, ExprVal, Out)], Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [EvalExpr, Pat, SizeExpr],
-    nonvar(EvalExpr),
-    EvalExpr = [eval, Expr],
-    var(Pat),
-    nonvar(SizeExpr),
-    SizeExpr = ['size-atom', SizeArg],
-    SizeArg == Pat, !,
-    append(GsH, [he_count_eval_expr(Expr, Out)], Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [CollapseExpr, Pat, FoldExpr],
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    he_unique_space_fold_expr(Expr, SpaceExpr, ProducerCall),
-    var(Pat),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
-    he_translate_unique_space_fold(SpaceExpr, ProducerCall, Func, InitExpr, GsH, Out, Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [CollapseExpr, Pat, FoldExpr],
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    var(Pat),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    translate_expr_to_conj(InitExpr, InitConj, InitValue),
-    exclude(==(true), [InitConj], VisibleConjs),
-    append(GsH, VisibleConjs, MidGoals),
-    append(MidGoals, [he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, Out)], Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [CollapseExpr, Pat, In],
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    he_unique_space_fold_expr(Expr, SpaceExpr, ProducerCall),
-    var(Pat),
-    nonvar(In),
-    In = [let, FoldPat, FoldExpr, Rest],
-    var(FoldPat),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
-    he_translate_unique_space_fold_rest(SpaceExpr, ProducerCall, Func, InitExpr, FoldPat, Rest, GsH, Out, Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [CollapseExpr, Pat, In],
-    nonvar(CollapseExpr),
-    CollapseExpr = [collapse, Expr],
-    var(Pat),
-    nonvar(In),
-    In = [let, FoldPat, FoldExpr, Rest],
-    var(FoldPat),
-    nonvar(FoldExpr),
-    FoldExpr = [foldl, Func, FoldArg, InitExpr],
-    FoldArg == Pat, !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    translate_expr_to_conj(InitExpr, InitConj, InitValue),
-    translate_expr_to_conj(Rest, RestConj, RestValue),
-    exclude(==(true), [InitConj], VisibleConjs),
-    append(GsH, VisibleConjs, MidGoals),
-    append(MidGoals,
-           [ he_fold_visible_results(ExprConj, ExprVal, Func, InitValue, FoldValue),
-             FoldPat = FoldValue,
-             RestConj,
-             Out = RestValue
-           ],
-           Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == let,
-    T = [Pat, Val, In],
-    he_var_unused_in_expr(Pat, In),
-    he_effect_only_safe_root_expr(Val), !,
+    he_detect_effect_only_unused_binding_contract(HV, T, Val, In), !,
     translate_expr_to_conj(In, InConj, InValue),
     append(GsH, [he_effect_only_expr(Val), InConj, (Out = InValue)], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == chain,
-    T = [Val, Pat, In],
-    he_var_unused_in_expr(Pat, In),
-    he_effect_only_safe_root_expr(Val), !,
+    he_detect_clause_head_eval_binding_contract(HV, T, Pat, Val, In), !,
+    he_constrain_args(Pat, Pv, Gp),
     translate_expr_to_conj(In, InConj, InValue),
-    append(GsH, [he_effect_only_expr(Val), InConj, (Out = InValue)], Goals).
+    goals_list_to_conj(Gp, PatConj),
+    he_bind_visible_or_cut_goals(GsH,
+                                 he_eval_runtime_arg(Val, V),
+                                 V,
+                                 Pv,
+                                 PatConj,
+                                 InConj,
+                                 InValue,
+                                 Out,
+                                 Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == let,
     T = [Pat, Val, In], !,
@@ -804,6 +877,15 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     Goal = ( he_collect_assert_result_sets(ExprConj, ExprVal, ExpConj, ExpVal, Actuals, Expecteds),
              he_assert_set_results([assertEqual, Expr, Expected], Actuals, Expecteds, Out) ),
     append(GsH, [Goal], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == assertEqualToEval,
+    T = [Expr, Expected], !,
+    translate_expr_to_conj(Expr, ExprConj, ExprVal),
+    translate_expr(Expected, GsE, ExpVal),
+    ActualGoal = he_collect_assert_eval_actual(ExprVal, ExprConj, ExpVal, Actual),
+    AssertGoal = he_assert_equal_to_eval([assertEqualToEval, Expr, Expected],
+                                         Actual, ExpVal, Out),
+    append([GsH, GsE, [ActualGoal, AssertGoal]], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == assertEqualToResult,
     T = [Expr, ExpectedTuple], !,
@@ -855,16 +937,6 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     Goal = ( he_collect_assert_result_tuple(ExprConj, ExprVal, ExpectedTuple, Actuals, Expecteds),
              he_assert_same_results_or_error([assertAlphaEqualToResultMsg, Expr, ExpectedTuple], Actuals, Expecteds, Msg, Out) ),
     append(GsH, [Goal], Goals).
-he_translate_special(HV, T, GsH, Out, Goals) :-
-    HV == assertPeTTaTest,
-    T = [Expr, Expected], !,
-    translate_expr_to_conj(Expr, ExprConj, ExprVal),
-    translate_expr(Expected, ExpGoals, ExpVal),
-    ActualGoal = he_collect_petta_test_actual(ExprVal, ExprConj, ExpVal, Actual),
-    AssertGoal = he_assert_petta_test([assertPeTTaTest, Expr, Expected],
-                                      Actual, ExpVal, Out),
-    append([GsH, ExpGoals, [ActualGoal, AssertGoal]], Goals).
-
 he_translate_match_once_truth_empty(SpaceExpr, Pattern, Body, GsH, Out, Goals) :-
     ( Body == true ; Body == 'True' ),
     translate_expr(SpaceExpr, GsS, S),
@@ -913,6 +985,29 @@ he_translate_special(HV, T, GsH, Out, Goals) :-
     T = [_Policy, X], !,
     translate_expr_to_conj(X, Conj, Val),
     append(GsH, [once((Conj, Out = Val))], Goals).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == and,
+    T = [LeftRaw, RightRaw], !,
+    ( he_bool_constraint_preferred(RightRaw),
+      \+ he_bool_constraint_preferred(LeftRaw)
+    -> he_translate_bool_arg(RightRaw, GsRight, Right),
+       he_translate_bool_arg(LeftRaw, GsLeft, Left),
+       append([GsH, GsRight, GsLeft,
+               [he_call_typed(and, [Left, Right], [[->, 'Bool', 'Bool', 'Bool']], Out)]],
+              Goals)
+    ;  he_translate_bool_arg(LeftRaw, GsLeft, Left),
+       he_translate_bool_arg(RightRaw, GsRight, Right),
+       append([GsH, GsLeft, GsRight,
+               [he_call_typed(and, [Left, Right], [[->, 'Bool', 'Bool', 'Bool']], Out)]],
+              Goals)
+    ).
+he_translate_special(HV, T, GsH, Out, Goals) :-
+    HV == maplist,
+    T = [FuncExpr, ListExpr], !,
+    translate_expr(FuncExpr, GsF, Func),
+    translate_expr_to_conj(ListExpr, ListConj, ListValue),
+    exclude(==(true), [ListConj], VisibleConjs),
+    append([GsH, GsF, VisibleConjs, [he_maplist_reduce(ListValue, Func, Out)]], Goals).
 he_translate_special(HV, T, GsH, Out, Goals) :-
     HV == foldl,
     T = [Func, ListExpr, InitExpr],
@@ -1038,11 +1133,25 @@ he_native_helper_dispatch(HV, RawArgs, GsH, Out, Goals) :-
     RawArgs = [ExprRaw, Then], !,
     translate_expr(ExprRaw, GsExpr, Expr),
     append([GsH, GsExpr, [he_native_return_on_error(Expr, Then, Out)]], Goals).
+he_native_helper_args(HV, RawArgs, GsArgs, AVs) :-
+    he_profile_enabled,
+    atom(HV),
+    he_function_typechains(HV, TypeChains),
+    include(he_arrow_typechain, TypeChains, ArrowTypeChains),
+    ArrowTypeChains \= [],
+    include(he_typechain_arity_matches(RawArgs), ArrowTypeChains, MatchingArity),
+    MatchingArity = [TypeChain|_],
+    TypeChain = [->|TypeItems],
+    append(ArgTypes, [_], TypeItems),
+    translate_he_args_by_type(RawArgs, ArgTypes, GsArgs, AVs), !.
+he_native_helper_args(_HV, RawArgs, GsArgs, AVs) :-
+    translate_args(RawArgs, GsArgs, AVs).
+
 he_native_helper_dispatch(HV, RawArgs, GsH, Out, Goals) :-
     he_profile_enabled,
     atom(HV),
     he_native_helper(HV, Native),
-    translate_args(RawArgs, GsArgs, AVs),
+    he_native_helper_args(HV, RawArgs, GsArgs, AVs),
     append(AVs, [Out], CallArgs),
     Goal =.. [Native|CallArgs],
     append([GsH, GsArgs, [Goal]], Goals).
@@ -1055,8 +1164,26 @@ he_typed_dispatch(HV, RawArgs, GsH, Out, Goals) :-
     append(GsH, GsData, Goals).
 he_typed_dispatch(HV, RawArgs, GsH, Out, Goals) :-
     he_profile_enabled,
+    HV == '==',
+    RawArgs = [LeftRaw, ExpectedRaw],
+    nonvar(LeftRaw),
+    LeftRaw = ['size-atom', ExprRaw],
+    nonvar(ExpectedRaw),
+    number(ExpectedRaw), !,
+    append(GsH, [he_size_atom_eq_raw(ExprRaw, ExpectedRaw, Out)], Goals).
+he_typed_dispatch(HV, RawArgs, GsH, Out, Goals) :-
+    he_profile_enabled,
+    HV == '==',
+    RawArgs = [ExpectedRaw, RightRaw],
+    nonvar(RightRaw),
+    RightRaw = ['size-atom', ExprRaw],
+    nonvar(ExpectedRaw),
+    number(ExpectedRaw), !,
+    append(GsH, [he_size_atom_eq_raw(ExprRaw, ExpectedRaw, Out)], Goals).
+he_typed_dispatch(HV, RawArgs, GsH, Out, Goals) :-
+    he_profile_enabled,
     atom(HV),
-    memberchk(HV, ['==', '!=']),
+    memberchk(HV, ['==', '!=', '=alpha']),
     RawArgs = [LeftRaw, RightRaw], !,
     translate_he_eq_arg(LeftRaw, GsLeft, Left),
     translate_he_eq_arg(RightRaw, GsRight, Right),
@@ -1090,7 +1217,31 @@ he_typed_partial_allowed('-', direct).
 he_typed_partial_allowed('*', direct).
 he_typed_partial_allowed('/', direct).
 he_typed_partial_allowed('%', direct).
+he_typed_partial_allowed('==', direct).
+he_typed_partial_allowed('!=', direct).
+he_typed_partial_allowed('=alpha', direct).
 he_typed_partial_allowed(cons, direct).
+
+he_bool_constraint_preferred([==, ['size-atom', _], N]) :-
+    nonvar(N),
+    number(N), !.
+he_bool_constraint_preferred([==, N, ['size-atom', _]]) :-
+    nonvar(N),
+    number(N), !.
+
+he_translate_bool_arg(Expr, Goals, Out) :-
+    he_bool_streamable_call(Expr, Goals, Out), !.
+he_translate_bool_arg(Expr, Goals, Out) :-
+    translate_expr(Expr, Goals, Out).
+
+he_bool_streamable_call(Expr, Goals, Out) :-
+    nonvar(Expr),
+    Expr = [Fun|RawArgs],
+    atom(Fun),
+    translate_args_for_head(Fun, RawArgs, GsArgs, Args),
+    Call = [Fun|Args],
+    he_build_user_call_stream_goal(Call, Out, Goal), !,
+    append(GsArgs, [Goal], Goals).
 
 he_typed_partial_candidate(Fun, PartialMode, Args, TypeChains) :-
     he_typed_partial_allowed(Fun, PartialMode),

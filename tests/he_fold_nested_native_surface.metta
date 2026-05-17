@@ -10,6 +10,6 @@
    (if (== $n 0) ()
        (cons (range 50) (deep-nest (- $n 1)))))
 
-!(assertPeTTaTest (fold-nested + 0 (1 (2 3))) 6)
-!(assertPeTTaTest (fold-nested + 0 (deep-nest 3)) 3825)
+!(assertEqualToEval (fold-nested + 0 (1 (2 3))) 6)
+!(assertEqualToEval (fold-nested + 0 (deep-nest 3)) 3825)
 !(assertEqual (fold-nested + 0 foo) (fold-nested + 0 foo))

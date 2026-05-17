@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (14 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_quoting.metta
+; Source: examples/he_quoting.metta
 
 !(import! &self ../../lib/lib_he.metta)
 !(test (quote (+ 1 2)) (quote (+ 1 2)))

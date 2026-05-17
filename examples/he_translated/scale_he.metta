@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (9 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/scale.metta
+; Source: examples/scale.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -12,4 +12,4 @@
 (= (q-both $a $b) (collapse (match &self (r $a $b) (r $a $b))))
 (= (q-rel $r) (collapse (match &self ($r 643 3) ($r 643 3))))
 (= (indexing-demo $K) (let* (($temp (addK $K)) ($all (q-all)) ($first (q-first 7)) ($second (q-second 3)) ($rel (q-rel r)) ($both (q-both 42 2))) (all: (length $all) first: (length $first) second: (length $second) rel: (length $rel) both: (length $both))))
-!(assertPeTTaTest (indexing-demo 1000000) (all: 1000000 first: 1 second: 100000 rel: 1 both: 1))
+!(assertEqualToEval (indexing-demo 1000000) (all: 1000000 first: 1 second: 100000 rel: 1 both: 1))

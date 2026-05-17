@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (10 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/logicprog.metta
+; Source: examples/logicprog.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -12,4 +12,4 @@
 (= (successor g f) True)
 (= (later-in-alphabet $X $Y) (successor $X $Y))
 (= (later-in-alphabet $X $Y) (and (successor $X $Z) (later-in-alphabet $Z $Y)))
-!(assertPeTTaTest (collapse ((later-in-alphabet d $1) $1)) ((True c) (True b) (True a)))
+!(assertEqualToEval (collapse ((later-in-alphabet d $1) $1)) ((True c) (True b) (True a)))

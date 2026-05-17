@@ -1,6 +1,6 @@
 % Internal MeTTa -> Prolog runtime compiler used by PeTTa at load/eval time.
 % This is not the canonical file-to-file PeTTa <-> HE translator; that lives
-% in /home/zar/claude/hyperon/translators/.
+% in the sibling translators/ project.
 
 %Pattern matching, structural and functional/relational constraints on arguments:
 constrain_args(X, X, []) :- (var(X); atomic(X)), !.
@@ -55,6 +55,14 @@ he_clause_pattern_equiv(Expected, Actual) :-
 
 %Flatten (= Head Body) MeTTa function into Prolog Clause:
 translate_clause(Input, Clause) :- translate_clause(Input, Clause, true).
+:- multifile he_bridge_with_clause_head_args/2.
+
+he_bridge_with_clause_head_args(_Args, Goal) :-
+    \+ ( current_predicate(he_profile_enabled/0),
+         he_profile_enabled
+       ),
+    call(Goal).
+
 translate_clause(Input, Clause, ConstrainArgs) :-
                                                Input = [=, [F|_], _],
                                                atom(F),
@@ -69,9 +77,12 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs, HeadFunctor) :-
                                                   GoalsPrefix = [] ),
                                                catch(nb_getval(F, Prev), _, Prev = []),
                                                nb_setval(F, [fun_meta(Args1, BodyExpr) | Prev]),
-                                               ( he_bridge_lower_clause_body(BodyExpr, GoalsBody, ExpOut)
-                                               -> true
-                                               ;  translate_expr(BodyExpr, GoalsBody, ExpOut) ),
+                                               LowerGoal =
+                                                   ( he_bridge_lower_clause_body(BodyExpr, GoalsBody, ExpOut)
+                                                   -> true
+                                                   ;  translate_expr(BodyExpr, GoalsBody, ExpOut)
+                                                   ),
+                                               he_bridge_with_clause_head_args(Args1, LowerGoal),
                                                (  nonvar(ExpOut) , ExpOut = partial(Base,Bound)
                                                -> current_predicate(Base/Arity), length(Bound, N), M is (Arity - N) - 1,
                                                   length(ExtraArgs, M), append([Bound,ExtraArgs,[Out]],CallArgs), Goal =.. [Base|CallArgs],
@@ -136,6 +147,8 @@ rewrite_streamops(['trace!', Arg1, Arg2],
     he_profile_enabled, !.
 rewrite_streamops(['trace!', Arg1, Arg2],
                   [progn, ['println!', Arg1], Arg2]).
+rewrite_streamops([unique, Arg], [unique, Arg]) :-
+    he_profile_enabled, !.
 rewrite_streamops([unique, Arg],
                   [call, [superpose, ['unique-atom', [collapse, Arg]]]]).
 rewrite_streamops([union, [superpose|A], [superpose|B]],
@@ -153,12 +166,27 @@ rewrite_streamops(X, X).
 safe_rewrite_streamops(In, Out) :- ( compound(In), In = [Op|_], atom(Op) -> rewrite_streamops(In, Out)
                                                                           ; Out = In).
 
+he_strip_translator_rule_quote([quote, Expr], Expr) :- !.
+he_strip_translator_rule_quote(Expr, Expr).
+
 %Turn MeTTa code S-expression into goals list:
 translate_expr(X, [], Value) :-
         he_profile_enabled,
         atom(X),
         he_ground_numeric_constant(X, Value), !.
 translate_expr(X, [], X)          :- ((var(X) ; atomic(X)) ; X = partial(_,_)), !.
+translate_expr([H0|T0], Goals, Out) :-
+        he_profile_enabled,
+        is_list(H0),
+        T0 \= [],
+        he_clause_tuple_tail_requires_tuple(T0),
+        he_tuple_data_head_expr(H0), !,
+        he_clause_tuple_items([H0|T0], Out, Goals).
+translate_expr([H0|T0], [he_eval_ambiguous_list_head_expr(H0, T0, Out)], Out) :-
+        he_profile_enabled,
+        is_list(H0),
+        T0 \= [],
+        he_clause_tuple_tail_requires_tuple(T0), !.
 translate_expr([H0|T0], Goals, Out) :-
         safe_rewrite_streamops([H0|T0],[H|T]),
         ( he_profile_enabled,
@@ -181,7 +209,8 @@ translate_expr([H0|T0], Goals, Out) :-
                                              he_clause_functor(HV, HookFunctor),
                                              HookCall =.. [HookFunctor|Args],
                                              call(HookCall),
-                                             translate_expr(Gs, GsE, Out),
+                                             he_strip_translator_rule_quote(Gs, EvalGs),
+                                             translate_expr(EvalGs, GsE, Out),
                                              append([GsH,GsT,GsE],Goals)
         %--- Non-determinism ---:
         ; HV == superpose, T = [Args], is_list(Args), he_profile_enabled
@@ -190,6 +219,9 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == superpose, T = [Args], is_list(Args) -> build_superpose_branches(Args, Out, Branches),
                                                         disj_list(Branches, Disj),
                                                         append(GsH, [Disj], Goals)
+        ; HV == unique, T = [Arg], he_profile_enabled
+          -> translate_expr_to_conj(Arg, Conj, Value),
+             append(GsH, [he_unique_visible_result(Conj, Value, Out)], Goals)
         ; HV == length, T = [Arg], he_profile_enabled,
           nonvar(Arg),
           Arg = [collapse, E]
@@ -291,7 +323,7 @@ translate_expr([H0|T0], Goals, Out) :-
                                                      ; translate_expr(KeyExpr, Gk, Kv),
                                                        translate_case(PairsExpr, Kv, Out, IfGoal, KeyGoal),
                                                        append([GsH, Gk, KeyGoal, [IfGoal]], Goals) )
-        ; (HV == let ; HV == chain), T = [Pat, Val, In] -> translate_expr(Pat, Gp, Pv),
+        ; (HV == let ; HV == chain), T = [Pat, Val, In] -> translate_pattern_expr(Pat, Gp, Pv),
                                                            translate_expr(Val, Gv, V),
                                                            translate_expr(In,  Gi, Out),
                                                            append([GsH,[(Pv=V)],Gp,Gv,Gi], Goals)
@@ -417,10 +449,6 @@ translate_expr([H0|T0], Goals, Out) :-
                                    he_bridge_eval_goal(Arg, Out, Goal),
                                    append(Inner, [Goal], Goals)
         %Force arg to remain data/list:
-        ; HV == quote, T = [Expr], he_profile_enabled
-          -> append(GsH, [], Inner),
-             Out = [quote, Expr],
-             Goals = Inner
         ; HV == quote, T = [Expr] -> append(GsH, [], Inner),
                                      Out = Expr,
                                      Goals = Inner
@@ -445,6 +473,12 @@ translate_expr([H0|T0], Goals, Out) :-
           he_symbolic_data_functor(HV)
           -> eval_data_list([HV|T], Gd, Out),
              append(GsH, Gd, Goals)
+        ; he_profile_enabled,
+          atom(HV),
+          fun(HV)
+          -> translate_args_for_head(HV, T, GsT, AVs),
+             append(GsH, GsT, Inner),
+             he_known_fun_dispatch(HV, AVs, Out, Inner, T, GsH, false, [], Goals)
         %--- Automatic 'smart' dispatch, translator deciding when to create a predicate call, data list, or dynamic dispatch: ---
         ; translate_args_for_head(HV, T, GsT, AVs),
           %HE list-headed data tuple: preserve the head expression structurally,
@@ -532,6 +566,21 @@ eval_data_list([E|Es], Goals, [V|Vs]) :- ( is_list(E) -> eval_data_term(E, G1, V
                                          eval_data_list(Es, G2, Vs),
                                          append(G1, G2, Goals).
 
+translate_pattern_expr([quote, Expr], [], [quote, PatternExpr]) :-
+    he_profile_enabled, !,
+    translate_pattern_data(Expr, PatternExpr).
+translate_pattern_expr(Expr, Goals, Out) :-
+    translate_expr(Expr, Goals, Out).
+
+translate_pattern_data(Term, Pattern) :-
+    ( var(Term)
+    ; atomic(Term)
+    ), !,
+    Pattern = Term.
+translate_pattern_data([Head|Args], [PatternHead|PatternArgs]) :-
+    translate_pattern_data(Head, PatternHead),
+    maplist(translate_pattern_data, Args, PatternArgs).
+
 
 %Convert let* to recusrive let:
 letstar_to_rec_let([[Pat,Val]],Body,[let,Pat,Val,Body]).
@@ -588,7 +637,8 @@ he_fun_arg_prefers_raw(_Fun, _Index, Arg) :-
     is_list(Arg),
     Arg = [Head|_],
     atom(Head),
-    he_constructor_symbol(Head), !.
+    he_constructor_symbol(Head),
+    \+ he_head_may_denote_callable(Head), !.
 he_fun_arg_prefers_raw(Fun, Index, Arg) :-
     catch(nb_getval(Fun, Metas), _, fail),
     member(fun_meta(PatternArgs, _), Metas),
@@ -616,6 +666,12 @@ he_fun_arg_is_data_surface(Arg) :-
       \+ fun(Head),
       \+ he_head_may_denote_callable(Head)
     ).
+
+he_tuple_data_head_expr(Expr) :-
+    he_clause_data_skeleton(Expr, _, _), !.
+he_tuple_data_head_expr(Expr) :-
+    is_list(Expr),
+    \+ he_callable_data_head(Expr), !.
 
 he_zero_arg_user_callable_atom(Head) :-
     atom(Head),

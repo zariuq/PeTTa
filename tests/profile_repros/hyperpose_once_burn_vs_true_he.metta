@@ -9,7 +9,7 @@
        False
        (burn (- $n 1))))
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (once (superpose ((burn 2000000)
                     True)))
   False)

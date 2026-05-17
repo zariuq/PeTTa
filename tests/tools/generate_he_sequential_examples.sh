@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
-TRANSLATE_SH=${TRANSLATE_SH:-/home/zar/claude/hyperon/translators/translate.sh}
+TRANSLATE_SH=${TRANSLATE_SH:-"$ROOT/../translators/translate.sh"}
 LABEL_HE_EXAMPLES_SH=${LABEL_HE_EXAMPLES_SH:-"$ROOT/tests/tools/label_petta_he_examples.sh"}
 GENERATED_DIR=${GENERATED_DIR:-"$ROOT/examples/he_translated"}
 SOURCE_DIR=${SOURCE_DIR:-"$ROOT/examples"}

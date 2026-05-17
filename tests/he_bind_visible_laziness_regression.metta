@@ -11,5 +11,5 @@
      (let $x (superpose (1 2))
        (record-picked $x))))
 
-!(assertPeTTaTest (lazy-bind-pick) ok)
+!(assertEqualToEval (lazy-bind-pick) ok)
 !(assertEqualToResult (collapse (match &self (lazy-picked $v) $v)) ((1)))

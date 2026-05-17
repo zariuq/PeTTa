@@ -12,7 +12,7 @@
 (= (prime? $n)
    (== $n (find-divisor $n 2)))
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (once (hyperpose ((prime? 535372570000000063)
                     (prime? 5421844300001))))
   True)

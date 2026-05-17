@@ -1,4 +1,4 @@
-!(assertPeTTaTest
+!(assertEqualToEval
   (case (collected (a b) ())
     (((collected $body $rest)
       (if (== (size-atom $body) 2)

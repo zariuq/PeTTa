@@ -6,4 +6,4 @@
 (= (map-flat $f (cons $x $xs)) (cons ($f $x) (map-flat $f $xs)))
 (= (range $n) (if (== $n 0) () (cons $n (range (- $n 1)))))
 
-!(assertPeTTaTest (let $temp (map-flat (+ 1) (range 100000)) (length $temp)) 100000)
+!(assertEqualToEval (let $temp (map-flat (+ 1) (range 100000)) (length $temp)) 100000)

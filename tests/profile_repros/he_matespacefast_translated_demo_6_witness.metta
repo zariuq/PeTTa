@@ -16,7 +16,7 @@
           ($g (rewriteK Z $K)))
          (match &self (num $1) (num $1))))
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (let $__tr_tuple_1 (collapse (mate-space-demo 6))
     (size-atom $__tr_tuple_1))
   190)

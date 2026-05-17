@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (10 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/recursive_types2.metta
+; Source: examples/recursive_types2.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -10,5 +10,5 @@
 (= (Greater (S $x) Z) True)
 (= (Greater Z $x) False)
 (= (Greater (S $x) (S $y)) (Greater $x $y))
-!(assertPeTTaTest (Greater (S Z) (S Z)) false)
-!(assertPeTTaTest (Greater (S (S Z)) (S Z)) true)
+!(assertEqualToEval (Greater (S Z) (S Z)) false)
+!(assertEqualToEval (Greater (S (S Z)) (S Z)) true)

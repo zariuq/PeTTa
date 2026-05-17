@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (11 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_evaluation.metta
+; Source: examples/he_evaluation.metta
 
 !(import! &self ../../lib/lib_he.metta)
 (= (double $x) (+ $x $x))

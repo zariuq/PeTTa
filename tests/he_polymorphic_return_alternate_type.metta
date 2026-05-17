@@ -4,4 +4,4 @@
 (: testf (-> $a $a))
 (= (testf at) t)
 
-!(assertPeTTaTest (testf at) t)
+!(assertEqualToEval (testf at) t)

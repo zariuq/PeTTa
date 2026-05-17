@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (38 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_math.metta
+; Source: examples/he_math.metta
 
 !(test (pow-math 2 3) 8.0)
 !(test (sqrt-math 9) 3.0)

@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (16 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_types.metta
+; Source: examples/he_types.metta
 
 !(import! &self ../../lib/lib_he.metta)
 !(test (is-function (-> Atom Atom)) True)

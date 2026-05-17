@@ -9,4 +9,4 @@
 (= (range $n) (if (== $n 0) () (cons $n (range (- $n 1)))))
 (= (deep-nest $n) (if (== $n 0) () (cons (range 50) (deep-nest (- $n 1)))))
 
-!(assertPeTTaTest (fold-nested + 0 (deep-nest 1000)) 1275000)
+!(assertEqualToEval (fold-nested + 0 (deep-nest 1000)) 1275000)

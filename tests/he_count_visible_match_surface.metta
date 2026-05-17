@@ -31,5 +31,5 @@
           ($g (rewriteTagK Z $K)))
          (match &self (tag $1) ok)))
 
-!(assertPeTTaTest (let $tuple (collapse (mate-space-demo 3)) (size-atom $tuple)) 22)
-!(assertPeTTaTest (let $tuple (collapse (tag-space-ones 3)) (size-atom $tuple)) 22)
+!(assertEqualToEval (let $tuple (collapse (mate-space-demo 3)) (size-atom $tuple)) 22)
+!(assertEqualToEval (let $tuple (collapse (tag-space-ones 3)) (size-atom $tuple)) 22)

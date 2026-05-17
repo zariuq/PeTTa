@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (5 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/holfunctions_intrinsicop.metta
+; Source: examples/holfunctions_intrinsicop.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -7,4 +7,4 @@
 (= (mymap $f ()) ())
 (= (mymap $f (cons $x $xs)) (cons ($f $x) (mymap $f $xs)))
 (= (eq $a $b) (== $a $b))
-!(assertPeTTaTest (mymap (== 1) (1 2 3)) (mymap (eq 1) (1 2 3)))
+!(assertEqualToEval (mymap (== 1) (1 2 3)) (mymap (eq 1) (1 2 3)))

@@ -28,7 +28,7 @@
          (reduce-within (eval (fib 5))))))
 
 !(println! "DEBUG: before-pre-fib-assert")
-!(assertPeTTaTest
+!(assertEqualToEval
   (before-call-errors-ofc (before-quote) (before-eval) (before-reduce))
   (before-call-errors-ofc
     (quote-before (quote (fib 5)))
@@ -36,7 +36,7 @@
     (reduce-before (quote (fib 5)))))
 
 !(println! "DEBUG: before-compilefib-assert")
-!(assertPeTTaTest
+!(assertEqualToEval
   (compilefib)
   ((within (quote (fib 5)))
    (call-within 5)
@@ -57,7 +57,7 @@
    (reduce-after (eval (fib 5))))
 
 !(println! "DEBUG: before-before-group-assert")
-!(assertPeTTaTest
+!(assertEqualToEval
   ((before-call) (before-quote) (before-eval) (before-reduce))
   ((call-before 5)
    (quote-before (quote (fib 5)))
@@ -65,7 +65,7 @@
    (reduce-before 5)))
 
 !(println! "DEBUG: before-after-group-assert")
-!(assertPeTTaTest
+!(assertEqualToEval
   ((after-call) (after-quote) (after-eval) (after-reduce))
   ((call-after 5)
    (quote-after (quote (fib 5)))

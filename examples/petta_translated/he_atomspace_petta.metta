@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (20 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_atomspace.metta
+; Source: examples/he_atomspace.metta
 
 !(import! &self ../../lib/lib_he.metta)
 !(add-atom &self (= (addnormal) (+ 1 3)))

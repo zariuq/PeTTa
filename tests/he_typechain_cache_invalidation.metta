@@ -1,5 +1,5 @@
-!(assertPeTTaTest (get-type tmpcache) %Undefined%)
+!(assertEqualToEval (get-type tmpcache) %Undefined%)
 !(add-atom &self (: tmpcache (-> Number Number)))
-!(assertPeTTaTest (get-type tmpcache) (-> Number Number))
+!(assertEqualToEval (get-type tmpcache) (-> Number Number))
 !(remove-atom &self (: tmpcache (-> Number Number)))
-!(assertPeTTaTest (get-type tmpcache) %Undefined%)
+!(assertEqualToEval (get-type tmpcache) %Undefined%)

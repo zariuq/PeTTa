@@ -22,6 +22,7 @@
 :- multifile he_bridge_eval_data_term/3.
 :- multifile he_bridge_eval_goal/3.
 :- multifile he_bridge_lower_clause_body/3.
+:- multifile he_bridge_with_clause_head_args/2.
 :- multifile he_bridge_match_blocked/1.
 :- multifile he_bridge_match_override/4.
 :- multifile he_bridge_partial_or_data/3.
@@ -49,6 +50,10 @@ he_bridge_clause_constrains_args(ConstrainArgs) :-
 he_bridge_lower_clause_body(Expr, Goals, Out) :-
     he_profile_enabled,
     he_lower_clause_body(Expr, Goals, Out).
+
+he_bridge_with_clause_head_args(Args, Goal) :-
+    he_profile_enabled,
+    he_with_clause_head_args(Args, Goal).
 
 he_bridge_reduce(F, Args, Out) :-
     he_profile_enabled,

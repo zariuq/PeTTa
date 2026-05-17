@@ -10,6 +10,6 @@
 (= (prime? $n)
    (== $n (find-divisor $n 2)))
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (prime? 5421844300001)
   True)

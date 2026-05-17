@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (16 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/curry.metta
+; Source: examples/curry.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -7,10 +7,10 @@
 (= (f $a $b) (+ $a $b))
 (= (g $a $b $c) (+ $c (+ $a $b)))
 (= (show) (repr (f 1)))
-!(assertPeTTaTest (repr (f 1)) "(partial f (1))")
-!(assertPeTTaTest ((f 1) 2) 3)
-!(assertPeTTaTest (repr (g 1 2)) "(partial g (1 2))")
+!(assertEqualToEval (repr (f 1)) "(partial f (1))")
+!(assertEqualToEval ((f 1) 2) 3)
+!(assertEqualToEval (repr (g 1 2)) "(partial g (1 2))")
 (= (h $A $B) (append ($A) $B))
-!(assertPeTTaTest ((h 42) (1 2 3)) (42 1 2 3))
-!(assertPeTTaTest (repr (h 42)) "(partial h (42))")
-!(assertPeTTaTest (map-atom (1 2 3) (+ 1)) (2 3 4))
+!(assertEqualToEval ((h 42) (1 2 3)) (42 1 2 3))
+!(assertEqualToEval (repr (h 42)) "(partial h (42))")
+!(assertEqualToEval (map-atom (1 2 3) (+ 1)) (2 3 4))

@@ -28,6 +28,9 @@ escape_quotes([H|T], [H|R]) :- escape_quotes(T, R).
 he_public_term(Term, Public) :-
     var(Term), !,
     Public = Term.
+he_public_term([quote, Term], Public) :-
+    !,
+    he_public_syntax_term(Term, Public).
 he_public_term(true, 'True') :- !.
 he_public_term(false, 'False') :- !.
 he_public_term(Term, ['State', PublicValue]) :-
@@ -46,6 +49,20 @@ he_public_term(Term, Public) :-
 he_public_term(Term, Public) :-
     Term =.. [F|Args],
     maplist(he_public_term, Args, PublicArgs),
+    Public =.. [F|PublicArgs].
+
+he_public_syntax_term(Term, Public) :-
+    var(Term), !,
+    Public = Term.
+he_public_syntax_term(Term, Public) :-
+    atomic(Term), !,
+    Public = Term.
+he_public_syntax_term(Term, Public) :-
+    is_list(Term), !,
+    maplist(he_public_syntax_term, Term, Public).
+he_public_syntax_term(Term, Public) :-
+    Term =.. [F|Args],
+    maplist(he_public_syntax_term, Args, PublicArgs),
     Public =.. [F|PublicArgs].
 
 %Read S string or atom, extract codes, and apply DCG (parsing):

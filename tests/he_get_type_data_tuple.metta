@@ -1,5 +1,5 @@
 (: a A)
 (: b B)
 (: testx (-> $a $b $a))
-!(assertPeTTaTest (get-type (a b)) (A B))
-!(assertPeTTaTest (get-type (testx 1 "f")) Number)
+!(assertEqualToEval (get-type (a b)) (A B))
+!(assertEqualToEval (get-type (testx 1 "f")) Number)

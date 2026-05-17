@@ -1,15 +1,16 @@
 ; Translated from PeTTa to HE (23 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/nars_direct.metta
+; Source: examples/nars_direct.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
+(= (quoted-syntax (quote $expr)) $expr)
 !(import! &self (library lib_nars))
 (: => (-> Expression Expression Atom Atom))
 (= (=> (cons , $args) $C $stvImp) (chain (cut) $__tr_discard_1 (add-atom &self (= $C (Truth_Deduction (foldl-atom $args (stv 1.0 1.0) $__tr_acc_2 $__tr_item_3 (eval (Truth_Deduction $__tr_acc_2 $__tr_item_3))) $stvImp)))))
 (= (=> $A $C $stvImp) (add-atom &self (= $C (Truth_Deduction $A $stvImp))))
 (: ? (-> Expression Atom))
-(= (? $term) (collapse (unique ($term (chain (eval $term) $__tr_discard_4 (foldl-atom (collapse (eval $term)) (stv 0.5 0.0) $__tr_acc_5 $__tr_item_6 (eval (Truth_Revision $__tr_acc_5 $__tr_item_6))))))))
+(= (? $term) (collapse (unique ($term (chain (unquote (quote $term)) $__tr_discard_4 (foldl-atom (collapse (unquote (quote $term))) (stv 0.5 0.0) $__tr_acc_5 $__tr_item_6 (eval (Truth_Revision $__tr_acc_5 $__tr_item_6))))))))
 !(=> (, (father $a $b) (father $b $c)) (grandfather $a $c) (stv 1.0 0.9))
 !(=> (, (father $a $b) (mother $b $c)) (grandfather $a $c) (stv 1.0 0.9))
 !(=> (grandfather $a $x) (old $a) (stv 1.0 0.9))
@@ -17,6 +18,6 @@
 (= (father b c) (stv 1.0 0.9))
 (= (father a y) (stv 1.0 0.9))
 (= (mother y c) (stv 0.0 0.9))
-!(assertPeTTaTest (? (grandfather a c)) (quote (((grandfather a c) (stv 1.0 0.7290000000000001)))))
-!(assertPeTTaTest (? (grandfather $who c)) (quote (((grandfather a c) (stv 1.0 0.7290000000000001)))))
-!(assertPeTTaTest (? (old $who)) (quote (((old a) (stv 1.0 0.6561000000000001)))))
+!(assertEqualToEval (? (grandfather a c)) (quoted-syntax (quote (((grandfather a c) (stv 1.0 0.7290000000000001))))))
+!(assertEqualToEval (? (grandfather $who c)) (quoted-syntax (quote (((grandfather a c) (stv 1.0 0.7290000000000001))))))
+!(assertEqualToEval (? (old $who)) (quoted-syntax (quote (((old a) (stv 1.0 0.6561000000000001))))))

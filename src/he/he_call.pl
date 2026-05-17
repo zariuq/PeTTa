@@ -11,8 +11,10 @@ he_user_functor_prefix('$metta$:').
 :- dynamic he_single_equation_arity_cache/3.
 :- dynamic he_single_result_callable_param_positions_cache/3.
 :- dynamic he_single_result_call_plan_cache/4.
+:- dynamic he_single_result_ground_memo_cache/3.
+:- dynamic he_single_result_recursive_fun_cache/3.
 :- dynamic he_multi_equation_direct_plan_cache/3.
-:- dynamic he_datastructure_native_plan_cache/3.
+:- dynamic he_native_contract_plan_cache/3.
 :- dynamic he_unique_queue_search_plan_cache/3.
 :- dynamic he_effect_only_safe_fun_cache/3.
 :- dynamic he_effect_only_native_plan_cache/3.
@@ -21,6 +23,8 @@ metta_user_functor(Fun, UserFun) :-
     atom(Fun),
     he_user_functor_prefix(Prefix),
     atom_concat(Prefix, Fun, UserFun).
+
+% Shared HE runtime identity and "return self on failure" policy.
 
 he_clause_functor(Fun, Fun) :-
     \+ he_profile_enabled, !.
@@ -51,7 +55,19 @@ he_constructor_symbol(Fun) :-
 
 he_symbolic_data_functor(Fun) :-
     atom(Fun),
-    sub_atom(Fun, 0, 1, _, '@').
+    sub_atom(Fun, 0, 1, _, '@'),
+    \+ he_symbolic_callable_functor(Fun).
+
+he_symbolic_callable_functor(Fun) :-
+    fun(Fun), !.
+he_symbolic_callable_functor(Fun) :-
+    he_has_atom_head_equation(Fun), !.
+he_symbolic_callable_functor(Fun) :-
+    he_has_zero_arg_atom_head_equation(Fun), !.
+he_symbolic_callable_functor(Fun) :-
+    catch(nb_getval(Fun, Metas), _, fail),
+    is_list(Metas),
+    Metas \= [].
 
 he_user_functor_clause_count(UserFun, Arity, Count) :-
     findall(1,
@@ -60,6 +76,10 @@ he_user_functor_clause_count(UserFun, Arity, Count) :-
             ),
             Rows),
     length(Rows, Count).
+
+% Native contract discovery and caching.
+% These recognizers stay intentionally narrow; routing uses the cached contract
+% name rather than re-scanning translated clauses.
 
 he_runtime_direct_predicate_plan(Fun, Arity, Plan) :-
     he_runtime_direct_predicate_plan_cache(Fun, Arity, Plan), !.
@@ -73,22 +93,22 @@ he_runtime_direct_predicate_plan(Fun, Arity, Plan) :-
     ),
     assertz(he_runtime_direct_predicate_plan_cache(Fun, Arity, Plan)).
 
-he_datastructure_native_plan(Fun, Arity, Plan) :-
-    he_datastructure_native_plan_cache(Fun, Arity, Plan), !.
-he_datastructure_native_plan(Fun, Arity, Plan) :-
-    ( he_datastructure_native_plan_1(Fun, Arity, Plan0)
+he_native_contract_plan(Fun, Arity, Plan) :-
+    he_native_contract_plan_cache(Fun, Arity, Plan), !.
+he_native_contract_plan(Fun, Arity, Plan) :-
+    ( he_native_contract_plan_1(Fun, Arity, Plan0)
     -> Plan = Plan0
     ;  Plan = none
     ),
-    assertz(he_datastructure_native_plan_cache(Fun, Arity, Plan)).
+    assertz(he_native_contract_plan_cache(Fun, Arity, Plan)).
 
-he_datastructure_native_plan_1('empty-queue', 0, empty_queue) :-
+he_native_contract_plan_1('empty-queue', 0, empty_queue) :-
     metta_user_functor('empty-queue', UserFun),
     he_user_functor_clause_count(UserFun, 1, 1),
     functor(Head, UserFun, 1),
     clause(Head, true),
     Head =.. [UserFun, [queue, [], [], 0]], !.
-he_datastructure_native_plan_1(enqueue, 2, enqueue) :-
+he_native_contract_plan_1(enqueue, 2, enqueue) :-
     metta_user_functor(enqueue, UserFun),
     he_user_functor_clause_count(UserFun, 3, 1),
     functor(Head, UserFun, 3),
@@ -97,7 +117,7 @@ he_datastructure_native_plan_1(enqueue, 2, enqueue) :-
              he_call_typed(+, [Count, 1], [[->, 'Number', 'Number', 'Number']], Next)
            )),
     Head =.. [UserFun, Elem, [queue, In, Out, Count], [queue, NewIn, Out, Next]], !.
-he_datastructure_native_plan_1(dequeue, 2, dequeue) :-
+he_native_contract_plan_1(dequeue, 2, dequeue) :-
     metta_user_functor(dequeue, UserFun),
     he_user_functor_clause_count(UserFun, 3, 2),
     functor(Head1, UserFun, 3),
@@ -116,7 +136,7 @@ he_datastructure_native_plan_1(dequeue, 2, dequeue) :-
                                    QueueOut2,
                                    Out2)),
     Head2 =.. [UserFun, Elem2, [queue, In2, [], Count2], Out2], !.
-he_datastructure_native_plan_1('add-unique-or-fail', 2, add_unique_or_fail) :-
+he_native_contract_plan_1('add-unique-or-fail', 2, add_unique_or_fail) :-
     metta_user_functor('add-unique-or-fail', UserFun),
     he_user_functor_clause_count(UserFun, 3, 1),
     functor(Head, UserFun, 3),
@@ -136,16 +156,112 @@ he_datastructure_native_plan_1('add-unique-or-fail', 2, add_unique_or_fail) :-
                                    AddOut,
                                    Out)),
     Head =.. [UserFun, Space, Expression, Out], !.
-he_datastructure_native_plan_1(Fun, 2, move9) :-
+he_native_contract_plan_1(Fun, 2, move9) :-
     he_move9_native_fun(Fun).
-he_datastructure_native_plan_1(Fun, 1, range) :-
+he_native_contract_plan_1(Fun, 1, range) :-
     he_range_native_fun(Fun).
-he_datastructure_native_plan_1(Fun, 1, deep_nest(Width)) :-
+he_native_contract_plan_1(Fun, 1, deep_nest(Width)) :-
     he_deep_nest_native_fun(Fun, Width).
-he_datastructure_native_plan_1(Fun, 2, poly) :-
+he_native_contract_plan_1(Fun, 2, poly) :-
     he_poly_native_fun(Fun).
-he_datastructure_native_plan_1(Fun, 3, fold_nested) :-
+he_native_contract_plan_1(Fun, 3, fold_nested) :-
     he_fold_nested_native_fun(Fun).
+he_native_contract_plan_1(Fun, 2, trial_divisor) :-
+    he_trial_divisor_native_fun(Fun).
+he_native_contract_plan_1(Fun, 1, self_add_desc_mod(Rel, Mod)) :-
+    he_self_add_desc_mod_contract(Fun, Rel, Mod).
+he_native_contract_plan_1(Fun, 1, indexing_demo(Rel, Mod,
+                                                FirstKey, SecondKey,
+                                                RelName, RelA, RelB,
+                                                BothA, BothB)) :-
+    he_indexing_demo_contract(Fun, Rel, Mod,
+                              FirstKey, SecondKey,
+                              RelName, RelA, RelB,
+                              BothA, BothB).
+
+he_self_add_desc_mod_contract(Fun, Rel, Mod) :-
+    atom(Fun),
+    he_single_meta_body(Fun, [K],
+                        [if, [==, CondK, 0], done,
+                         ['let*',
+                          [[ModVar, ['%', ModK, Mod]],
+                           [_, ['add-atom', '&self', [Rel, AddK, ModVar]]]],
+                          [Fun, [-, RecK, 1]]]]),
+    CondK == K,
+    ModK == K,
+    AddK == K,
+    RecK == K,
+    atom(Rel),
+    integer(Mod),
+    Mod > 0.
+
+he_collapse_match_identity_fun(Fun, Args, Pattern) :-
+    atom(Fun),
+    he_single_meta_body(Fun, Args, [collapse, [match, '&self', Pattern, Body]]),
+    Pattern == Body.
+
+he_indexing_demo_contract(Fun, Rel, Mod,
+                          FirstKey, SecondKey,
+                          RelName, RelA, RelB,
+                          BothA, BothB) :-
+    atom(Fun),
+    he_single_meta_body(Fun, [K],
+                        ['let*',
+                         [[_, [AddFun, AddK]],
+                          [AllVar, [QAll]],
+                          [FirstVar, [QFirst, FirstKey]],
+                          [SecondVar, [QSecond, SecondKey]],
+                          [RelVar, [QRel, RelName]],
+                          [BothVar, [QBoth, BothA, BothB]]],
+                         ['all:', [LengthFun, AllLenArg],
+                          'first:', [LengthFun, FirstLenArg],
+                          'second:', [LengthFun, SecondLenArg],
+                          'rel:', [LengthFun, RelLenArg],
+                          'both:', [LengthFun, BothLenArg]]]),
+    AddK == K,
+    AllLenArg == AllVar,
+    FirstLenArg == FirstVar,
+    SecondLenArg == SecondVar,
+    RelLenArg == RelVar,
+    BothLenArg == BothVar,
+    he_count_eval_call_fun(LengthFun),
+    he_self_add_desc_mod_contract(AddFun, Rel, Mod),
+    he_collapse_match_identity_fun(QAll, [], [Rel, _, _]),
+    he_collapse_match_identity_fun(QFirst, [FirstKey], [Rel, FirstKey, _]),
+    he_collapse_match_identity_fun(QSecond, [SecondKey], [Rel, _, SecondKey]),
+    he_collapse_match_identity_fun(QRel, [RelName], [RelName, RelA, RelB]),
+    he_collapse_match_identity_fun(QBoth, [BothA, BothB], [Rel, BothA, BothB]).
+
+he_trial_divisor_native_fun(Fun) :-
+    atom(Fun),
+    he_single_meta_body(Fun, [N, D],
+                        [if, [>, [*, MulD1, MulD2], GtN], ThenN,
+                         [if, [==, 0, ['%', ModN, ModD]], ThenD,
+                          [Fun, RecN, [+, RecD, 1]]]]),
+    MulD1 == D,
+    MulD2 == D,
+    GtN == N,
+    ThenN == N,
+    ModN == N,
+    ModD == D,
+    ThenD == D,
+    RecN == N,
+    RecD == D.
+he_trial_divisor_native_fun(Fun) :-
+    atom(Fun),
+    he_single_meta_body(Fun, [N, D],
+                        [if, [>, [*, MulD1, MulD2], GtN], ThenN,
+                         [if, [==, ['%', ModN, ModD], 0], ThenD,
+                          [Fun, RecN, [+, RecD, 1]]]]),
+    MulD1 == D,
+    MulD2 == D,
+    GtN == N,
+    ThenN == N,
+    ModN == N,
+    ModD == D,
+    ThenD == D,
+    RecN == N,
+    RecD == D.
 
 he_range_native_fun(Fun) :-
     atom(Fun),
@@ -230,7 +346,7 @@ he_unique_queue_search_seed_expr(Start, seeded, Space,
                                  ['add-unique-or-fail', Space, Start]).
 
 he_unique_queue_search_neighbor_contract(Fun, 2, board9, move9_stream) :-
-    he_datastructure_native_plan(Fun, 2, move9).
+    he_native_contract_plan(Fun, 2, move9).
 
 he_unique_queue_search_neighbors_expr(['collapse', Inner], Space, StatePlan, NeighborPlan) :-
     Inner = ['let*',
@@ -291,6 +407,8 @@ he_unique_queue_search_plan_1(Fun, 2, queue_search_contract(Space, SeedMode, Sta
     he_unique_queue_search_loop_plan(LoopFun, 3, queue_search(Space, StatePlan, NeighborPlan)),
     he_unique_queue_search_seed_expr(Start, SeedMode, Space, SeedExpr).
 
+% Native execution helpers for the recognized backend contracts.
+
 he_note_native_move9_fallback(Board, Dir) :-
     he_perf_counter_inc(native_move9_fallback_calls),
     ( var(Dir)
@@ -336,76 +454,100 @@ he_fold_nested_native_fun(Fun) :-
             [Fun, Callable, [Fun, Callable, Init, X], Xs],
             [Fun, Callable, [Callable, Init, X], Xs]].
 
-he_build_native_datastructure_goal(Call, Out, Goal) :-
+he_build_native_contract_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
-    he_datastructure_native_plan(Fun, Arity, Plan),
+    he_native_contract_plan(Fun, Arity, Plan),
     Plan \== none,
     Plan == move9,
     Args = [Board, Dir], !,
     Goal = he_native_move9_call(Fun, Board, Dir, Out).
-he_build_native_datastructure_goal(Call, Out, Goal) :-
+he_build_native_contract_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
-    he_datastructure_native_plan(Fun, Arity, Plan),
+    he_native_contract_plan(Fun, Arity, Plan),
     Plan \== none,
     Plan = deep_nest(Width),
     Args = [N], !,
     Goal = he_native_deep_nest_call(Fun, Width, N, Out).
-he_build_native_datastructure_goal(Call, Out, Goal) :-
+he_build_native_contract_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
-    he_datastructure_native_plan(Fun, Arity, Plan),
+    he_native_contract_plan(Fun, Arity, Plan),
     Plan \== none,
     Plan == range,
     Args = [N], !,
     Goal = he_native_range_call(Fun, N, Out).
-he_build_native_datastructure_goal(Call, Out, Goal) :-
+he_build_native_contract_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
-    he_datastructure_native_plan(Fun, Arity, Plan),
+    he_native_contract_plan(Fun, Arity, Plan),
     Plan \== none,
     Plan == poly,
     Args = [Callable, N], !,
     Goal = he_native_poly_call(Fun, Callable, N, Out).
-he_build_native_datastructure_goal(Call, Out, Goal) :-
+he_build_native_contract_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
-    he_datastructure_native_plan(Fun, Arity, Plan),
+    he_native_contract_plan(Fun, Arity, Plan),
     Plan \== none,
     Plan == fold_nested,
     Args = [Callable, Init, Tree], !,
     Goal = he_native_fold_nested_call(Fun, Callable, Init, Tree, Out).
-he_build_native_datastructure_goal(Call, Out, Goal) :-
+he_build_native_contract_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun|Args],
     atom(Fun),
     length(Args, Arity),
-    he_datastructure_native_plan(Fun, Arity, Plan),
+    he_native_contract_plan(Fun, Arity, Plan),
     Plan \== none,
-    he_build_native_datastructure_goal_1(Plan, Args, Out, Goal).
+    Plan == trial_divisor,
+    Args = [N, D], !,
+    Goal = he_native_trial_divisor_call(Fun, N, D, Out).
+he_build_native_contract_goal(Call, Out, Goal) :-
+    he_profile_enabled,
+    Call = [Fun|Args],
+    atom(Fun),
+    length(Args, Arity),
+    he_native_contract_plan(Fun, Arity, Plan),
+    Plan \== none,
+    he_build_native_contract_goal_1(Plan, Args, Out, Goal).
 
-he_build_native_datastructure_goal_1(empty_queue, [], Out, he_native_empty_queue_call(Out)).
-he_build_native_datastructure_goal_1(enqueue, [Elem, Queue], Out,
-                                     he_native_queue_enqueue_call(Elem, Queue, Out)).
-he_build_native_datastructure_goal_1(dequeue, [Elem, Queue], Out,
-                                     he_native_queue_dequeue_call(Elem, Queue, Out)).
-he_build_native_datastructure_goal_1(add_unique_or_fail, [Space, Expr], Out,
-                                     he_native_add_unique_or_fail_call(Space, Expr, Out)).
-he_build_native_datastructure_first_visible_goal(Call, Out, Goal) :-
+he_build_native_contract_goal_1(empty_queue, [], Out, he_native_empty_queue_call(Out)).
+he_build_native_contract_goal_1(enqueue, [Elem, Queue], Out,
+                                he_native_queue_enqueue_call(Elem, Queue, Out)).
+he_build_native_contract_goal_1(dequeue, [Elem, Queue], Out,
+                                he_native_queue_dequeue_call(Elem, Queue, Out)).
+he_build_native_contract_goal_1(add_unique_or_fail, [Space, Expr], Out,
+                                he_native_add_unique_or_fail_call(Space, Expr, Out)).
+he_build_native_contract_goal_1(self_add_desc_mod(Rel, Mod), [K], Out,
+                                he_native_self_add_desc_mod_call(Rel, Mod, K, Out)).
+he_build_native_contract_goal_1(indexing_demo(Rel, Mod,
+                                              FirstKey, SecondKey,
+                                              RelName, RelA, RelB,
+                                              BothA, BothB),
+                                [K],
+                                Out,
+                                he_native_indexing_demo_call(Rel, Mod,
+                                                             FirstKey, SecondKey,
+                                                             RelName, RelA, RelB,
+                                                             BothA, BothB,
+                                                             K,
+                                                             Out)).
+he_build_native_contract_first_visible_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [dequeue, Elem, QueueExpr],
-    he_datastructure_native_plan(dequeue, 2, dequeue), !,
+    he_native_contract_plan(dequeue, 2, dequeue), !,
     Goal = he_native_queue_dequeue_first_visible_call(Elem, QueueExpr, Out).
 
 he_native_empty_queue_call(Out) :-
@@ -443,6 +585,87 @@ he_native_queue_dequeue_first_visible_call(Elem, QueueExpr, Out) :-
 he_native_add_unique_or_fail_call(Space0, Expr, Out) :-
     he_space_add_unique_public(Space0, Expr, Added, Out),
     Added == true.
+
+he_native_trial_divisor_call(_Fun, NExpr, DExpr, Out) :-
+    he_eval_runtime_arg(NExpr, N),
+    he_eval_runtime_arg(DExpr, D),
+    integer(N),
+    integer(D),
+    D > 0, !,
+    he_native_trial_divisor_loop(N, D, Out).
+he_native_trial_divisor_call(Fun, N, D, [Fun, N, D]).
+
+he_native_trial_divisor_loop(N, D, Out) :-
+    D2 is D * D,
+    ( D2 > N
+    -> Out = N
+    ;  Rem is N mod D,
+       ( Rem =:= 0
+       -> Out = D
+       ;  D1 is D + 1,
+          he_native_trial_divisor_loop(N, D1, Out)
+       )
+    ).
+
+he_native_self_add_desc_mod_call(Rel, Mod, KExpr, Out) :-
+    he_eval_runtime_arg(KExpr, K),
+    ( integer(K),
+      K >= 0
+    -> he_native_self_add_desc_mod_loop(K, Rel, Mod),
+       Out = done
+    ;  Out = [Rel, K]
+    ).
+
+he_native_self_add_desc_mod_loop(0, _Rel, _Mod) :- !.
+he_native_self_add_desc_mod_loop(K, Rel, Mod) :-
+    K > 0,
+    Rem is K mod Mod,
+    Term = [Rel, K, Rem],
+    add_sexp('&self', Term),
+    he_note_space_fact_added('&self', Term),
+    K1 is K - 1,
+    he_native_self_add_desc_mod_loop(K1, Rel, Mod).
+
+he_count_positive_mod_upto(K, Mod, Rem, Count) :-
+    ( Rem =:= 0 -> First is Mod ; First = Rem ),
+    ( K < First
+    -> Count = 0
+    ;  Count is ((K - First) // Mod) + 1
+    ).
+
+he_desc_mod_fact_present(K, Mod, A, B, Count) :-
+    integer(A),
+    integer(B),
+    A >= 1,
+    A =< K,
+    B =:= A mod Mod, !,
+    Count = 1.
+he_desc_mod_fact_present(_K, _Mod, _A, _B, 0).
+
+he_native_indexing_demo_call(Rel, Mod,
+                             FirstKey, SecondKey,
+                             RelName, RelA, RelB,
+                             BothA, BothB,
+                             KExpr,
+                             Out) :-
+    RelName == Rel,
+    he_eval_runtime_arg(KExpr, K),
+    integer(K),
+    K >= 0, !,
+    he_native_self_add_desc_mod_loop(K, Rel, Mod),
+    AllCount = K,
+    ( integer(FirstKey), FirstKey >= 1, FirstKey =< K
+    -> FirstCount = 1
+    ;  FirstCount = 0
+    ),
+    he_count_positive_mod_upto(K, Mod, SecondKey, SecondCount),
+    he_desc_mod_fact_present(K, Mod, RelA, RelB, RelCount),
+    he_desc_mod_fact_present(K, Mod, BothA, BothB, BothCount),
+    Out = ['all:', AllCount,
+           'first:', FirstCount,
+           'second:', SecondCount,
+           'rel:', RelCount,
+           'both:', BothCount].
 
 he_native_move9_call(Fun, BoardExpr, DirExpr, Out) :-
     he_perf_counter_inc(native_move9_calls),
@@ -726,6 +949,10 @@ he_native_fold_nested_reduce(Fun, Callable, Init, Tree, [Fun, Callable, Init, Tr
     atom(Fun),
     \+ is_list(Tree).
 
+% Typed-call selection and typed return shaping.
+% Answer-policy details now live in he_answers.pl; this section only decides
+% which typed route is applicable and how typed raw results are cast.
+
 he_he_data_shadowed_fun(Fun) :-
     he_profile_enabled,
     atom(Fun),
@@ -773,6 +1000,20 @@ he_call_typed(Fun, Args, TypeChains, Out) :-
 he_typed_runtime_overload('map-atom', [List, Func], Out) :-
     is_list(List),
     he_maplist_reduce(List, Func, Out).
+he_typed_runtime_overload('filter-atom', [List, Func], Out) :-
+    is_list(List),
+    he_filterlist_reduce(List, Func, Out).
+
+he_size_atom_eq_raw(ExprRaw, Expected, true) :-
+    integer(Expected),
+    Expected >= 0,
+    var(ExprRaw), !,
+    length(ExprRaw, Expected).
+he_size_atom_eq_raw(ExprRaw, Expected, Out) :-
+    he_eval_runtime_arg(ExprRaw, Expr),
+    catch('size-atom'(Expr, Size), _, fail), !,
+    he_profile_eq(Size, Expected, Out).
+he_size_atom_eq_raw(_ExprRaw, _Expected, false).
 
 he_typed_call_has_selection(Fun, Args, DisplayArgs, TypeChains) :-
     he_select_typed_call([Fun|DisplayArgs], TypeChains, Args, _), !.
@@ -800,73 +1041,6 @@ he_select_typed_call(Call, TypeChains, Args, err(TypeChain, Errors, Args)) :-
 
 he_typechain_return_type([->|TypeItems], ReturnType) :-
     append(_, [ReturnType], TypeItems).
-
-he_note_typed_visible_or_all_row(Row, RawOut, State) :-
-    ( he_visible_result(RawOut)
-    -> arg(1, State, Mode),
-       ( Mode == no_visible
-       -> nb_setarg(1, State, visible),
-          nb_setarg(2, State, [])
-       ;  true
-       ),
-       arg(3, State, VisibleAcc0),
-       nb_setarg(3, State, [Row|VisibleAcc0])
-    ; arg(1, State, no_visible)
-    -> arg(2, State, RawAcc0),
-       nb_setarg(2, State, [Row|RawAcc0])
-    ;  true
-    ).
-
-he_finalize_typed_visible_or_all_rows(State, Rows) :-
-    arg(1, State, Mode),
-    ( Mode == visible
-    -> arg(3, State, VisibleAcc),
-       reverse(VisibleAcc, Rows)
-    ;  arg(2, State, RawAcc),
-       reverse(RawAcc, Rows)
-    ).
-
-he_collect_typed_visible_or_all_raw_rows(Fun, Args, Rows) :-
-    State = state(no_visible, [], []),
-    ( catch(( copy_term(Args, ArgsCopy),
-              he_invoke_typed(Fun, ArgsCopy, Raw0),
-              copy_term(Raw0, BoundRaw0),
-              he_note_typed_visible_or_all_row(BoundRaw0, Raw0, State),
-              fail
-            ),
-            _,
-            fail)
-    ; he_finalize_typed_visible_or_all_rows(State, Rows)
-    ).
-
-he_collect_typed_visible_or_all_arg_rows(Fun, Args, Rows) :-
-    State = state(no_visible, [], []),
-    ( catch(( copy_term(Args, ArgsCopy),
-              he_invoke_typed(Fun, ArgsCopy, Raw0),
-              copy_term(ArgsCopy-Raw0, BoundArgs-BoundRaw0),
-              he_note_typed_visible_or_all_row(BoundArgs-BoundRaw0, Raw0, State),
-              fail
-            ),
-            _,
-            fail)
-    ; he_finalize_typed_visible_or_all_rows(State, Rows)
-    ).
-
-he_collect_typed_visible_or_all_display_rows(Fun, Args, DisplayArgs, Rows) :-
-    State = state(no_visible, [], []),
-    ( catch(( copy_term(Args-DisplayArgs, ArgsCopy-DisplayCopy),
-              he_invoke_typed(Fun, ArgsCopy, Raw0),
-              copy_term(ArgsCopy-DisplayCopy-Raw0,
-                        BoundArgs-BoundDisplay-BoundRaw0),
-              he_note_typed_visible_or_all_row(BoundArgs-BoundDisplay-BoundRaw0,
-                                               Raw0,
-                                               State),
-              fail
-            ),
-            _,
-            fail)
-    ; he_finalize_typed_visible_or_all_rows(State, Rows)
-    ).
 
 he_finish_typed_call_selections('get-type', Args, DisplayArgs, Selections, Out) :-
     !,
@@ -1111,19 +1285,6 @@ he_maybe_eval_typed_return(ReturnType, In, Out) :-
     he_eval_return_if_callable(In, Out).
 he_maybe_eval_typed_return(_, In, In).
 
-he_invoke_typed_visible_or_all(Fun, Args, RawOut) :-
-    he_perf_counter_inc(typed_visible_or_all_calls),
-    State = state(no_visible),
-    ( catch((he_invoke_typed(Fun, Args, RawOut),
-             he_visible_result(RawOut),
-             nb_setarg(1, State, visible)),
-            _,
-            fail)
-    ; arg(1, State, no_visible),
-      he_perf_counter_inc(typed_visible_or_all_replays),
-      catch(he_invoke_typed(Fun, Args, RawOut), _, fail)
-    ).
-
 he_has_atom_head_equation(Fun) :-
     atom(Fun),
     he_eq_fact(Fun, _, _, _).
@@ -1201,6 +1362,8 @@ he_call_has_fun_meta([Fun|Args]) :-
     copy_term(HeadArgs-Args, HeadCopy-ArgsCopy),
     HeadCopy = ArgsCopy, !.
 
+% Backend cache invalidation for live `&self` mutations and function metadata.
+
 he_invalidate_compiled_goal_resolution(Fun) :-
     atom(Fun), !,
     retractall(he_compiled_goal_resolution(Fun, _, _)),
@@ -1235,72 +1398,50 @@ he_invalidate_single_equation_arity_cache(_).
 
 he_invalidate_all_single_result_plan_caches :-
     retractall(he_single_result_callable_param_positions_cache(_, _, _)),
-    retractall(he_single_result_call_plan_cache(_, _, _, _)).
+    retractall(he_single_result_call_plan_cache(_, _, _, _)),
+    retractall(he_single_result_ground_memo_cache(_, _, _)),
+    retractall(he_single_result_recursive_fun_cache(_, _, _)).
 
 he_invalidate_multi_equation_direct_plan_cache(Fun) :-
     atom(Fun), !,
     retractall(he_multi_equation_direct_plan_cache(Fun, _, _)).
 he_invalidate_multi_equation_direct_plan_cache(_).
 
-he_invalidate_datastructure_native_plan_cache(Fun) :-
+he_invalidate_native_contract_plan_cache(Fun) :-
     atom(Fun), !,
-    retractall(he_datastructure_native_plan_cache(Fun, _, _)).
-he_invalidate_datastructure_native_plan_cache(_).
+    retractall(he_native_contract_plan_cache(Fun, _, _)).
+he_invalidate_native_contract_plan_cache(_).
 he_invalidate_unique_queue_search_plan_cache(Fun) :-
     retractall(he_unique_queue_search_plan_cache(Fun, _, _)).
 he_invalidate_unique_queue_search_plan_cache(_).
 
+he_invalidate_backend_fun_caches(Fun) :-
+    he_invalidate_runtime_callable_head_cache(Fun),
+    he_invalidate_runtime_direct_predicate_plan_cache(Fun),
+    he_invalidate_call_partial_arity_cache(Fun),
+    he_invalidate_partial_apply_dispatch_plan_cache(Fun),
+    he_invalidate_single_equation_arity_cache(Fun),
+    he_invalidate_all_single_result_plan_caches,
+    he_invalidate_multi_equation_direct_plan_cache(Fun),
+    he_invalidate_native_contract_plan_cache(Fun),
+    he_invalidate_unique_queue_search_plan_cache(Fun),
+    he_invalidate_effect_only_safe_fun_cache(Fun).
+
 he_space_fact_added_hook('&self', [=, [Fun|_], _]) :-
     atom(Fun), !,
     he_invalidate_compiled_goal_resolution(Fun),
-    he_invalidate_runtime_callable_head_cache(Fun),
-    he_invalidate_runtime_direct_predicate_plan_cache(Fun),
-    he_invalidate_call_partial_arity_cache(Fun),
-    he_invalidate_partial_apply_dispatch_plan_cache(Fun),
-    he_invalidate_single_equation_arity_cache(Fun),
-    he_invalidate_all_single_result_plan_caches,
-    he_invalidate_multi_equation_direct_plan_cache(Fun),
-    he_invalidate_datastructure_native_plan_cache(Fun),
-    he_invalidate_unique_queue_search_plan_cache(Fun),
-    he_invalidate_effect_only_safe_fun_cache(Fun).
+    he_invalidate_backend_fun_caches(Fun).
 he_space_fact_removed_hook('&self', [=, [Fun|_], _]) :-
     atom(Fun), !,
     he_invalidate_compiled_goal_resolution(Fun),
-    he_invalidate_runtime_callable_head_cache(Fun),
-    he_invalidate_runtime_direct_predicate_plan_cache(Fun),
-    he_invalidate_call_partial_arity_cache(Fun),
-    he_invalidate_partial_apply_dispatch_plan_cache(Fun),
-    he_invalidate_single_equation_arity_cache(Fun),
-    he_invalidate_all_single_result_plan_caches,
-    he_invalidate_multi_equation_direct_plan_cache(Fun),
-    he_invalidate_datastructure_native_plan_cache(Fun),
-    he_invalidate_unique_queue_search_plan_cache(Fun),
-    he_invalidate_effect_only_safe_fun_cache(Fun).
+    he_invalidate_backend_fun_caches(Fun).
 he_fun_registered_hook(Fun) :-
     atom(Fun), !,
-    he_invalidate_runtime_callable_head_cache(Fun),
-    he_invalidate_runtime_direct_predicate_plan_cache(Fun),
-    he_invalidate_call_partial_arity_cache(Fun),
-    he_invalidate_partial_apply_dispatch_plan_cache(Fun),
-    he_invalidate_single_equation_arity_cache(Fun),
-    he_invalidate_all_single_result_plan_caches,
-    he_invalidate_multi_equation_direct_plan_cache(Fun),
-    he_invalidate_datastructure_native_plan_cache(Fun),
-    he_invalidate_unique_queue_search_plan_cache(Fun),
-    he_invalidate_effect_only_safe_fun_cache(Fun).
+    he_invalidate_backend_fun_caches(Fun).
 he_fun_removed_hook(Fun) :-
     atom(Fun), !,
-    he_invalidate_runtime_callable_head_cache(Fun),
     he_invalidate_compiled_goal_resolution(Fun),
-    he_invalidate_runtime_direct_predicate_plan_cache(Fun),
-    he_invalidate_call_partial_arity_cache(Fun),
-    he_invalidate_partial_apply_dispatch_plan_cache(Fun),
-    he_invalidate_single_equation_arity_cache(Fun),
-    he_invalidate_all_single_result_plan_caches,
-    he_invalidate_multi_equation_direct_plan_cache(Fun),
-    he_invalidate_datastructure_native_plan_cache(Fun),
-    he_invalidate_unique_queue_search_plan_cache(Fun),
-    he_invalidate_effect_only_safe_fun_cache(Fun).
+    he_invalidate_backend_fun_caches(Fun).
 
 he_compiled_goal_user_functor(Fun, Arity, UserFun) :-
     he_compiled_goal_resolution(Fun, Arity, UserFun), !.
@@ -1336,9 +1477,13 @@ he_compiled_user_goal([Fun|Args], Out, Goal) :-
     he_compiled_goal_user_functor(Fun, Arity, UserFun),
     Goal =.. [UserFun|CallArgs].
 
+% Native/direct call routing for user calls.
+% Order matters: native contracts and explicit compiled-equation contracts
+% stay ahead of broader compiled/runtime fallback lanes.
+
 he_build_user_call_native_or_direct_goal(Call, Out, Goal) :-
     he_profile_enabled,
-    he_build_native_datastructure_goal(Call, Out, Goal), !.
+    he_build_native_contract_goal(Call, Out, Goal), !.
 he_build_user_call_native_or_direct_goal(Call, Out, Goal) :-
     he_profile_enabled,
     he_compiled_equation_goal(Call, Out, CompiledGoal), !,
@@ -1373,12 +1518,15 @@ he_build_user_call_direct_goal(Call, Out, Goal) :-
     he_profile_enabled,
     he_build_user_call_native_or_direct_goal(Call, Out, Goal), !.
 
-he_build_native_datastructure_stream_goal(Call, Out, Goal) :-
+% Stream routing mirrors the direct-call router, but prefers stream-capable
+% native/compiled lanes before dropping to general result streaming.
+
+he_build_native_contract_stream_goal(Call, Out, Goal) :-
     he_profile_enabled,
     Call = [Fun, Board, Dir],
     atom(Fun),
     var(Dir),
-    he_datastructure_native_plan(Fun, 2, move9), !,
+    he_native_contract_plan(Fun, 2, move9), !,
     Goal = he_native_move9_stream_call(Board, Dir, Out).
 
 he_build_native_queue_search_goal(Call, Out, Goal) :-
@@ -1401,10 +1549,10 @@ he_build_native_queue_search_goal(Call, Out, Goal) :-
 
 he_build_user_call_stream_goal(Call, Out, Goal) :-
     he_profile_enabled,
-    he_build_native_datastructure_stream_goal(Call, Out, Goal), !.
+    he_build_native_contract_stream_goal(Call, Out, Goal), !.
 he_build_user_call_stream_goal(Call, Out, Goal) :-
     he_profile_enabled,
-    he_build_native_datastructure_goal(Call, Out, Goal), !.
+    he_build_native_contract_goal(Call, Out, Goal), !.
 he_build_user_call_stream_goal(Call, Out, Goal) :-
     he_profile_enabled,
     he_compiled_equation_goal(Call, Out, CompiledGoal), !,
@@ -1413,6 +1561,10 @@ he_build_user_call_stream_goal(Call, Out, Goal) :-
     he_profile_enabled,
     he_compiled_user_goal(Call, Out, CompiledGoal), !,
     Goal = he_call_compiled_result_stream(Call, CompiledGoal, Out).
+
+% Generic HE runtime evaluation and dynamic-call fallback.
+% Clause order matters: cheap structural exits come first, then native/compiled
+% routes, then the broader eval/reduce fallback.
 
 he_call_compiled_result_stream(Call, Goal, Out) :-
     call(Goal),
@@ -1454,6 +1606,12 @@ he_eval_or_reduce([Fun], Out) :-
     he_profile_enabled,
     he_zero_arg_atom_head_body(Fun, Body), !,
     he_eval_zero_arg_equation_body(Body, Out).
+he_eval_or_reduce([iterate, I, N, State, Step], Out) :-
+    he_profile_enabled,
+    integer(I),
+    integer(N),
+    N >= 0, !,
+    he_native_iterate(I, N, State, Step, Out).
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
     Call = [Fun|Args],
@@ -1475,7 +1633,7 @@ he_eval_or_reduce([maplist, Func, List], Out) :-
     he_maplist_reduce(List, Func, Out).
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
-    he_build_native_datastructure_goal(Call, Out, Goal), !,
+    he_build_native_contract_goal(Call, Out, Goal), !,
     call(Goal).
 he_eval_or_reduce(Call, Out) :-
     he_profile_enabled,
@@ -1504,6 +1662,53 @@ he_apply_zero_arg_callable([Fun|Args], Out) :-
     he_eval_or_reduce([Fun], Callable),
     he_apply_callable_result(Callable, Args, Out).
 
+he_eval_ambiguous_list_head_expr(HeadExpr, TailExprs, Out) :-
+    he_eval_ambiguous_head_expr(HeadExpr, HeadValue),
+    ( he_ambiguous_callable_head_value(HeadValue)
+    -> he_eval_ambiguous_eval_args(TailExprs, Args),
+       he_apply_callable_result(HeadValue, Args, Out)
+    ;  he_eval_ambiguous_eval_args(TailExprs, TailValues),
+       Out = [HeadValue|TailValues]
+    ).
+
+he_eval_ambiguous_head_expr([Head|RawArgs], HeadValue) :-
+    atom(Head),
+    he_effect_only_safe_call(Head, RawArgs, []), !,
+    ( once(he_dynamic_call_raw(Head, RawArgs, HeadValue))
+    -> true
+    ;  he_eval_ambiguous_eval_args(RawArgs, EvalArgs),
+       HeadValue = [Head|EvalArgs]
+    ).
+he_eval_ambiguous_head_expr([Head|RawArgs], HeadValue) :-
+    !,
+    State = state(no_success),
+    ( he_dynamic_call_raw(Head, RawArgs, HeadValue),
+      nb_setarg(1, State, success)
+    ; arg(1, State, no_success),
+      he_eval_ambiguous_eval_args(RawArgs, EvalArgs),
+      HeadValue = [Head|EvalArgs]
+    ).
+he_eval_ambiguous_head_expr(HeadExpr, HeadValue) :-
+    translate_expr(HeadExpr, HeadGoals, HeadValue),
+    call_goals(HeadGoals).
+
+he_eval_ambiguous_eval_args([], []).
+he_eval_ambiguous_eval_args([Expr|Exprs], [Value|Values]) :-
+    translate_expr(Expr, Goals, Value),
+    call_goals(Goals),
+    he_eval_ambiguous_eval_args(Exprs, Values).
+
+he_ambiguous_callable_head_value(Value) :-
+    nonvar(Value),
+    ( Value = partial(_, _)
+    ; atom(Value), fun(Value)
+    ; he_py_callable_head(Value)
+    ).
+
+% Dynamic runtime-call routing before the generic evaluator.
+% These paths separate raw special forms, partial application, plainly
+% noncallable heads, and the remaining eval/reduce fallback.
+
 he_dynamic_call_raw(Head, RawArgs, Out) :-
     var(Head), !,
     he_eval_runtime_args(RawArgs, EvalArgs),
@@ -1527,6 +1732,10 @@ he_dynamic_call_raw(Head, RawArgs, Out) :-
     append(Bound, EvalArgs, AllArgs),
     he_build_partial_apply_direct_goal(Fun, AllArgs, Out, Goal), !,
     call(Goal).
+he_dynamic_call_raw(Head, RawArgs, Out) :-
+    number(Head), !,
+    once(he_eval_runtime_args(RawArgs, EvalArgs)),
+    Out = [Head|EvalArgs].
 he_dynamic_call_raw(Head, RawArgs, Out) :-
     atomic(Head),
     \+ he_py_callable_head(Head),
@@ -1566,6 +1775,9 @@ he_dynamic_var_head_call_raw(Head, RawArgs, Out) :-
     he_eval_runtime_args(RawArgs, EvalArgs),
     he_dynamic_var_head_call_eval(Head, EvalArgs, Out).
 
+% Var-head calls get one more chance to become direct once their head and args
+% have already been evaluated.
+
 he_dynamic_var_head_call_eval(Head, EvalArgs, Out) :-
     nonvar(Head),
     Head = partial(Fun, Bound),
@@ -1574,6 +1786,9 @@ he_dynamic_var_head_call_eval(Head, EvalArgs, Out) :-
     he_build_partial_apply_direct_goal(Fun, AllArgs, Out, Goal), !,
     he_perf_counter_inc(var_head_partial_direct_hits),
     call(Goal).
+he_dynamic_var_head_call_eval(Head, EvalArgs, Out) :-
+    number(Head), !,
+    Out = [Head|EvalArgs].
 he_dynamic_var_head_call_eval(Head, EvalArgs, Out) :-
     atomic(Head),
     \+ he_py_callable_head(Head),
@@ -1603,6 +1818,9 @@ he_dynamic_var_head_call_eval(Head, EvalArgs, Out) :-
     he_perf_counter_inc(var_head_direct_fallbacks),
     he_eval_or_reduce([Head|EvalArgs], Out).
 
+% Raw arity-checked special forms that intentionally bypass generic call
+% discovery.
+
 he_runtime_special_call(Head, RawArgs, Out) :-
     length(RawArgs, Arity),
     he_surface(Head, ExpectedArity, _Kind, _Scope),
@@ -1611,6 +1829,9 @@ he_runtime_special_call(Head, RawArgs, Out) :-
 he_runtime_special_call(quote, [Expr], [quote, Expr]) :- !.
 he_runtime_special_call(capture, [Expr], Out) :-
     capture(Expr, Out).
+
+% Runtime-argument evaluation tries hard to preserve already-plain data instead
+% of bouncing it back through the generic evaluator.
 
 he_eval_runtime_args([], []).
 he_eval_runtime_args([RawArg|RawArgs], [EvalArg|EvalArgs]) :-
@@ -1653,6 +1874,50 @@ he_runtime_arg_prefers_raw(Arg) :-
     is_list(Arg),
     he_runtime_raw_data_term(Arg).
 
+he_fast_runtime_arg_expr([+, A, B], Out) :-
+    number(A),
+    number(B), !,
+    Out is A + B.
+he_fast_runtime_arg_expr([-, A, B], Out) :-
+    number(A),
+    number(B), !,
+    Out is A - B.
+he_fast_runtime_arg_expr([*, A, B], Out) :-
+    number(A),
+    number(B), !,
+    Out is A * B.
+he_fast_runtime_arg_expr([+, A, [*, B, C]], Out) :-
+    number(A),
+    number(B),
+    number(C), !,
+    Out is A + (B * C).
+he_fast_runtime_arg_expr([+, [*, A, B], C], Out) :-
+    number(A),
+    number(B),
+    number(C), !,
+    Out is (A * B) + C.
+he_fast_runtime_arg_expr([Fun, A, B], Out) :-
+    nonvar(Fun),
+    he_fast_runtime_arg_fun(Fun),
+    he_fast_runtime_arg_value(A, AV),
+    he_fast_runtime_arg_value(B, BV),
+    he_fast_typed_call(Fun, [AV, BV], [], Out).
+
+he_fast_runtime_arg_fun('+').
+he_fast_runtime_arg_fun('-').
+he_fast_runtime_arg_fun('*').
+he_fast_runtime_arg_fun('/').
+he_fast_runtime_arg_fun('%').
+
+he_fast_runtime_arg_value(Arg, Eval) :-
+    nonvar(Arg),
+    is_list(Arg),
+    he_fast_runtime_arg_expr(Arg, Eval), !.
+he_fast_runtime_arg_value(Arg, Arg) :-
+    \+ is_list(Arg).
+
+he_eval_runtime_arg(Arg, Eval) :-
+    he_fast_runtime_arg_expr(Arg, Eval), !.
 he_eval_runtime_arg(Arg, Arg) :-
     he_runtime_arg_prefers_raw(Arg), !,
     he_perf_counter_inc(runtime_arg_raw_data_fast_paths).
@@ -1663,6 +1928,9 @@ he_eval_runtime_arg(Arg, Eval) :-
       Eval = Arg
     ).
 he_eval_runtime_arg(Arg, Arg).
+
+% Runtime head classification keeps the noncallable fast paths honest while the
+% callable cache absorbs repeated dynamic dispatch.
 
 he_noncallable_runtime_head(Head) :-
     he_perf_counter_inc(runtime_noncallable_head_checks),
@@ -1694,6 +1962,9 @@ he_apply_callable_result(partial(Fun, Bound), Args, Out) :-
     ;  he_perf_counter_inc(partial_apply_direct_fallbacks),
        he_eval_or_reduce([Fun|AllArgs], Out)
     ).
+he_apply_callable_result(Fun, Args, Out) :-
+    he_py_callable_head(Fun), !,
+    py_call_callable(Fun, Args, Out).
 he_apply_callable_result(Fun, Args, Out) :-
     atom(Fun),
     fun(Fun),
@@ -1919,10 +2190,19 @@ he_single_equation_arity(Fun, Arity) :-
 
 he_nth1_eq(1, [Head|_], Value) :-
     Head == Value, !.
+he_nth1_eq(N, List, Value) :-
+    var(N), !,
+    he_nth1_eq_from(List, Value, 1, N).
 he_nth1_eq(N, [_|Tail], Value) :-
     N > 1,
     N1 is N - 1,
     he_nth1_eq(N1, Tail, Value).
+
+he_nth1_eq_from([Head|_], Value, N, N) :-
+    Head == Value.
+he_nth1_eq_from([_|Tail], Value, N0, N) :-
+    N1 is N0 + 1,
+    he_nth1_eq_from(Tail, Value, N1, N).
 
 he_single_result_callable_param_positions(Fun, Arity, Positions) :-
     he_single_result_callable_param_positions_cache(Fun, Arity, Positions), !.
@@ -1956,6 +2236,7 @@ he_single_result_callable_param_position_in_expr(Expr, HeadArgs, Pos) :-
     member(Arg, Args),
     he_single_result_callable_param_position_in_expr(Arg, HeadArgs, Pos).
 
+he_single_result_callable_key(_Args, [], []) :- !.
 he_single_result_callable_key(Args, Positions, Key) :-
     findall(Arg,
             ( member(Pos, Positions),
@@ -2075,22 +2356,115 @@ he_single_result_call_plan_1(Fun, Arity, Positions, Args, Stack, safe) :-
     he_single_result_safe_expr(Body, Stack), !.
 he_single_result_call_plan_1(_Fun, _Arity, _Positions, _Args, _Stack, unsafe).
 
+he_single_result_ground_memo_candidate(Fun, Args) :-
+    ground(Args),
+    length(Args, Arity),
+    he_single_result_recursive_fun(Fun, Arity).
+
+he_single_result_recursive_fun(Fun, Arity) :-
+    he_single_result_recursive_fun_cache(Fun, Arity, yes), !.
+he_single_result_recursive_fun(Fun, Arity) :-
+    he_single_result_recursive_fun_cache(Fun, Arity, no), !,
+    fail.
+he_single_result_recursive_fun(Fun, Arity) :-
+    ( once(( he_eq_fact(Fun, Arity, _HeadArgs, Body),
+             he_expr_calls_fun_at_least(Fun, Body, 2)
+           ))
+    -> Decision = yes
+    ;  Decision = no
+    ),
+    assertz(he_single_result_recursive_fun_cache(Fun, Arity, Decision)),
+    Decision == yes.
+
+he_expr_calls_fun(Fun, Expr) :-
+    he_expr_call_count(Fun, Expr, Count),
+    Count > 0.
+
+he_expr_calls_fun_at_least(Fun, Expr, Need) :-
+    he_expr_call_count(Fun, Expr, Count),
+    Count >= Need.
+
+he_expr_call_count(Fun, Expr, Count) :-
+    he_expr_call_count(Fun, Expr, 0, Count).
+
+he_expr_call_count(_Fun, Expr, Count, Count) :-
+    var(Expr), !.
+he_expr_call_count(_Fun, Expr, Count, Count) :-
+    atomic(Expr), !.
+he_expr_call_count(_Fun, Expr, Count, Count) :-
+    nonvar(Expr),
+    Expr = [quote, _Quoted], !,
+    true.
+he_expr_call_count(Fun, Expr, Count0, Count) :-
+    nonvar(Expr),
+    is_list(Expr),
+    Expr = [Head|Items],
+    ( Head == Fun
+    -> Count1 is Count0 + 1
+    ;  he_expr_call_count(Fun, Head, Count0, Count1)
+    ),
+    he_expr_call_count_list(Fun, Items, Count1, Count).
+he_expr_call_count(Fun, Expr, Count0, Count) :-
+    nonvar(Expr),
+    compound(Expr),
+    \+ is_list(Expr),
+    compound_name_arguments(Expr, _Name, Args),
+    he_expr_call_count_list(Fun, Args, Count0, Count).
+
+he_expr_call_count_list(_Fun, [], Count, Count).
+he_expr_call_count_list(Fun, [Item|Items], Count0, Count) :-
+    he_expr_call_count(Fun, Item, Count0, Count1),
+    he_expr_call_count_list(Fun, Items, Count1, Count).
+
+he_single_result_compiled_call_or_self(Call, _Goal, Out) :-
+    Call = [Fun|Args],
+    atom(Fun),
+    he_single_result_ground_memo_candidate(Fun, Args),
+    he_single_result_call_plan(Fun, Args, safe),
+    he_single_result_ground_memo_hit(Fun, Args, Out), !.
 he_single_result_compiled_call_or_self(Call, Goal, Out) :-
     Call = [Fun|Args],
     atom(Fun),
     he_single_result_call_plan(Fun, Args, safe),
-    he_perf_counter_inc(compiled_equation_goal_single_result_calls),
+    he_note_single_result_direct_attempt,
     once(( call(Goal),
            he_capture_bound_call_out(Call, Out, BoundCall, BoundOut)
          )),
+    he_note_single_result_direct_hit(BoundOut),
+    Call = BoundCall,
+    Out = BoundOut,
+    he_single_result_ground_memo_store(Fun, Args, BoundOut).
+
+he_single_result_ground_memo_hit(Fun, Args, Out) :-
+    he_single_result_ground_memo_candidate(Fun, Args),
+    he_single_result_ground_memo_cache(Fun, Args, Out0), !,
+    Out = Out0.
+
+he_single_result_ground_memo_store(Fun, Args, Out) :-
+    he_single_result_ground_memo_candidate(Fun, Args),
+    ground(Out),
+    \+ he_empty_result(Out),
+    \+ he_error_atom(Out), !,
+    ( he_single_result_ground_memo_cache(Fun, Args, _)
+    -> true
+    ;  assertz(he_single_result_ground_memo_cache(Fun, Args, Out))
+    ).
+he_single_result_ground_memo_store(_, _, _).
+
+he_note_single_result_direct_attempt :-
+    he_perf_counters_enabled, !,
+    he_perf_counter_inc(compiled_equation_goal_single_result_calls).
+he_note_single_result_direct_attempt.
+
+he_note_single_result_direct_hit(BoundOut) :-
+    he_perf_counters_enabled, !,
     he_perf_counter_inc(compiled_equation_goal_single_direct_hits),
     he_perf_counter_add(compiled_equation_goal_raw_rows, 1),
     ( he_visible_result(BoundOut)
     -> he_perf_counter_add(compiled_equation_goal_visible_rows, 1)
     ;  true
-    ),
-    Call = BoundCall,
-    Out = BoundOut.
+    ).
+he_note_single_result_direct_hit(_).
 
 he_invalidate_effect_only_safe_fun_cache(Fun) :-
     atom(Fun), !,
@@ -2128,6 +2502,35 @@ he_effect_only_data_head(Head) :-
     \+ catch(nb_getval(Head, _), _, fail),
     \+ he_py_callable_head(Head).
 
+he_effect_only_safe_query_expr(Expr, Stack) :-
+    nonvar(Expr),
+    Expr = [Head, Space, Pattern, Body],
+    Head == match,
+    !,
+    he_effect_only_safe_arg_expr(Space, Stack),
+    he_effect_only_safe_arg_expr(Pattern, Stack),
+    he_effect_only_safe_arg_expr(Body, Stack).
+he_effect_only_safe_query_expr(Expr, Stack) :-
+    nonvar(Expr),
+    Expr = [Head, Inner],
+    Head == once,
+    !,
+    he_effect_only_safe_query_expr(Inner, Stack).
+he_effect_only_safe_query_expr(Expr, Stack) :-
+    nonvar(Expr),
+    Expr = [Head, Inner],
+    Head == collapse,
+    !,
+    he_effect_only_safe_query_expr(Inner, Stack).
+he_effect_only_safe_query_expr(Expr, Stack) :-
+    nonvar(Expr),
+    Expr = [Head, Inner],
+    Head == superpose,
+    !,
+    he_effect_only_safe_arg_expr(Inner, Stack).
+
+he_effect_only_safe_arg_expr(Expr, Stack) :-
+    he_effect_only_safe_query_expr(Expr, Stack), !.
 he_effect_only_safe_arg_expr(Expr, Stack) :-
     he_effect_only_safe_expr(Expr, Stack), !.
 he_effect_only_safe_arg_expr(Expr, _Stack) :-
@@ -2220,6 +2623,10 @@ he_effect_only_safe_expr([if, Cond, Then], Stack) :-
     !,
     he_effect_only_safe_arg_expr(Cond, Stack),
     he_effect_only_safe_expr(Then, Stack).
+he_effect_only_safe_expr([case, KeyExpr, Pairs], Stack) :-
+    !,
+    he_effect_only_safe_query_expr(KeyExpr, Stack),
+    he_effect_only_safe_case_pairs(Pairs, Stack).
 he_effect_only_safe_expr([let, Pat, Val, In], Stack) :-
     !,
     he_var_unused_in_expr(Pat, In),
@@ -2244,15 +2651,25 @@ he_effect_only_safe_expr([Head|Args], Stack) :-
 he_effect_only_safe_call(Head, Args, Stack) :-
     memberchk(Head, ['add-atom', 'remove-atom']), !,
     maplist({Stack}/[Arg]>>he_effect_only_safe_arg_expr(Arg, Stack), Args).
+he_effect_only_safe_call(empty, [], _) :- !.
 he_effect_only_safe_call(Head, Args, Stack) :-
     length(Args, Arity),
     maplist({Stack}/[Arg]>>he_effect_only_safe_arg_expr(Arg, Stack), Args),
     he_effect_only_safe_fun_1(Head, Arity, Stack).
 
+he_effect_only_safe_case_pairs([], _).
+he_effect_only_safe_case_pairs([[Pattern, Body]|Rest], Stack) :-
+    he_effect_only_safe_arg_expr(Pattern, Stack),
+    he_effect_only_safe_expr(Body, Stack),
+    he_effect_only_safe_case_pairs(Rest, Stack).
+
 he_effect_only_eval_arg(Arg, Eval) :-
     is_list(Arg), !,
-    ( he_eval_or_reduce(Arg, Eval)
-    ; Eval = Arg
+    State = state(no_success),
+    ( he_eval_or_reduce(Arg, Eval),
+      nb_setarg(1, State, success)
+    ; arg(1, State, no_success),
+      Eval = Arg
     ).
 he_effect_only_eval_arg(Arg, Arg).
 
@@ -2320,6 +2737,9 @@ he_effect_only_expr_1([if, Cond, Then]) :-
     -> he_effect_only_expr(Then)
     ;  true
     ).
+he_effect_only_expr_1([case, KeyExpr, Pairs]) :-
+    !,
+    he_effect_only_case(KeyExpr, Pairs).
 he_effect_only_expr_1([let, Pat, Val, In]) :-
     !,
     he_var_unused_in_expr(Pat, In),
@@ -2348,6 +2768,7 @@ he_effect_only_call(Head, Args) :-
     memberchk(Head, ['add-atom', 'remove-atom']), !,
     he_effect_only_eval_args(Args, EvalArgs),
     once(he_eval_or_reduce([Head|EvalArgs], _)).
+he_effect_only_call(empty, []) :- !.
 he_effect_only_call(Head, Args) :-
     length(Args, Arity),
     he_effect_only_native_plan(Head, Arity, Plan),
@@ -2365,6 +2786,26 @@ he_effect_only_call(Head, Args) :-
     copy_term(HeadArgs0-Body0, HeadArgs-Body),
     HeadArgs = EvalArgs,
     once(he_effect_only_expr(Body)).
+
+he_effect_only_case(KeyExpr, Pairs) :-
+    translate_expr_to_conj(KeyExpr, KeyConj, KeyValue),
+    ( call(KeyConj),
+      he_effect_only_case_pairs(Pairs, KeyValue),
+      fail
+    ; true
+    ).
+
+he_effect_only_case_pairs([], _).
+he_effect_only_case_pairs([[Pattern, Body]|Rest], KeyValue) :-
+    ( he_effect_only_case_pattern_matches(Pattern, KeyValue)
+    -> he_effect_only_expr(Body)
+    ;  he_effect_only_case_pairs(Rest, KeyValue)
+    ).
+
+he_effect_only_case_pattern_matches(Pattern, KeyValue) :-
+    he_constrain_args(Pattern, PatternValue, PatternGoals),
+    call_goals(PatternGoals),
+    KeyValue = PatternValue.
 
 he_effect_only_native_call(self_add_branching(Rel, AddOps, RecurOps), [Term, Depth]) :-
     integer(Depth),
@@ -2533,7 +2974,8 @@ he_finalize_single_equation_goal_result(State, Resolution) :-
        Resolution = collect([], RawResults)
     ; Mode == visible
     -> arg(4, State, VisibleAcc),
-       Resolution = collect(VisibleAcc, [])
+       reverse(VisibleAcc, VisibleResults),
+       Resolution = collect(VisibleResults, [])
     ).
 
 he_single_equation_goal_result(Call, Goal, Out, Resolution) :-
@@ -2740,7 +3182,7 @@ he_build_compiled_equation_first_visible(Call, Out, Goal) :-
     he_profile_enabled,
     nonvar(Call),
     is_list(Call),
-    he_build_native_datastructure_first_visible_goal(Call, Out, DirectGoal), !,
+    he_build_native_contract_first_visible_goal(Call, Out, DirectGoal), !,
     Goal = once(DirectGoal).
 he_build_compiled_equation_first_visible(Call, Out, Goal) :-
     he_profile_enabled,
@@ -2749,10 +3191,18 @@ he_build_compiled_equation_first_visible(Call, Out, Goal) :-
     he_compiled_equation_goal(Call, Out, CompiledGoal), !,
     Goal = he_call_compiled_equation_first_visible(Call, CompiledGoal, Out).
 
+he_call_compiled_equation_or_self([iterate, I, N, State, Step], _Goal, Out) :-
+    he_profile_enabled,
+    integer(I),
+    integer(N),
+    N >= 0, !,
+    he_native_iterate(I, N, State, Step, Out).
 he_call_compiled_equation_or_self(Call, _Goal, Out) :-
     he_profile_enabled,
     he_build_native_queue_search_goal(Call, Out, DirectGoal), !,
     call(DirectGoal).
+he_call_compiled_equation_or_self(Call, Goal, Out) :-
+    he_single_result_compiled_call_or_self(Call, Goal, Out), !.
 he_call_compiled_equation_or_self(Call, Goal, Out) :-
     he_single_equation_call(Call), !,
     he_single_equation_goal_result(Call, Goal, Out, Resolution),
@@ -2826,6 +3276,35 @@ he_maplist_reduce([], _Func, []).
 he_maplist_reduce([X|Xs], Func, [Y|Ys]) :-
     he_eval_or_reduce([Func, X], Y),
     he_maplist_reduce(Xs, Func, Ys).
+
+he_filterlist_reduce([], _Func, []).
+he_filterlist_reduce([X|Xs], Func, Out) :-
+    he_eval_or_reduce([Func, X], Keep),
+    he_filterlist_reduce(Xs, Func, Rest),
+    ( (Keep == true ; Keep == 'True')
+    -> Out = [X|Rest]
+    ;  Out = Rest
+    ).
+
+he_native_iterate(_I, 0, State, _Step, State) :- !.
+he_native_iterate(I, N, State, Step, Out) :-
+    atom(Step),
+    he_compiled_goal_user_functor(Step, 3, UserFun), !,
+    he_native_iterate_compiled(UserFun, I, N, State, Out).
+he_native_iterate(I, N, State0, Step, Out) :-
+    N > 0,
+    once(he_eval_or_reduce([Step, I, State0], State1)),
+    I1 is I + 1,
+    N1 is N - 1,
+    he_native_iterate(I1, N1, State1, Step, Out).
+
+he_native_iterate_compiled(_UserFun, _I, 0, State, State) :- !.
+he_native_iterate_compiled(UserFun, I, N, State0, Out) :-
+    N > 0,
+    once(call(UserFun, I, State0, State1)),
+    I1 is I + 1,
+    N1 is N - 1,
+    he_native_iterate_compiled(UserFun, I1, N1, State1, Out).
 
 he_foldl_reduce([], _Func, Acc, Acc).
 he_foldl_reduce([X|Xs], Func, Acc0, Out) :-

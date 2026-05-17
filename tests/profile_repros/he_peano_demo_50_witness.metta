@@ -22,7 +22,7 @@
           ($g (expandK $K)))
          (match &self (num $1) $1)))
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (let $__tr_tuple_1 (collapse (demo-peano 50))
        (size-atom $__tr_tuple_1))
   51)

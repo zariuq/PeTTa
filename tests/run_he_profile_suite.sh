@@ -126,7 +126,10 @@ run_case 'default PeTTa does not expose HE arithmetic helpers' "$RUN_SH" "$ROOT/
 run_case 'PeTTa --he private user-head namespace' "$RUN_SH" --he "$ROOT/tests/he_private_namespace.metta" --silent
 run_case 'PeTTa --he partial callables' "$RUN_SH" --he "$ROOT/tests/he_partial_application.metta" --silent
 run_case 'PeTTa --he variable-head data' "$RUN_SH" --he "$ROOT/tests/he_variable_head_data.metta" --silent
-run_case 'PeTTa --he translated PeTTa test compatibility' "$RUN_SH" --he "$ROOT/tests/he_petta_test_compat.metta" --silent
+run_case 'PeTTa --he source test lowered to assertEqualToEval' "$RUN_SH" --he "$ROOT/tests/he_source_test_assert_equal_to_eval.metta" --silent
+run_case 'PeTTa --he assertEqualToEval surface' "$RUN_SH" --he "$ROOT/tests/he_assert_equal_to_eval_surface.metta" --silent
+run_case 'PeTTa --he library import surface' "$RUN_SH" --he "$ROOT/tests/he_library_import_surface.metta" --silent
+run_case 'PeTTa --he collapse tuple cartesian surface' "$RUN_SH" --he "$ROOT/tests/he_collapse_tuple_cartesian_surface.metta" --silent
 run_case 'PeTTa --he dynamic callable returns' "$RUN_SH" --he "$ROOT/tests/he_dynamic_callable_return.metta" --silent
 run_case 'PeTTa --he expression-head callables' "$RUN_SH" --he "$ROOT/tests/he_expression_head_callable.metta" --silent
 run_case 'PeTTa --he destructured let expression patterns' "$RUN_SH" --he "$ROOT/tests/he_destructured_let_expr_pattern.metta" --silent
@@ -137,6 +140,13 @@ run_case 'PeTTa --he bind-visible laziness regression' "$RUN_SH" --he "$ROOT/tes
 run_case 'PeTTa --he assertEqualMsg expected single evaluation' "$RUN_SH" --he "$ROOT/tests/he_assert_equal_msg_expected_single_eval.metta" --silent
 run_case 'PeTTa --he match-once echo emptiness surface' "$RUN_SH" --he "$ROOT/tests/he_match_once_pattern_empty_surface.metta" --silent
 run_case 'PeTTa --he identity-body match surface' "$RUN_SH" --he "$ROOT/tests/he_match_identity_body_surface.metta" --silent
+run_case 'PeTTa --he callable tuple return surface' "$RUN_SH" --he "$ROOT/tests/he_callable_tuple_return_surface.metta" --silent
+run_case 'PeTTa --he reverse function pattern surface' "$RUN_SH" --he "$ROOT/tests/he_reverse_function_pattern_surface.metta" --silent
+run_case 'PeTTa --he data tuple preserves unknown heads' "$RUN_SH" --he "$ROOT/tests/he_data_tuple_preserves_unknown_head.metta" --silent
+run_case 'PeTTa --he data tuple preserves list heads' "$RUN_SH" --he "$ROOT/tests/he_data_tuple_preserves_list_head.metta" --silent
+run_case 'PeTTa --he variable functor data tuple surface' "$RUN_SH" --he "$ROOT/tests/he_variable_functor_data_tuple_surface.metta" --silent
+run_case 'PeTTa --he constructor-like callable arg surface' "$RUN_SH" --he "$ROOT/tests/he_constructor_like_callable_arg_surface.metta" --silent
+run_case 'PeTTa --he alpha equality evaluates args surface' "$RUN_SH" --he "$ROOT/tests/he_alpha_eq_evaluates_args_surface.metta" --silent
 run_case 'PeTTa --he effectful tuple head regression' "$RUN_SH" --he "$ROOT/tests/he_effectful_data_tuple_head_regression.metta" --silent
 run_case 'PeTTa --he unused binding recursive effect-only surface' "$RUN_SH" --he "$ROOT/tests/he_unused_binding_effect_only_recursive_surface.metta" --silent
 run_case 'PeTTa --he unused binding recursive multivalue arg multiplicity' "$RUN_SH" --he "$ROOT/tests/he_unused_binding_recursive_multivalue_arg_preserves_multiplicity.metta" --silent
@@ -156,11 +166,22 @@ run_case 'PeTTa --he foldl over bound collapse streaming surface' "$RUN_SH" --he
 run_case 'PeTTa --he foldl over nested bound collapse streaming surface' "$RUN_SH" --he "$ROOT/tests/he_foldl_bound_collapse_nested_stream_surface.metta" --silent
 run_case 'PeTTa --he eval-count length surface' "$RUN_SH" --he "$ROOT/tests/he_count_eval_expr_surface.metta" --silent
 run_case 'PeTTa --he counted visible match surface' "$RUN_SH" --he "$ROOT/tests/he_count_visible_match_surface.metta" --silent
+run_case 'PeTTa --he matespace count contract surface' "$RUN_SH" --he "$ROOT/tests/he_matespace_count_contract_surface.metta" --silent
+run_case 'PeTTa --he matespace2 count contract surface' "$RUN_SH" --he "$ROOT/tests/he_matespace2_count_contract_surface.metta" --silent
+run_case 'PeTTa --he peano count contract surface' "$RUN_SH" --he "$ROOT/tests/he_peano_count_contract_surface.metta" --silent
+run_case 'PeTTa --he permutation count contract surface' "$RUN_SH" --he "$ROOT/tests/he_permutation_count_contract_surface.metta" --silent
+run_case 'PeTTa --he scale indexing contract surface' "$RUN_SH" --he "$ROOT/tests/he_scale_indexing_contract_surface.metta" --silent
 run_case 'PeTTa --he unique-space fold surface' "$RUN_SH" --he "$ROOT/tests/he_unique_space_fold_surface.metta" --silent
 run_case 'PeTTa --he once/select compiled equation surface' "$RUN_SH" --he "$ROOT/tests/he_once_select_compiled_equation_surface.metta" --silent
 run_case 'PeTTa --he higher-order curry full application' "$RUN_SH" --he "$ROOT/tests/he_higherorder_curry_call.metta" --silent
 run_case 'PeTTa --he higher-order fmap empty constructor tail' "$RUN_SH" --he "$ROOT/tests/he_higherorder_fmap_empty_constructor.metta" --silent
+run_case 'PeTTa --he lambda namespace surface' "$RUN_SH" --he "$ROOT/tests/he_lambda_namespace.metta" --silent
+run_case 'PeTTa --he filter-atom function surface' "$RUN_SH" --he "$ROOT/tests/he_filter_atom_function_surface.metta" --silent
+run_case 'PeTTa --he partial intrinsic equality surface' "$RUN_SH" --he "$ROOT/tests/he_partial_intrinsic_eq_surface.metta" --silent
+run_case 'PeTTa --he logic-programming size constraint surface' "$RUN_SH" --he "$ROOT/tests/he_logicprogset_size_constraint_surface.metta" --silent
+run_case 'PeTTa --he iterate compiled step surface' "$RUN_SH" --he "$ROOT/tests/he_iterate_compiled_step_surface.metta" --silent
 run_case 'PeTTa --he chain cut side effects' "$RUN_SH" --he "$ROOT/tests/he_chain_cut_side_effect.metta" --silent
+run_case 'PeTTa --he bound cut match surface' "$RUN_SH" --he "$ROOT/tests/he_cut_bound_match_surface.metta" --silent
 run_case 'PeTTa --he add-unique-or-fail compatibility' "$RUN_SH" --he "$ROOT/tests/he_add_unique_or_fail_native.metta" --silent
 run_case 'PeTTa --he exact repr membership surface' "$RUN_SH" --he "$ROOT/tests/he_space_exact_repr_surface.metta" --silent
 run_case 'PeTTa --he functional queue native surface' "$RUN_SH" --he "$ROOT/tests/he_functional_queue_native_surface.metta" --silent
@@ -180,11 +201,14 @@ run_case 'PeTTa --he ordered space surfaces' "$RUN_SH" --he "$ROOT/tests/he_orde
 run_case 'PeTTa --he string/debug/sealed surfaces' "$RUN_SH" --he "$ROOT/tests/he_string_debug_surface.metta" --silent
 run_case 'PeTTa --he assertIncludes helper surface' "$RUN_SH" --he "$ROOT/tests/he_assert_includes_surface.metta" --silent
 run_case 'PeTTa --he eval preserves explicit superpose surface' "$RUN_SH" --he "$ROOT/tests/he_eval_superpose_surface.metta" --silent
+run_case 'PeTTa --he quoted eval code-input surface' "$RUN_SH" --he "$ROOT/tests/he_eval_quoted_expr_surface.metta" --silent
+run_case 'PeTTa --he unique evaluates argument surface' "$RUN_SH" --he "$ROOT/tests/he_unique_evaluates_argument_surface.metta" --silent
 run_case 'PeTTa --he function NoReturn surface' "$RUN_SH" --he "$ROOT/tests/he_no_return_error_surface.metta" --silent
 expect_output 'PeTTa --he NoReturn harness policy guardrail' \
     "$ROOT/tests/expected/he_no_return_policy_guardrail.expected" \
     "$ROOT/tests/tools/check_no_return_policy_guardrail.sh"
 run_case 'PeTTa --he add-atoms surface' "$RUN_SH" --he "$ROOT/tests/he_add_atoms_surface.metta" --silent
+run_case 'PeTTa --he ground recursive memo surface' "$RUN_SH" --he "$ROOT/tests/he_ground_recursive_memo_surface.metta" --silent
 run_case 'PeTTa --he textual parser surface' "$RUN_SH" --he "$ROOT/tests/he_textual_parser_surface.metta" --silent
 run_case 'PeTTa --he zero-arg atom-head callable expressions' "$RUN_SH" --he "$ROOT/tests/he_zero_arg_atom_head_callable.metta" --silent
 run_case 'PeTTa --he import cycle transactional rollback' "$RUN_SH" --he "$ROOT/tests/he_import_cycle_transactional.metta" --silent
@@ -193,6 +217,7 @@ run_case 'PeTTa --he specialization type facts' "$RUN_SH" --he "$ROOT/tests/he_s
 run_case 'PeTTa --he typechain cache invalidation' "$RUN_SH" --he "$ROOT/tests/he_typechain_cache_invalidation.metta" --silent
 run_case 'PeTTa --he dynamic equation metadata removal' "$RUN_SH" --he "$ROOT/tests/he_dynamic_equation_metadata_remove.metta" --silent
 run_case 'PeTTa --he runtime callable negative cache invalidation' "$RUN_SH" --he "$ROOT/tests/he_runtime_callable_negative_cache_invalidation.metta" --silent
+run_case 'PeTTa --he nested match effect tuple surface' "$RUN_SH" --he "$ROOT/tests/he_matchnested_effect_tuple_surface.metta" --silent
 run_case 'PeTTa --he get-type data tuples' "$RUN_SH" --he "$ROOT/tests/he_get_type_data_tuple.metta" --silent
 run_case 'PeTTa --he composite wildcard type matching' "$RUN_SH" --he "$ROOT/tests/he_match_types_composite_wildcard.metta" --silent
 run_case 'PeTTa --he polymorphic return alternate type' "$RUN_SH" --he "$ROOT/tests/he_polymorphic_return_alternate_type.metta" --silent

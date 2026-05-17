@@ -2,10 +2,6 @@
 ; This keeps the stateful add/match semantics of the full example but uses a
 ; small K so correctness can be certified separately from the full workload.
 
-(= (count-demo $expr)
-   (let $tuple (eval $expr)
-        (size-atom $tuple)))
-
 (= (add-atom-no-duplicate $Space $Atom)
    (if (== () (collapse (once (match $Space $Atom $Atom))))
        (add-atom $Space $Atom)
@@ -33,6 +29,7 @@
           ($h (mate)))
          (match &self (num $1) (num $1))))
 
-!(test
-  (count-demo (collapse (mate-space-demo 4)))
+!(assertEqualToEval
+  (let $tuple (collapse (mate-space-demo 4))
+       (size-atom $tuple))
   103)

@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (11 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_equalreduct.metta
+; Source: examples/he_equalreduct.metta
 
 !(import! &self ../../lib/lib_he.metta)
 (= (add 1 2) 3)

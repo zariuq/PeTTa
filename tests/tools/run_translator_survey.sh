@@ -7,8 +7,7 @@
 #      then run --he and capture wall/rss/exit.
 #   3. For hyperpose-bearing sources, also run the preserve-hyperpose
 #      compatibility lane.
-#   4. Classify the row using the vocabulary from the brief at
-#      tmp/hepetta_examples_translation_bench_instructions_20260425.md
+#   4. Classify the row using survey categories
 #      (translated_passes, correct_but_perf_gap, translator_gap_*,
 #       he_runtime_gap_*, portable_extension_lowered,
 #      petta_specific_no_translation, external_or_interactive,
@@ -31,10 +30,12 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 RUN_SH=${RUN_SH:-"$ROOT/run.sh"}
-TRANSLATE_SH=${TRANSLATE_SH:-/home/zar/claude/hyperon/translators/translate.sh}
+TRANSLATE_SH=${TRANSLATE_SH:-"$ROOT/../translators/translate.sh"}
 LABEL_HE_EXAMPLES_SH=${LABEL_HE_EXAMPLES_SH:-"$ROOT/tests/tools/label_petta_he_examples.sh"}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
 WITNESS_TIMEOUT_SECONDS=${WITNESS_TIMEOUT_SECONDS:-20}
+PERF_RATIO_LIMIT=${PERF_RATIO_LIMIT:-2.23}
+PERF_STARTUP_ALLOWANCE_SECONDS=${PERF_STARTUP_ALLOWANCE_SECONDS:-0.25}
 LIMIT_KB=${LIMIT_KB:-10485760}
 SWIPL_THREADS=${SWIPL_THREADS:-false}
 HE_LOG_DIR=${HE_LOG_DIR:-"$ROOT/.he-logs"}
@@ -68,7 +69,14 @@ fi
 
 ulimit -v "$LIMIT_KB"
 export SWIPL_THREADS
-mkdir -p "$HE_LOG_DIR" "$GENERATED_DIR" "$GAPS_DIR"
+mkdir -p "$HE_LOG_DIR" "$GENERATED_DIR"
+if [ "$RESUME" != 1 ]; then
+    case "$GAPS_DIR" in
+        "$HE_LOG_DIR"/*) rm -rf -- "$GAPS_DIR" ;;
+        *) printf 'refusing to clear unexpected GAPS_DIR: %s\n' "$GAPS_DIR" >&2; exit 65 ;;
+    esac
+fi
+mkdir -p "$GAPS_DIR"
 : > "$LOG"
 
 if [ "$RESUME" = 1 ] && [ -s "$INVENTORY" ]; then
@@ -82,7 +90,7 @@ if [ "$RESUME" = 1 ] && [ -s "$INVENTORY" ]; then
 else
     # Headers (overwrite for fresh runs).
     printf 'source\tpure_portable_category\tpure_portable_translated\tdefault_exit\tpure_portable_he_exit\tpure_portable_reason\tpure_portable_next_action\tpreserve_hyperpose_category\tpreserve_hyperpose_translated\tpreserve_hyperpose_he_exit\tpreserve_hyperpose_reason\tpreserve_hyperpose_next_action\n' > "$INVENTORY"
-    printf 'source\tpure_portable_translated\tpreserve_hyperpose_translated\tdefault_wall\tdefault_rss\tpure_portable_wall\tpure_portable_rss\tpreserve_hyperpose_wall\tpreserve_hyperpose_rss\tpure_portable_ratio_wall\tpreserve_hyperpose_ratio_wall\tpure_portable_category\tpreserve_hyperpose_category\tnotes\n' > "$BENCH"
+    printf 'source\tpure_portable_translated\tpreserve_hyperpose_translated\tdefault_wall\tdefault_rss\tpure_portable_wall\tpure_portable_rss\tpreserve_hyperpose_wall\tpreserve_hyperpose_rss\tpure_portable_ratio_wall\tpreserve_hyperpose_ratio_wall\tpure_portable_category\tpreserve_hyperpose_category\tnotes\tpure_portable_perf_budget_wall\tpure_portable_perf_budget_status\tpreserve_hyperpose_perf_budget_wall\tpreserve_hyperpose_perf_budget_status\n' > "$BENCH"
     declare -A RESUME_DONE=()
 fi
 
@@ -216,6 +224,28 @@ is_timeout_rc() {
     esac
 }
 
+perf_budget_wall() {
+    local default_wall=$1
+    awk -v base="$default_wall" \
+        -v ratio="$PERF_RATIO_LIMIT" \
+        -v allowance="$PERF_STARTUP_ALLOWANCE_SECONDS" \
+        'BEGIN {
+             if (base == "NA" || base + 0 <= 0) print "NA";
+             else printf "%.3f", (base * ratio) + allowance;
+         }'
+}
+
+perf_budget_status() {
+    local he_wall=$1
+    local budget_wall=$2
+    awk -v actual="$he_wall" -v budget="$budget_wall" \
+        'BEGIN {
+             if (actual == "NA" || budget == "NA") print "unknown";
+             else if (actual + 0 <= budget + 0 + 0.0005) print "ok";
+             else print "gap";
+         }'
+}
+
 # ------------------------------------------------------------------
 # Per-file processing
 # ------------------------------------------------------------------
@@ -347,13 +377,27 @@ classify_and_record() {
     he_stdout=${rest3%%$'\037'*}
     he_stderr=${rest3#*$'\037'}
 
+    local portable_budget_wall portable_budget_status
+    portable_budget_wall=$(perf_budget_wall "$default_wall")
+    portable_budget_status=$(perf_budget_status "$he_wall" "$portable_budget_wall")
+
     # ----- Classify pure portable HE lane -----
     local portable_category portable_reason portable_next_action
     local portable_extension_lowered=0
     if [ "$he_rc" = 0 ] && ! has_assert_failure "$he_stdout" && ! has_assert_failure "$he_stderr"; then
-        portable_category=translated_passes
-        portable_reason='portable translator output runs cleanly under --he'
-        portable_next_action='-'
+        if [ "$portable_budget_status" = gap ]; then
+            portable_category=correct_but_perf_gap
+            portable_reason="portable translator output is correct, but --he wall=${he_wall}s exceeds budget=${portable_budget_wall}s (${PERF_RATIO_LIMIT}x native + ${PERF_STARTUP_ALLOWANCE_SECONDS}s)"
+            portable_next_action='profile the translated workload or raise the explicit performance budget'
+            printf 'source=%s\ndefault_wall=%s\nhe_wall=%s\nbudget_wall=%s\nformula=he_wall <= default_wall * %s + %ss\n' \
+                "$rel" "$default_wall" "$he_wall" "$portable_budget_wall" \
+                "$PERF_RATIO_LIMIT" "$PERF_STARTUP_ALLOWANCE_SECONDS" \
+                > "$GAPS_DIR/${base}.perf.txt"
+        else
+            portable_category=translated_passes
+            portable_reason='portable translator output runs cleanly under --he within the wall-time performance budget'
+            portable_next_action='-'
+        fi
     else
         if [ "$parallel_lane_kind" = hyperpose ]; then
             portable_category=he_runtime_extension_gap
@@ -389,6 +433,7 @@ classify_and_record() {
     # ----- Optional preserve-hyperpose compatibility lane -----
     local parallel_category=- parallel_reason=- parallel_next_action=-
     local parallel_he_rc=- parallel_he_wall=NA parallel_he_rss=NA
+    local parallel_budget_wall=NA parallel_budget_status=-
     local parallel_stdout= parallel_stderr=
     if [ "$parallel_lane_kind" = hyperpose ]; then
         local trans_parallel_log="$GAPS_DIR/${base}.translate_parallel.stderr"
@@ -411,11 +456,23 @@ classify_and_record() {
             rest3=${rest2#*$'\t'}
             parallel_stdout=${rest3%%$'\037'*}
             parallel_stderr=${rest3#*$'\037'}
+            parallel_budget_wall=$(perf_budget_wall "$default_wall")
+            parallel_budget_status=$(perf_budget_status "$parallel_he_wall" "$parallel_budget_wall")
 
             if [ "$parallel_he_rc" = 0 ] && ! has_assert_failure "$parallel_stdout" && ! has_assert_failure "$parallel_stderr"; then
-                parallel_category=translated_passes
-                parallel_reason='preserve-hyperpose translator output runs cleanly under --he'
-                parallel_next_action='-'
+                if [ "$parallel_budget_status" = gap ]; then
+                    parallel_category=correct_but_perf_gap
+                    parallel_reason="preserve-hyperpose translator output is correct, but --he wall=${parallel_he_wall}s exceeds budget=${parallel_budget_wall}s (${PERF_RATIO_LIMIT}x native + ${PERF_STARTUP_ALLOWANCE_SECONDS}s)"
+                    parallel_next_action='profile the translated _he_parallel workload or raise the explicit performance budget'
+                    printf 'source=%s\ndefault_wall=%s\nhe_wall=%s\nbudget_wall=%s\nformula=he_wall <= default_wall * %s + %ss\n' \
+                        "$rel" "$default_wall" "$parallel_he_wall" "$parallel_budget_wall" \
+                        "$PERF_RATIO_LIMIT" "$PERF_STARTUP_ALLOWANCE_SECONDS" \
+                        > "$GAPS_DIR/${base}.perf_parallel.txt"
+                else
+                    parallel_category=translated_passes
+                    parallel_reason='preserve-hyperpose translator output runs cleanly under --he within the wall-time performance budget'
+                    parallel_next_action='-'
+                fi
             elif is_timeout_rc "$parallel_he_rc" && [ "$witness_passed" = 1 ]; then
                 parallel_category=correct_but_perf_gap
                 parallel_reason="parallel full translated run timed out, but reduced witness $witness_rel passes under --he"
@@ -474,10 +531,12 @@ classify_and_record() {
     fi
     if [ "$portable_category" = translated_passes ] || [ "$portable_category" = correct_but_perf_gap ] || \
        [ "$parallel_category" = translated_passes ] || [ "$parallel_category" = correct_but_perf_gap ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$rel" "$rel_gen" "$rel_gen_parallel" "$default_wall" "$default_rss" \
             "$he_wall" "$he_rss" "$parallel_he_wall" "$parallel_he_rss" \
             "$portable_ratio" "$parallel_ratio" "$portable_category" "$parallel_category" "-" \
+            "$portable_budget_wall" "$portable_budget_status" \
+            "$parallel_budget_wall" "$parallel_budget_status" \
             >> "$BENCH"
     fi
     if [ -n "$witness_path" ]; then
@@ -517,8 +576,15 @@ count_cat_col() {
     awk -F'\t' -v c="$1" -v col="$2" 'NR>1 && $col==c {n++} END{print n+0}' "$INVENTORY"
 }
 
+count_bench_status_col() {
+    awk -F'\t' -v c="$1" -v col="$2" 'NR>1 && $col==c {n++} END{print n+0}' "$BENCH"
+}
+
 {
     printf '\n--- inventory summary ---\n'
+    printf '  perf_budget_formula: he_wall <= default_wall * %s + %ss\n' "$PERF_RATIO_LIMIT" "$PERF_STARTUP_ALLOWANCE_SECONDS"
+    printf '  pure_portable_perf_budget_ok: %s\n' "$(count_bench_status_col ok 16)"
+    printf '  pure_portable_perf_budget_gap: %s\n' "$(count_bench_status_col gap 16)"
     printf '  pure_portable_translated_passes: %s\n' "$(count_cat_col translated_passes 2)"
     printf '  pure_portable_correct_but_perf_gap: %s\n' "$(count_cat_col correct_but_perf_gap 2)"
     printf '  petta_he_extended_needed: %s\n' "$(count_cat_col portable_extension_lowered 2)"

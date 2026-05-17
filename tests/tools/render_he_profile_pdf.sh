@@ -95,15 +95,15 @@ EOF
 ### A.4 How To Refresh This PDF
 
 ```bash
-cd /home/zar/claude/hyperon/petta-he-profile
+cd <petta-he-profile>
 
 # 1. Run the guarded local HE profile suite.
-HE_METTA_BIN=/home/zar/miniconda3/envs/hyperon/bin/metta \
+HE_METTA_BIN=/path/to/metta \
 LIMIT_KB=3145728 SWIPL_STACK_LIMIT=1g SWIPL_THREADS=false TIMEOUT_SECONDS=180 \
 tests/run_he_profile_suite.sh > .he-logs/he_profile_suite_manual_refresh.log 2>&1
 
 # 2. Run the guarded HE corpus and regenerate the severity TSV.
-HE_METTA_BIN=/home/zar/miniconda3/envs/hyperon/bin/metta \
+HE_METTA_BIN=/path/to/metta \
 LIMIT_KB=3145728 SWIPL_STACK_LIMIT=1g SWIPL_THREADS=false TIMEOUT_SECONDS=180 \
 tests/run_he_corpus_bundle.sh
 

@@ -583,6 +583,7 @@ he_eval_in_space_for_metta(Atom, Space, Raw) :-
     he_evalc_in_space(Atom, Space, Raw).
 
 he_metta_eval_special_raw(Atom, [eval, Atom], Atom) :- !.
+he_metta_eval_special_raw(Atom, [quote, Atom], Atom) :- !.
 he_metta_eval_special_raw(_Atom, EvalRaw, EvalRaw).
 
 he_metta_success_value(Atom, Type, Space, Out) :-

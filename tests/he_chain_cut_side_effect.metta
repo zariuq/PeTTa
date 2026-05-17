@@ -4,4 +4,4 @@
 (= (=> $A $C $stvImp)
    (add-atom &self (= $C two)))
 !(=> (, a b) c tv)
-!(assertPeTTaTest (collapse (match &self (= c $body) $body)) (one))
+!(assertEqualToEval (collapse (match &self (= c $body) $body)) (one))

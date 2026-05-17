@@ -47,4 +47,4 @@
           ($Q1 (enqueue $Start (empty-queue))))
      (bfs_loop_limited $Q1 0 $limit)))
 
-!(assertPeTTaTest (bfs_all_limited (___ 1 2 3 4 5 6 7 8) 500) 500)
+!(assertEqualToEval (bfs_all_limited (___ 1 2 3 4 5 6 7 8) 500) 500)

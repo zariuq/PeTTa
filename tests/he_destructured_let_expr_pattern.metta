@@ -1,3 +1,3 @@
-!(assertPeTTaTest
+!(assertEqualToEval
   (let ($x (42 (if (== $x 2) 43 44))) (3 (42 $z)) (+ $x $z))
   47)

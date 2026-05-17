@@ -3,4 +3,4 @@
 !(import! &self ../../lib/lib_roman.metta)
 
 !(println! "DEBUG: mylast")
-!(assertPeTTaTest (let (mylast $x) (1 2 3) $x) 3)
+!(assertEqualToEval (let (mylast $x) (1 2 3) $x) 3)

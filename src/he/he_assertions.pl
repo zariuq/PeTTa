@@ -1,4 +1,4 @@
-:- meta_predicate he_collect_petta_test_actual(?, 0, ?, ?).
+:- meta_predicate he_collect_assert_eval_actual(?, 0, ?, ?).
 
 he_result_key(Term, Key) :-
     he_public_result(Term, Public),
@@ -10,6 +10,9 @@ he_result_key(Term, Key) :-
 he_public_result(Term, Public) :-
     cyclic_term(Term), !,
     Public = Term.
+he_public_result([quote, Term], Public) :-
+    !,
+    he_public_syntax_result(Term, Public).
 he_public_result(Term, Public) :-
     nonvar(Term),
     Term = partial(Fun, Args), !,
@@ -19,6 +22,19 @@ he_public_result(Term, Public) :-
     is_list(Term), !,
     he_public_result_list(Term, Public).
 he_public_result(Term, Term).
+
+he_public_syntax_result(Term, Public) :-
+    ( var(Term)
+    ; atomic(Term)
+    ), !,
+    Public = Term.
+he_public_syntax_result(Term, Public) :-
+    is_list(Term), !,
+    maplist(he_public_syntax_result, Term, Public).
+he_public_syntax_result(Term, Public) :-
+    Term =.. [F|Args],
+    maplist(he_public_syntax_result, Args, PublicArgs),
+    Public =.. [F|PublicArgs].
 
 he_public_result_list([], []).
 he_public_result_list([Term|Terms], [Public|Publics]) :-
@@ -57,40 +73,50 @@ he_assert_set_results(Label, Actuals, Expecteds, []) :-
              [RLabel, RExpecteds, RActuals]),
       halt(1) ).
 
-he_petta_test_matches(Actual, Expected) :-
+he_collect_source_test_actual(ExprConj, ExprVal, Actual) :-
+    he_collect_visible_results(ExprConj, ExprVal, Results),
+    ( Results = [Only]
+    -> Actual = Only
+    ;  Actual = Results
+    ).
+
+he_assert_equal_to_eval(Label, Actual, Expected, true) :-
+    ( he_assert_eval_matches(Actual, Expected)
+    -> true
+    ; swrite(Label, RLabel),
+      he_public_result(Actual, PublicActual),
+      he_public_result(Expected, PublicExpected),
+      swrite(PublicActual, RActual),
+      swrite(PublicExpected, RExpected),
+      format("Assertion failed: ~w~nExpected: ~w~nActual: ~w~n",
+             [RLabel, RExpected, RActual]),
+      halt(1)
+    ).
+
+he_assert_eval_matches(Actual, Expected) :-
     var(Expected), !,
     Expected = Actual.
-he_petta_test_matches(Actual, Expected) :-
+he_assert_eval_matches(Actual, Expected) :-
     he_result_key(Actual, ActualKey),
     he_result_key(Expected, ExpectedKey),
     ActualKey == ExpectedKey.
 
-he_collect_petta_test_actual(ExprVal, ExprConj, Expected, Actual) :-
+he_collect_assert_eval_actual(ExprVal, ExprConj, Expected, Actual) :-
     findnsols(2, ExprVal, ExprConj, Sampled),
     ( Sampled = [First|_],
-      he_petta_test_matches(First, Expected)
+      he_assert_eval_matches(First, Expected)
     -> Actual = First
     ; Sampled = [Actual]
     -> true
     ; findall(ExprVal, ExprConj, Results),
       ( Results = [First|_],
-        he_petta_test_matches(First, Expected)
+        he_assert_eval_matches(First, Expected)
       -> Actual = First
       ; Results = [Actual]
       -> true
       ; Actual = Results
       )
     ).
-
-he_assert_petta_test(Label, Actual, Expected, true) :-
-    ( he_petta_test_matches(Actual, Expected)
-    -> true
-    ; swrite(Label, RLabel),
-      swrite(Actual, RActual),
-      swrite(Expected, RExpected),
-      format("Assertion failed: ~w~nExpected: ~w~nActual: ~w~n",
-             [RLabel, RExpected, RActual]),
-      halt(1) ).
 
 he_assert_same_results_or_error(Subject, Actuals, Expecteds, Msg, Out) :-
     ( he_same_results(Actuals, Expecteds)

@@ -229,11 +229,14 @@ member(X, L, true) :- member(X, L).
 'readln!'(Out) :- read_line_to_string(user_input, Str),
                   sread(Str, Out).
 
-test(A,B,true) :- (A =@= B -> E = '✅' ; E = '❌'),
-                  swrite(A, RA),
-                  swrite(B, RB),
+test(A,B,true) :-
+                  he_public_term(A, APublic),
+                  he_public_term(B, BPublic),
+                  (APublic =@= BPublic -> E = '✅' ; E = '❌'),
+                  swrite_public(A, RA),
+                  swrite_public(B, RB),
                   format("is ~w, should ~w. ~w ~n", [RA, RB, E]),
-                  (A =@= B -> true ; halt(1)).
+                  (APublic =@= BPublic -> true ; halt(1)).
 
 assert(Goal, true) :- ( call(Goal) -> true
                                     ; swrite(Goal, RG),

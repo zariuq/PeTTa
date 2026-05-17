@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (31 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/tilepuzzle.metta
+; Source: examples/tilepuzzle.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -32,4 +32,4 @@
 (= (bfs_loop (empty-queue) $N0) $N0)
 (= (bfs_loop $Q $N0) (let* (($Q1 (once (dequeue $S $Q))) ($Ln (collapse (let* (($Snew (move $S $_)) ($2 (add-unique-or-fail &dup $Snew))) $Snew))) ($Q2 (foldl enqueue $Ln $Q1)) ($N1 (+ $N0 1))) (bfs_loop $Q2 $N1)))
 (= (bfs_all $Start) (let* (($Pt (add-unique-item-or-empty $Start)) ($Q1 (enqueue $Start (empty-queue)))) (bfs_loop $Q1 0)))
-!(assertPeTTaTest (let $x (bfs_all (___ 1 2 3 4 5 6 7 8)) $x) 181441)
+!(assertEqualToEval (let $x (bfs_all (___ 1 2 3 4 5 6 7 8)) $x) 181441)

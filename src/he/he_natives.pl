@@ -160,12 +160,19 @@ he_format_string(Format, Parts, Out) :-
 
 he_collect_unique_visible_results(Expr, Results) :-
     once(translate_expr_to_conj(Expr, Conj, Value)),
+    he_collect_unique_visible_results_from_conj(Conj, Value, Results).
+
+he_collect_unique_visible_results_from_conj(Conj, Value, Results) :-
     findall(Value,
             ( call(Conj),
               he_visible_result(Value)
             ),
             RawResults),
     alpha_list_to_set(RawResults, Results).
+
+he_unique_visible_result(Conj, Value, Out) :-
+    he_collect_unique_visible_results_from_conj(Conj, Value, Results),
+    member(Out, Results).
 
 he_native_add_reduct(Space, [=, Head, Body], Out) :-
     he_collect_unique_visible_results(Body, BodyReducedList),
@@ -211,15 +218,26 @@ he_eval_special(Arg, Out) :-
     Out = Body.
 he_eval_special(Arg, Out) :-
     nonvar(Arg),
+    Arg = [quote, Expr], !,
+    he_eval_special(Expr, EvalOut),
+    ( ( EvalOut = [eval, WrappedExpr]
+      ; EvalOut = [quote, WrappedExpr]
+      ),
+      he_alpha_equiv_term(Expr, WrappedExpr)
+    -> Out = Expr
+    ;  Out = EvalOut
+    ).
+he_eval_special(Arg, Out) :-
+    nonvar(Arg),
     Arg = ['Error'|_], !,
     Out = Arg.
 he_eval_special(Arg, Out) :-
     once(translate_expr(Arg, Goals, EvalOut)),
     ( he_irreducible_eval_result(Arg, Goals, EvalOut),
       he_irreducible_eval_keeps_wrapper(Arg)
-    -> Out = [eval, Arg]
+    -> Out = [quote, Arg]
     ; call_goals(Goals),
       ( he_irreducible_eval_keeps_wrapper(Arg),
         he_alpha_equiv_term(Arg, EvalOut)
-      -> Out = [eval, Arg]
+      -> Out = [quote, Arg]
       ; Out = EvalOut ) ).

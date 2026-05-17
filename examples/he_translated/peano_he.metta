@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (6 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/peano.metta
+; Source: examples/peano.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -9,4 +9,4 @@
 (= (expand-once) (case (match &self (num $t) $t) (($x (add-atom-no-duplicate &self (num (S $x)))))))
 (= (expandK $n) (if (== $n 0) done (let $temp1 (expand-once) (expandK (- $n 1)))))
 (= (demo-peano $K) (let* (($s (add-atom &self (num Z))) ($g (expandK $K))) (match &self (num $1) $1)))
-!(assertPeTTaTest (let $__tr_tuple_1 (collapse (demo-peano 300)) (size-atom $__tr_tuple_1)) 301)
+!(assertEqualToEval (let $__tr_tuple_1 (collapse (demo-peano 300)) (size-atom $__tr_tuple_1)) 301)

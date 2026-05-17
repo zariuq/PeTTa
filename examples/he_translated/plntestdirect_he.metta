@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (16 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/plntestdirect.metta
+; Source: examples/plntestdirect.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -18,4 +18,4 @@
 (= (sentence (Inheritance a b) (stv 0.9 0.9)) (once True))
 (= (sentence (Inheritance b c) (stv 0.9 0.9)) (once True))
 (= (sentence (Inheritance $A $C) $TV) (once (and (and (sentence (Inheritance $A $B) $T1) (sentence (Inheritance $B $C) $T2)) (= $TV (Truth_Deduction (STV $A) (STV $B) (STV $C) $T1 $T2)))))
-!(assertPeTTaTest (let $derivation (sentence (Inheritance a c) $TV) $TV) (stv 0.8166666666666668 0.9))
+!(assertEqualToEval (let $derivation (sentence (Inheritance a c) $TV) $TV) (stv 0.8166666666666668 0.9))

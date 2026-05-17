@@ -1,5 +1,5 @@
 ; Translated from HE to PeTTa (12 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/he_error.metta
+; Source: examples/he_error.metta
 
 !(import! &self ../../lib/lib_he.metta)
 !(test (let $result (catch (+ 40 2)) (if-error $result Error $result)) 42)

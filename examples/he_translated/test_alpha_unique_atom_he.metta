@@ -1,19 +1,19 @@
 ; Translated from PeTTa to HE (26 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/test_alpha_unique_atom.metta
+; Source: examples/test_alpha_unique_atom.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((link $x human) (link $y human) (link $z human))) ((link $a human))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((parent $x human) (parent $y human) (child $z human))) ((parent $a human) (child $b human))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((parent $x human) (child $y human) (friend $z human))) ((parent $a human) (child $b human) (friend $c human))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((likes $x) (hates $y) (knows $z))) ((likes $a) (hates $b) (knows $c))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((link (foo $x) human) (link (foo $y) human) (link (bar $z) human))) ((link (foo $a) human) (link (bar $b) human))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((parent (child $x) human) (parent (child $y) human) (parent (child $x) human))) ((parent (child $a) human))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((link $x human) (parent $x human) (link $y human) (parent $z human) (link $x human))) ((link $a human) (parent $a human))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((foo $x) (foo $y) (bar $x) (foo $x) (bar $y))) ((foo $a) (bar $a))) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom (1 2 2 3 1 4 4 5)) (1 2 3 4 5)) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom (a b a c b d e a)) (a b c d e)) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ()) ()) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom (1)) (1)) True)
-!(assertPeTTaTest (=alpha (alpha-unique-atom ((link $x human))) ((link $a human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((link $x human) (link $y human) (link $z human))) ((link $a human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((parent $x human) (parent $y human) (child $z human))) ((parent $a human) (child $b human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((parent $x human) (child $y human) (friend $z human))) ((parent $a human) (child $b human) (friend $c human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((likes $x) (hates $y) (knows $z))) ((likes $a) (hates $b) (knows $c))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((link (foo $x) human) (link (foo $y) human) (link (bar $z) human))) ((link (foo $a) human) (link (bar $b) human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((parent (child $x) human) (parent (child $y) human) (parent (child $x) human))) ((parent (child $a) human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((link $x human) (parent $x human) (link $y human) (parent $z human) (link $x human))) ((link $a human) (parent $a human))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((foo $x) (foo $y) (bar $x) (foo $x) (bar $y))) ((foo $a) (bar $a))) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom (1 2 2 3 1 4 4 5)) (1 2 3 4 5)) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom (a b a c b d e a)) (a b c d e)) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ()) ()) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom (1)) (1)) True)
+!(assertEqualToEval (=alpha (alpha-unique-atom ((link $x human))) ((link $a human))) True)

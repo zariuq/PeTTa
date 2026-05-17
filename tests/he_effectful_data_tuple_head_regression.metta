@@ -13,13 +13,13 @@
    ((tick-fun $left)
     (tick-fun $right)))
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (let* (($seed (add-atom &self (seen-inline rootinline)))
          ($_ ((tick-inline leftinline) (tick-inline rightinline))))
     (length (collapse (match &self (seen-inline $xinline) (seen-inline $xinline)))))
   3)
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (let* (($seed (add-atom &self (seen-fun rootfun)))
          ($_ (pair-effects leftfun rightfun)))
     (length (collapse (match &self (seen-fun $xfun) (seen-fun $xfun)))))

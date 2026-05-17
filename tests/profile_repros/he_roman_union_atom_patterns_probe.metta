@@ -3,6 +3,6 @@
 !(import! &self ../../lib/lib_roman.metta)
 
 !(println! "DEBUG: union-atom-patterns")
-!(assertPeTTaTest (let (mylast $x) (1 2 3) $x) 3)
-!(assertPeTTaTest (let (init $xs) (1 2 3) $xs) (1 2))
-!(assertPeTTaTest (let (rcons $xs $x) (1 2 3) ($xs $x)) ((1 2) 3))
+!(assertEqualToEval (let (mylast $x) (1 2 3) $x) 3)
+!(assertEqualToEval (let (init $xs) (1 2 3) $xs) (1 2))
+!(assertEqualToEval (let (rcons $xs $x) (1 2 3) ($xs $x)) ((1 2) 3))

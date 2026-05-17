@@ -12,13 +12,13 @@ profile_feature(he, native_he_core).
 he_surface(assertEqual, 2, native(he_native_assert_equal), core).
 he_surface(assertAlphaEqual, 2, native(he_native_assert_alpha_equal), core).
 he_surface(assert, 1, native(he_native_assert), core).
+he_surface(assertEqualToEval, 2, special(assert_equal_to_eval), translator).
 he_surface(assertEqualToResult, 2, special(assert_equal_to_result), core).
 he_surface(assertAlphaEqualToResult, 2, special(assert_alpha_equal_to_result), core).
 he_surface(assertEqualMsg, 3, special(assert_equal_msg), compat).
 he_surface(assertEqualToResultMsg, 3, special(assert_equal_to_result_msg), compat).
 he_surface(assertAlphaEqualMsg, 3, special(assert_alpha_equal_msg), compat).
 he_surface(assertAlphaEqualToResultMsg, 3, special(assert_alpha_equal_to_result_msg), compat).
-he_surface(assertPeTTaTest, 2, special(assert_petta_test), compat).
 he_surface(assertIncludes, 2, special(assert_includes), compat).
 he_surface(unify, 4, special(unify), core).
 he_surface('add-reduct', 2, special(add_reduct), core).

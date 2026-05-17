@@ -1,18 +1,18 @@
-!(assertPeTTaTest
+!(assertEqualToEval
   (let $results (collapse (superpose (heads tails)))
        (if (== $results ())
            Empty
            (car-atom $results)))
   heads)
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (let $results (collapse (match &self absent $x))
        (if (== () $results)
            Empty
            (car-atom $results)))
   Empty)
 
-!(assertPeTTaTest
+!(assertEqualToEval
   (chain (collapse (superpose (9 10))) $results
     (if (== $results ())
         Empty

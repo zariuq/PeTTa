@@ -214,6 +214,12 @@ module_spec_path(Spec, Display, Path, 'relative-file') :-
     term_atom_string(Spec, SpecString),
     resolve_existing_file(SpecString, Path),
     Display = SpecString.
+module_spec_path([library, Name], Display, Path, 'library-file') :-
+    term_atom_string(Name, LibName),
+    atomic_list_concat(['lib', LibName], '/', RelAtom),
+    atom_string(RelAtom, Rel),
+    resolve_existing_file(Rel, Path),
+    Display = LibName.
 module_spec_path(Spec, Display, Path, 'stdlib-file') :-
     term_atom_string(Spec, SpecString),
     atomic_list_concat(['lib', SpecString], '/', RelAtom),
@@ -318,6 +324,9 @@ he_import_common(Surface, SpaceRef, File, SuccessOut, Out) :-
     ).
 
 he_builtin_he_import(mork) :- !.
+he_builtin_he_import([library, Name]) :-
+    term_atom_string(Name, LibName),
+    install_he_library(LibName), !.
 he_builtin_he_import(File) :-
     ( atom(File) ; string(File) ),
     term_atom_string(File, LibName),

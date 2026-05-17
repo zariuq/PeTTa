@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (7 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/matespace2.metta
+; Source: examples/matespace2.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -10,4 +10,4 @@
 (= (mate) (case (superpose (collapse (match &self (num (M $t)) $t))) (($t (case (once (match &self (num (W $t)) $t)) (($t (add-atom-no-duplicate &self (num (C $t))))))))))
 (= (rewriteK $n) (if (== $n 0) done (let* (($temp1 (expand)) ($temp2 (mate))) (rewriteK (- $n 1)))))
 (= (mate-space-demo $K) (let* (($s (add-atom &self (num Z))) ($g (rewriteK $K))) (match &self (num $1) (num $1))))
-!(assertPeTTaTest (let $__tr_tuple_1 (collapse (mate-space-demo 80)) (size-atom $__tr_tuple_1)) 1297533)
+!(assertEqualToEval (let $__tr_tuple_1 (collapse (mate-space-demo 80)) (size-atom $__tr_tuple_1)) 1297533)

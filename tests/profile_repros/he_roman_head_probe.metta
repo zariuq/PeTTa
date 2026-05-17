@@ -3,5 +3,5 @@
 
 !(import! &self ../../lib/lib_roman.metta)
 !(println! "DEBUG: before-head")
-!(assertPeTTaTest (let (head $x) (1 2 3) $x) 1)
+!(assertEqualToEval (let (head $x) (1 2 3) $x) 1)
 !(println! "DEBUG: after-head")

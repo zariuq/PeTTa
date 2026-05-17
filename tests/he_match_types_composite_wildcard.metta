@@ -2,4 +2,4 @@
 (: b B)
 (: mid (-> $a $a))
 (= (mid $x) (let (a b) $x $x))
-!(assertPeTTaTest (mid ($x b)) (a b))
+!(assertEqualToEval (mid ($x b)) (a b))

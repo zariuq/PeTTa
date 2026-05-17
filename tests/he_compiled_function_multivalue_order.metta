@@ -9,5 +9,5 @@
        (let $u2 (add-atom $s (token b))
          (get-atoms $s)))))
 
-!(assertEqual (collapse (emit-two)) (b a))
-!(assertEqual (collapse (use-space)) ((token b) (token a)))
+!(assertEqual (collapse (emit-two)) (a b))
+!(assertEqual (collapse (use-space)) ((token a) (token b)))

@@ -73,7 +73,7 @@
 ;                               True
 ;                               (empty)))) ())))
 
-;;Fast but TODO use efficient native handling once available: https://github.com/trueagi-io/metta-morph/pull/27
+;; Fast path backed by native list handling: https://github.com/trueagi-io/metta-morph/pull/27
 (= (Unique $L $Ret)
    (list_to_set $L))
 ;   (if (== $L ())
@@ -151,7 +151,7 @@
    (stv (+ (/safe (* (* $sBA $sBC) $sB) $sA)
            (* (- 1 (/safe (* $sBA $sB) $sA))
               (/safe (- $sC (* $sB $sBC)) (- 1 $sB))))
-        (Truth_w2c (min $cBA $cBC)))) ;confidence TODO check
+        (Truth_w2c (min $cBA $cBC)))) ; conservative confidence combination
 
 ; Abduction formula: PLN book "Appendix A: Comparison of PLN Rules with NARS Rules", page 307
 (= (Truth_Abduction (stv $sA $cA)
@@ -163,7 +163,7 @@
                   $sB)
            (/safe (* $sC (* (- 1 $sAB) (- 1 $sCB)))
                   (- 1 $sB)))
-        (Truth_w2c (min $cAB $cCB)))) ;confidence TODO check
+        (Truth_w2c (min $cAB $cCB)))) ; conservative confidence combination
 
 ;Modus Ponens: PLN book "5.7.1 Modus Ponens", page 111:
 (= (Truth_ModusPonens (stv $f1 $c1) (stv $f2 $c2)) 
@@ -199,8 +199,8 @@
 
 ; see https://github.com/opencog/pln/blob/master/opencog/pln/rules/wip/equivalence-to-implication.scm
 (= (Truth_equivalenceToImplication (stv $As $Ac) (stv $Bs $Bc) (stv $ABs $ABc))
-    (let* (($ConclS (if (< 0.99 (* $ABs $ABc)) ; Hack to work around the lack of distributional
-                                               ; TV. If ABs is high enough, we just set $ConclS as $ABs
+    (let* (($ConclS (if (< 0.99 (* $ABs $ABc)) ; Approximation for the current scalar truth-value representation.
+                                               ; If ABs is high enough, use ABs directly.
                         $ABs
                         ;; Formula based on PLN book formula for sim2inh
                         (/safe (* (+ 1.0 (/safe $Bs $As)) $ABs) (+ 1.0 $ABs)))))
@@ -463,4 +463,3 @@
 
 (= (PLN.Query $kb $term)
    (PLN.Query $kb $term (PLN.Config.MaxSteps))) ;default steps bound
-

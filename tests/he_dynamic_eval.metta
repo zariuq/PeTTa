@@ -1,5 +1,5 @@
 ; Dynamic eval should evaluate materialized data returned by match/let,
-; while still preserving the HE wrapper for irreducible atom-headed calls.
+; while leaving irreducible atom-headed calls as raw source data.
 
 (= (dyn-eval-pair $L $a $b)
    (let $result (+ $a $b)

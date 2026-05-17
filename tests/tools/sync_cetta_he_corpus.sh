@@ -2,20 +2,21 @@
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+HYPERON_ROOT=$(cd -- "$ROOT/.." && pwd)
 if [ -n "${SOURCE_ROOT:-}" ]; then
     :
-elif [ -d /home/zar/claude/hyperon/CeTTa/tests ]; then
-    SOURCE_ROOT=/home/zar/claude/hyperon/CeTTa/tests
+elif [ -d "$HYPERON_ROOT/CeTTa/tests" ]; then
+    SOURCE_ROOT="$HYPERON_ROOT/CeTTa/tests"
 else
-    SOURCE_ROOT=/home/zar/claude/c-projects/CeTTa/tests
+    SOURCE_ROOT="$ROOT/../CeTTa/tests"
 fi
 DEST_ROOT=${DEST_ROOT:-"$ROOT/corpus/cetta_tests"}
 if [ -n "${SOURCE_LIB_ROOT:-}" ]; then
     :
-elif [ -d /home/zar/claude/hyperon/CeTTa/lib ]; then
-    SOURCE_LIB_ROOT=/home/zar/claude/hyperon/CeTTa/lib
+elif [ -d "$HYPERON_ROOT/CeTTa/lib" ]; then
+    SOURCE_LIB_ROOT="$HYPERON_ROOT/CeTTa/lib"
 else
-    SOURCE_LIB_ROOT=/home/zar/claude/c-projects/CeTTa/lib
+    SOURCE_LIB_ROOT="$ROOT/../CeTTa/lib"
 fi
 DEST_LIB_ROOT=${DEST_LIB_ROOT:-"$ROOT/lib"}
 SOURCE_PROJECT_ROOT=$(cd -- "$SOURCE_ROOT/.." && pwd)

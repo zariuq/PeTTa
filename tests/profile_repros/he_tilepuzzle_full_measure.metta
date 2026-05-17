@@ -40,4 +40,4 @@
    (let* (($Pt (add-unique-item-or-empty $Start))
           ($Q1 (enqueue $Start (empty-queue))))
          (bfs_loop $Q1 0)))
-!(assertPeTTaTest (let $x (bfs_all (___ 1 2 3 4 5 6 7 8)) $x) 181441)
+!(assertEqualToEval (let $x (bfs_all (___ 1 2 3 4 5 6 7 8)) $x) 181441)

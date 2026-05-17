@@ -2585,7 +2585,7 @@
     ; else keep playing
     (progn 
     ; prompt for x/y location
-    ; temporary change for PeTTa test, enter eg ((1 2) (1 3))
+    ; Manual test input, for example: ((1 2) (1 3))
     ;(let $coord (prompt-for-move) ())
     (let $coord (readln!) ())
     (let $f (nth 1 $coord) ())

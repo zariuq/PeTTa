@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (15 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/functionhead2.metta
+; Source: examples/functionhead2.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -17,4 +17,4 @@
 (= (only $C $X) (let $constraint $C $X))
 (= (animal $X) (only ((living $X) (being $X)) $X))
 (= (cat (animal $X)) (only (small $X) $X))
-!(assertPeTTaTest (msort (collapse (cat $X))) (cat42 garfield))
+!(assertEqualToEval (msort (collapse (cat $X))) (cat42 garfield))

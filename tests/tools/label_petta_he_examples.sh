@@ -42,17 +42,22 @@ header_mode_for_generated() {
 stamp_header() {
     local generated=$1
     local source=$2
+    local source_display=$source
     local tmp
     local mode_line
     local target
     local portability
+
+    case "$source" in
+        "$ROOT"/*) source_display=${source#"$ROOT"/} ;;
+    esac
 
     mode_line=$(header_mode_for_generated "$generated")
     target=${mode_line%%$'\t'*}
     portability=${mode_line#*$'\t'}
 
     tmp=$(mktemp "$(dirname -- "$generated")/.label.XXXXXX")
-    awk -v source="$source" -v target="$target" -v portability="$portability" '
+    awk -v source="$source_display" -v target="$target" -v portability="$portability" '
         NR == 1 {
             print
             next

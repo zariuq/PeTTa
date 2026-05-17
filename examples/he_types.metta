@@ -2,7 +2,7 @@
 
 !(test (is-function (-> Atom Atom)) True)
 !(test (is-function Atom) False)
-;TODO:
+; Additional type-cast examples:
 ;(: type1 Type)
 ;!(type-cast A type1 &self)
 ;!(type-cast 1 type1 &self)

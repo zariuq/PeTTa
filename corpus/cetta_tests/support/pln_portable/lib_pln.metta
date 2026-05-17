@@ -77,7 +77,7 @@
 ;                               True
 ;                               (empty)))) ())))
 
-;;Fast but TODO use efficient native handling once available: https://github.com/trueagi-io/metta-morph/pull/27
+;; Fast path backed by native list handling: https://github.com/trueagi-io/metta-morph/pull/27
 (= (Unique $L $Ret)
    (list_to_set $L))
 ;   (if (== $L ())
@@ -212,8 +212,8 @@
 
 ; see https://github.com/opencog/pln/blob/master/opencog/pln/rules/wip/equivalence-to-implication.scm
 (= (Truth_equivalenceToImplication (stv $As $Ac) (stv $Bs $Bc) (stv $ABs $ABc))
-    (let* (($ConclS (if (< 0.99 (* $ABs $ABc)) ; Hack to work around the lack of distributional
-                                               ; TV. If ABs is high enough, we just set $ConclS as $ABs
+    (let* (($ConclS (if (< 0.99 (* $ABs $ABc)) ; Approximation for the current scalar truth-value representation.
+                                               ; If ABs is high enough, use ABs directly.
                         $ABs
                         ;; Formula based on PLN book formula for sim2inh
                         (/safe (* (+ 1.0 (/safe $Bs $As)) $ABs) (+ 1.0 $ABs)))))

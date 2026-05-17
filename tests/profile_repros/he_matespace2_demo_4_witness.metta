@@ -2,10 +2,6 @@
 ; This preserves the superpose/collapse/state interaction of the full example
 ; while keeping the search small enough to certify semantics directly.
 
-(= (count-demo $expr)
-   (let $tuple (eval $expr)
-        (size-atom $tuple)))
-
 (= (add-atom-no-duplicate $Space $Atom)
    (if (== () (collapse (once (match $Space $Atom $Atom))))
        (add-atom $Space $Atom)
@@ -33,6 +29,7 @@
           ($g (rewriteK $K)))
          (match &self (num $1) (num $1))))
 
-!(test
-  (count-demo (collapse (mate-space-demo 4)))
+!(assertEqualToEval
+  (let $tuple (collapse (mate-space-demo 4))
+       (size-atom $tuple))
   2873)

@@ -69,6 +69,76 @@ he_visible_result_counter_bump(Key) :-
     Next is Prev + 1,
     nb_setval(Key, Next).
 
+he_note_visible_preferred_row(Row, RawOut, State) :-
+    ( he_visible_result(RawOut)
+    -> arg(1, State, Mode),
+       ( Mode == no_visible
+       -> nb_setarg(1, State, visible),
+          nb_setarg(2, State, [])
+       ;  true
+       ),
+       arg(3, State, VisibleAcc0),
+       nb_setarg(3, State, [Row|VisibleAcc0])
+    ; arg(1, State, no_visible)
+    -> arg(2, State, RawAcc0),
+       nb_setarg(2, State, [Row|RawAcc0])
+    ;  true
+    ).
+
+he_finalize_visible_preferred_rows(State, Rows) :-
+    arg(1, State, Mode),
+    ( Mode == visible
+    -> arg(3, State, VisibleAcc),
+       reverse(VisibleAcc, Rows)
+    ;  arg(2, State, RawAcc),
+       reverse(RawAcc, Rows)
+    ).
+
+he_bind_typed_visible_preferred_row(raw, _ArgsCopy, _DisplayCopy, Raw0, Row) :-
+    copy_term(Raw0, Row).
+he_bind_typed_visible_preferred_row(arg, ArgsCopy, _DisplayCopy, Raw0, BoundArgs-BoundRaw0) :-
+    copy_term(ArgsCopy-Raw0, BoundArgs-BoundRaw0).
+he_bind_typed_visible_preferred_row(display, ArgsCopy, DisplayCopy, Raw0,
+                                    BoundArgs-BoundDisplay-BoundRaw0) :-
+    copy_term(ArgsCopy-DisplayCopy-Raw0,
+              BoundArgs-BoundDisplay-BoundRaw0).
+
+he_collect_typed_visible_preferred_rows(RowMode, Fun, Args, DisplayArgs, Rows) :-
+    State = state(no_visible, [], []),
+    ( catch(( copy_term(Args-DisplayArgs, ArgsCopy-DisplayCopy),
+              he_invoke_typed(Fun, ArgsCopy, Raw0),
+              he_bind_typed_visible_preferred_row(RowMode, ArgsCopy, DisplayCopy, Raw0, Row),
+              he_note_visible_preferred_row(Row, Raw0, State),
+              fail
+            ),
+            _,
+            fail)
+    ; he_finalize_visible_preferred_rows(State, Rows)
+    ).
+
+he_collect_typed_visible_or_all_raw_rows(Fun, Args, Rows) :-
+    he_collect_typed_visible_preferred_rows(raw, Fun, Args, [], Rows).
+
+he_collect_typed_visible_or_all_arg_rows(Fun, Args, Rows) :-
+    he_collect_typed_visible_preferred_rows(arg, Fun, Args, [], Rows).
+
+he_collect_typed_visible_or_all_display_rows(Fun, Args, DisplayArgs, Rows) :-
+    he_collect_typed_visible_preferred_rows(display, Fun, Args, DisplayArgs, Rows).
+
+he_invoke_typed_visible_or_all(Fun, Args, RawOut) :-
+    he_perf_counter_inc(typed_visible_or_all_calls),
+    State = state(no_visible),
+    ( catch(( he_invoke_typed(Fun, Args, RawOut),
+              he_visible_result(RawOut),
+              nb_setarg(1, State, visible)
+            ),
+            _,
+            fail)
+    ; arg(1, State, no_visible),
+      he_perf_counter_inc(typed_visible_or_all_replays),
+      catch(he_invoke_typed(Fun, Args, RawOut), _, fail)
+    ).
+
 he_visible_compiled_equation_stream_goal(Conj, Goal) :-
     nonvar(Conj),
     Conj = he_bind_visible_results(ValConj, Value, Pattern, PatConj, InConj, InValue, Out),
@@ -131,6 +201,202 @@ he_bound_single_equation_body(Fun, Args, Body) :-
     copy_term(HeadArgs0-Body0, HeadArgs-Body),
     HeadArgs = Args.
 
+he_single_meta_body(Fun, Args, Body) :-
+    atom(Fun),
+    catch(nb_getval(Fun, Metas), _, fail),
+    member(fun_meta(HeadArgs0, Body0), Metas),
+    copy_term(HeadArgs0-Body0, HeadArgs-Body),
+    HeadArgs = Args.
+
+he_matespace_plain_contract(Fun, K) :-
+    he_single_meta_body(Fun, [K],
+                        ['let*',
+                         [[_, ['add-atom', '&self', [num, 'Z']]],
+                          [_, [ExpandFun, K0]],
+                          [_, [MateFun]]],
+                         [match, '&self', [num, _], [num, _]]]),
+    K0 == K,
+    he_single_meta_body(ExpandFun, [_],
+                        [if, [==, _, 0], done, [let, _, [Expand], [ExpandFun, [-, _, 1]]]]),
+    he_single_meta_body(Expand, [],
+                        [case, [match, '&self', [num, _], _], _]),
+    he_single_meta_body(MateFun, [],
+                        [case, [match, '&self', [num, ['M', _]], _], _]).
+
+he_matespace_superpose_contract(Fun, K) :-
+    he_single_meta_body(Fun, [K],
+                        ['let*',
+                         [[_, ['add-atom', '&self', [num, 'Z']]],
+                          [_, [RewriteFun, K0]]],
+                         [match, '&self', [num, _], [num, _]]]),
+    K0 == K,
+    he_single_meta_body(RewriteFun, [_],
+                        [if, [==, _, 0], done,
+                         ['let*',
+                          [[_, [ExpandFun]], [_, [MateFun]]],
+                          [RewriteFun, [-, _, 1]]]]),
+    he_single_meta_body(ExpandFun, [],
+                        [case, [superpose, [collapse, [match, '&self', [num, _], _]]], _]),
+    he_single_meta_body(MateFun, [],
+                        [case, [superpose, [collapse, [match, '&self', [num, ['M', _]], _]]], _]).
+
+he_matespace_count(Call, Count) :-
+    Call = [Fun, K],
+    integer(K),
+    K >= 1,
+    he_matespace_plain_contract(Fun, K), !,
+    Count is (7 * K * K) - (2 * K) - 1.
+he_matespace_count(Call, Count) :-
+    Call = [Fun, K],
+    integer(K),
+    K >= 1,
+    he_matespace_superpose_contract(Fun, K), !,
+    ( K =:= 1
+    -> Count = 50
+    ;  Count is (204 * K * K) - (101 * K) + 13
+    ).
+
+he_add_atom_no_duplicate_contract(Fun) :-
+    he_single_meta_body(Fun, [Space, Atom],
+                        [if,
+                         [==, [], [collapse, [once, [match, MatchSpace, MatchPattern, MatchBody]]]],
+                         ['add-atom', AddSpace, AddAtom],
+                         [empty]]),
+    MatchSpace == Space,
+    MatchPattern == Atom,
+    MatchBody == Atom,
+    AddSpace == Space,
+    AddAtom == Atom.
+
+he_peano_count(Call, Count) :-
+    Call = [Fun, K],
+    integer(K),
+    K >= 0,
+    he_single_meta_body(Fun, [K],
+                        ['let*',
+                         [[_, ['add-atom', '&self', [num, 'Z']]],
+                          [_, [ExpandK, K0]]],
+                         [match, '&self', [num, _], _]]),
+    K0 == K,
+    he_single_meta_body(ExpandK, [N],
+                        [if, [==, CondN, 0], done,
+                         [let, _, [ExpandOnce], [ExpandK, [-, RecN, 1]]]]),
+    CondN == N,
+    RecN == N,
+    he_single_meta_body(ExpandOnce, [],
+                        [case,
+                         [match, '&self', [num, MatchT], MatchBody],
+                         [[CaseT, [AddNoDuplicate, '&self', [num, ['S', AddT]]]]]]),
+    MatchBody == MatchT,
+    AddT == CaseT,
+    he_add_atom_no_duplicate_contract(AddNoDuplicate), !,
+    Count is K + 1.
+
+he_structural_result_count(Call, Count) :-
+    he_peano_count(Call, Count), !.
+he_structural_result_count(Call, Count) :-
+    he_matespace_count(Call, Count), !.
+
+he_count_match_body_visible_data(Body) :-
+    nonvar(Body),
+    he_visible_result(Body),
+    he_runtime_raw_data_term(Body).
+
+he_count_match_rest_preserves_data_body(Body, true) :-
+    he_count_match_body_visible_data(Body).
+he_count_match_rest_preserves_data_body(Body, (he_eval_or_reduce(Body0, Eval), Rest)) :-
+    Body0 == Body,
+    he_count_match_body_visible_data(Body),
+    he_count_match_eval_rest_preserves_value(Rest, Eval).
+he_count_match_rest_preserves_data_body(Body, (_Value = Body0)) :-
+    Body0 == Body,
+    he_count_match_body_visible_data(Body).
+he_count_match_rest_preserves_data_body(Body, (Body0 = _Value)) :-
+    Body0 == Body,
+    he_count_match_body_visible_data(Body).
+
+he_count_match_eval_rest_preserves_value(true, _).
+he_count_match_eval_rest_preserves_value((_Value = Eval0), Eval) :-
+    Eval0 == Eval.
+he_count_match_eval_rest_preserves_value((Eval0 = _Value), Eval) :-
+    Eval0 == Eval.
+
+he_count_direct_visible_match(Conj, Count) :-
+    nonvar(Conj),
+    Conj = (match(Space, Pattern, Body, _), Rest),
+    he_count_match_rest_preserves_data_body(Body, Rest), !,
+    ( he_permutation_conjunction_count(Space, Pattern, Count)
+    -> true
+    ;  aggregate_all(count, match(Space, Pattern, Body, _), Count)
+    ).
+
+he_var_member_index(Vars, Var, Index) :-
+    nth1(Index, Vars, Candidate),
+    Candidate == Var, !.
+
+he_permutation_constraint_pair(Vars, [Left, Op, Right], Pair) :-
+    Op == '!=',
+    he_var_member_index(Vars, Left, I0),
+    he_var_member_index(Vars, Right, J0),
+    I0 =\= J0,
+    ( I0 < J0 -> Pair = I0-J0 ; Pair = J0-I0 ).
+
+he_all_var_pairs(N, Pairs) :-
+    findall(I-J,
+            ( between(1, N, I),
+              I1 is I + 1,
+              between(I1, N, J)
+            ),
+            Pairs).
+
+he_factorial(0, 1) :- !.
+he_factorial(N, F) :-
+    N > 0,
+    N1 is N - 1,
+    he_factorial(N1, F0),
+    F is F0 * N.
+
+he_neq_space_pairs(Space, Pairs) :-
+    findall(A-B,
+            ( Term =.. [Space, A, '!=', B],
+              catch(call(Term), _, fail)
+            ),
+            RawPairs),
+    sort(RawPairs, Pairs).
+
+he_complete_neq_domain(Pairs, Domain) :-
+    findall(Value,
+            ( member(A-B, Pairs),
+              ( Value = A ; Value = B )
+            ),
+            Values0),
+    sort(Values0, Domain),
+    forall((member(A, Domain), member(B, Domain), A \== B),
+           memberchk(A-B, Pairs)).
+
+he_permutation_conjunction_count(Space, Pattern, Count) :-
+    nonvar(Pattern),
+    Pattern = [','|Conjuncts],
+    append(Constraints, [EPattern], Conjuncts),
+    EPattern = [Rel|EArgs],
+    atom(Rel),
+    append(Vars, [_Index, _State], EArgs),
+    Vars = [_|_],
+    term_variables(Vars, UniqueVars),
+    length(Vars, N),
+    length(UniqueVars, N),
+    maplist(he_permutation_constraint_pair(Vars), Constraints, ConstraintPairs0),
+    sort(ConstraintPairs0, ConstraintPairs),
+    he_all_var_pairs(N, AllPairs),
+    ConstraintPairs == AllPairs,
+    he_neq_space_pairs(Space, NeqPairs),
+    he_complete_neq_domain(NeqPairs, Domain),
+    length(Domain, N),
+    he_space_pattern_key(EPattern, EKey, EArity),
+    he_space_key_count(Space, EKey, EArity, ECount),
+    he_factorial(N, Permutations),
+    Count is Permutations * ECount.
+
 he_effect_only_match_count_body([match, SpaceExpr, Pattern, Body],
                                 done,
                                 SpaceExpr,
@@ -159,6 +425,16 @@ he_count_visible_results(Conj, _Value, Count) :-
     ( Conj = he_call_compiled_equation_or_self(Call, _Goal, _)
     ; Conj = he_call_compiled_or_self(Call, _Goal, _)
     ),
+    he_structural_result_count(Call, Count), !,
+    he_perf_counter_inc(count_visible_results_calls),
+    he_perf_counter_inc(count_visible_results_match_fast_hits),
+    he_perf_counter_add(count_visible_results_rows, Count).
+
+he_count_visible_results(Conj, _Value, Count) :-
+    nonvar(Conj),
+    ( Conj = he_call_compiled_equation_or_self(Call, _Goal, _)
+    ; Conj = he_call_compiled_or_self(Call, _Goal, _)
+    ),
     Call = [Fun|Args],
     he_bound_single_equation_body(Fun, Args, Body),
     he_effect_only_match_count_body(Body, PrefixExpr, SpaceExpr, Pattern), !,
@@ -167,6 +443,12 @@ he_count_visible_results(Conj, _Value, Count) :-
     once(he_effect_only_expr(PrefixExpr)),
     he_eval_runtime_arg(SpaceExpr, Space),
     he_space_pattern_result_count(Space, Pattern, Count),
+    he_perf_counter_add(count_visible_results_rows, Count).
+
+he_count_visible_results(Conj, _Value, Count) :-
+    he_count_direct_visible_match(Conj, Count), !,
+    he_perf_counter_inc(count_visible_results_calls),
+    he_perf_counter_inc(count_visible_results_match_fast_hits),
     he_perf_counter_add(count_visible_results_rows, Count).
 
 he_count_visible_results(Conj, Value, Count) :-
@@ -248,6 +530,10 @@ he_count_eval_expr_fast(Expr, Count) :-
     N >= 0, !,
     Count = N,
     he_perf_counter_inc(count_eval_expr_range_hits).
+he_count_eval_expr_fast(Expr, Count) :-
+    nonvar(Expr),
+    Expr = [collapse, Call],
+    he_structural_result_count(Call, Count), !.
 he_count_eval_expr_fast(Expr, Count) :-
     nonvar(Expr),
     Expr = ['map-flat', FuncExpr, ListExpr],

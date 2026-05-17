@@ -1,5 +1,5 @@
 ; Translated from PeTTa to HE (7 atoms)
-; Source: /home/zar/claude/hyperon/petta-he-profile/examples/once.metta
+; Source: examples/once.metta
 ; Translation target: PeTTa HE
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
@@ -8,4 +8,4 @@
 (foo 2)
 (= (match-single $space $pat $ret) (once (match $space $pat $ret)))
 !(let $x (match-single &self (foo $1) $1) (add-atom &self (bar $x)))
-!(assertPeTTaTest (collapse (match &self (bar $1) (bar $1))) ((bar 1)))
+!(assertEqualToEval (collapse (match &self (bar $1) (bar $1))) ((bar 1)))
