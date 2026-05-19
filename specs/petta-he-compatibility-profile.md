@@ -29,11 +29,12 @@ document.
 
 ## 3. Conformance Classes
 
-This profile distinguishes three implementation classes.
+This profile distinguishes four implementation classes.
 
 | Class | Meaning |
 | --- | --- |
 | HE core exact | Behavior is required by the HE core surface and must agree with upstream HE or the copied executable HE spec representatives. |
+| Translator helper | Backend-neutral helper surface used by generated HE artifacts; portable artifacts must supply the helper or lower it away. |
 | PeTTa HE compatibility | Behavior is intentionally supported by PeTTa `--he` to run PeTTa/HE-facing code, but is not claimed as HE core. |
 | PeTTa extension | Behavior is useful PeTTa surface outside HE core and outside the minimal compatibility contract. |
 
@@ -41,12 +42,41 @@ Semantic gaps in the HE core exact class MUST be closed before a conformance
 claim is made.
 
 Semantic gaps in the PeTTa HE compatibility class SHOULD be closed when they
-affect translated PeTTa examples or libraries intended for delivery to Hyperon
-AGI teams.
+affect translated PeTTa examples or libraries intended for downstream use.
 
 Performance gaps SHOULD be optimized when feasible.  If a Prolog implementation
 route makes a workload impractical, the limitation SHOULD be recorded as
 implementation evidence rather than hidden as a semantic failure.
+
+### 3.1 Survey Performance Budget
+
+The translator survey uses an operational wall-time budget for PeTTa `--he`
+on translated examples:
+
+```text
+he_wall <= default_wall * PERF_RATIO_LIMIT + PERF_STARTUP_ALLOWANCE_SECONDS
+```
+
+The default budget is:
+
+```text
+he_wall <= default_wall * 2.23 + 0.25s
+```
+
+This budget is not a semantic HE requirement.  It is the current acceptance
+threshold for this PeTTa implementation profile, allowing small fixed `--he`
+startup/runtime overhead while still flagging long-tail runtime regressions.
+
+Positive example: if default PeTTa takes `1.00s`, the `--he` budget is
+`2.48s`, so an HE run at `2.40s` is within budget.
+
+Negative example: with the same `1.00s` default run, an HE run at `2.60s`
+exceeds budget and is classified as `correct_but_perf_gap` if assertions still
+pass.
+
+The fresh survey writes per-row budget walls and statuses to
+`.he-logs/he_translation_bench.tsv`.  Use
+`tests/tools/summarize_he_translation_budget.awk` to inspect margins.
 
 ## 4. Translation Targets
 
@@ -112,7 +142,7 @@ Example:
 (= (tuple-with-collapse)
    ((collapse (superpose (a b c)))
     (collapse (superpose ((superpose (x y)))))))
-!(assertPeTTaTest (tuple-with-collapse) ((a b c) (x y)))
+!(assertEqualToEval (tuple-with-collapse) ((a b c) (x y)))
 ```
 
 ## 6. Partial Callables
@@ -155,7 +185,7 @@ Example:
 
 ```metta
 (= (returns-plus) (+))
-!(assertPeTTaTest (returns-plus 1 1) 2)
+!(assertEqualToEval (returns-plus 1 1) 2)
 ```
 
 Pure HE translation SHOULD lower PeTTa partial-callable idioms to explicit
@@ -187,7 +217,7 @@ callable in PeTTa HE compatibility mode.
 Example:
 
 ```metta
-!(assertPeTTaTest
+!(assertEqualToEval
   ((if True (let $f (|-> ($x) (+ $x 1)) $f) (empty)) 2)
   3)
 ```
@@ -214,7 +244,7 @@ after the pattern has bound the variables they depend on.
 Example:
 
 ```metta
-!(assertPeTTaTest
+!(assertEqualToEval
   (let ($x (42 (if (== $x 2) 43 44))) (3 (42 $z)) (+ $x $z))
   47)
 ```
@@ -246,8 +276,8 @@ Example:
 
 ```metta
 !(add-atom &space (wu))
-!(assertPeTTaTest (collapse (match &space ($x) ($x))) ((wu)))
-!(assertPeTTaTest (collapse (match &space ($x) $x)) (wu))
+!(assertEqualToEval (collapse (match &space ($x) ($x))) ((wu)))
+!(assertEqualToEval (collapse (match &space ($x) $x)) (wu))
 ```
 
 This does not require changing the internal storage representation.  It only
@@ -278,22 +308,37 @@ PeTTa HE MAY support additional dependent-binder or type behavior when such
 support is useful for PeTTa/HE-facing examples.  Additional support MUST be
 reported separately from HE-core conformance.
 
-## 13. PeTTa Test Compatibility
+PeTTa `--he` follows HE's unknown-type convention for unbound variables:
+public `(get-type $x)` yields `%Undefined%`, while `(get-metatype $x)` yields
+`Variable`.  This keeps unknown type information from escaping as a fresh
+logic variable that can later match unrelated concrete types.
 
-PeTTa HE MAY expose `assertPeTTaTest` as a compatibility assertion for
-translator-generated PeTTa examples.
+## 13. Source Test And Translator Helpers
 
-`assertPeTTaTest Actual Expected` MUST evaluate `Actual` using PeTTa `test`
-semantics:
+Translated PeTTa source tests MUST preserve the source `test` surface unless
+the user explicitly selects a lowering mode with different I/O behavior.
+
+`test Actual Expected` MUST evaluate and compare using PeTTa source-test
+semantics and MUST print the public actual/expected comparison before returning
+success or halting on failure.  Replacing source `test` with a quiet assertion
+helper changes observable I/O and is not the default translation contract.
+
+`assertEqualToEval` is a quiet translator assertion helper for explicit
+HE-facing tests and profile regression files where passing assertions should
+return `[True]` without printing the PeTTa `test` comparison line.
+
+`assertEqualToEval Actual Expected` MUST evaluate `Actual` and `Expected`, then
+compare them using source-test result semantics:
 
 1. If `Actual` produces exactly one result, compare that single result with
    `Expected`.
 2. If `Actual` produces multiple results, compare the result tuple with
    `Expected`.
 
-This surface is PeTTa HE compatibility, not HE core.  Pure HE translation
-SHOULD prefer explicit HE assertion forms when the source semantics are known
-unambiguously.
+This surface is not HE core and is not PeTTa-specific compatibility.  A
+portable generated artifact SHOULD either supply an equivalent helper definition
+for its target engine or lower source tests to explicit core forms when the
+source semantics are known unambiguously.
 
 ## 14. Import And Library Compatibility
 
@@ -354,7 +399,7 @@ current PeTTa implementation:
 | `tests/he_dynamic_callable_return.metta` | Zero-argument functions may return callables that accept later arguments. |
 | `tests/he_variable_head_data.metta` | Unbound variable heads remain data; bound callable variables call. |
 | `tests/he_expression_head_callable.metta` | Expressions that evaluate to callables can serve as call heads. |
-| `tests/he_petta_test_compat.metta` | Translator-target PeTTa `test` compatibility. |
+| `tests/he_assert_equal_to_eval_surface.metta` | Backend-neutral translator assertion helper surface. |
 | `tests/he_function_head_patterns.metta` | PeTTa function-head patterns work under `--he`. |
 | `tests/he_destructured_let_expr_pattern.metta` | Let destructuring can evaluate dependent pattern expressions. |
 | `tests/he_space_singleton_pattern.metta` | Singleton expression atoms remain list-shaped for list-pattern matching. |

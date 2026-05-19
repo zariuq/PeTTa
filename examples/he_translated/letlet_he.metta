@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (f) (let* ((($f1 $c1 3) (1 2 $d1))) ($f1 $c1 $d1)))
-!(assertEqualToEval (f) (1 2 3))
+!(test (f) (1 2 3))

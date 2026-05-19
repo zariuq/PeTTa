@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (y) (empty))
-!(assertEqualToEval (collapse (y)) ())
+!(test (collapse (y)) ())

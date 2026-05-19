@@ -23,7 +23,7 @@ fi
 HE_METTA_BIN=${HE_METTA_BIN:-$(command -v metta || true)}
 
 HE_ORACLE_HOME=${HE_ORACLE_HOME:-"$ROOT/.he-home"}
-ASSERT_HELPER_RE='assertEqualToEval|assertEqualToResult|assertAlphaEqualToResult|assertEqualMsg|assertEqualToResultMsg|assertAlphaEqualMsg|assertAlphaEqualToResultMsg|assertIncludes'
+TRANSLATOR_HELPER_RE='assertEqualToEval|assertEqualToResult|assertAlphaEqualToResult|assertEqualMsg|assertEqualToResultMsg|assertAlphaEqualMsg|assertAlphaEqualToResultMsg|assertIncludes|(^|[[:space:](!])test([[:space:])])'
 
 usage() {
     cat <<'EOF'
@@ -79,8 +79,8 @@ file_mode() {
     esac
 }
 
-has_assert_surface() {
-    grep -Eq "$ASSERT_HELPER_RE" "$1"
+has_translator_helper_surface() {
+    grep -Eq "$TRANSLATOR_HELPER_RE" "$1"
 }
 
 source_from_header() {
@@ -97,7 +97,7 @@ inventory_category() {
 classify_row() {
     local file=$1
     local mode=$2
-    local has_assert=$3
+    local has_helper=$3
     local petta_rc=$4
     local cetta_rc=$5
     local upstream_rc=$6
@@ -121,11 +121,11 @@ classify_row() {
         return
     fi
 
-    if [ "$has_assert" = 1 ] &&
+    if [ "$has_helper" = 1 ] &&
        [ "$cetta_rc" = 0 ] && [ "$upstream_rc" = 0 ] &&
-       printf '%s\n' "$cetta_out" | grep -Eq "$ASSERT_HELPER_RE" &&
-       printf '%s\n' "$upstream_out" | grep -Eq "$ASSERT_HELPER_RE"; then
-        printf '%s\t%s\n' assert_helper_surface 'translated file uses the assertion helper; CeTTa/upstream leave it as data unless the helper is supplied'
+       printf '%s\n' "$cetta_out" | grep -Eq "$TRANSLATOR_HELPER_RE" &&
+       printf '%s\n' "$upstream_out" | grep -Eq "$TRANSLATOR_HELPER_RE"; then
+        printf '%s\t%s\n' translator_helper_surface 'translated file uses a source-compatibility or assertion helper; CeTTa/upstream leave it as data unless the helper is supplied'
         return
     fi
 
@@ -164,7 +164,7 @@ classify_row() {
     printf '%s\t%s\n' unresolved_diff 'nontrivial portability mismatch; inspect outputs'
 }
 
-printf 'file\tmode\thas_assert_surface\tpetta_rc\tcetta_rc\tupstream_rc\tclass\tnotes\tpetta_out\tcetta_out\tupstream_out\n' > "$OUT_TSV"
+printf 'file\tmode\thas_translator_helper_surface\tpetta_rc\tcetta_rc\tupstream_rc\tclass\tnotes\tpetta_out\tcetta_out\tupstream_out\n' > "$OUT_TSV"
 
 count=0
 shopt -s nullglob
@@ -179,17 +179,17 @@ for file in "$GENERATED_DIR"/*_he.metta "$GENERATED_DIR"/*_he_sequential.metta "
     fi
 
     mode=$(file_mode "$file")
-    if has_assert_surface "$file"; then
-        has_assert=1
+    if has_translator_helper_surface "$file"; then
+        has_helper=1
     else
-        has_assert=0
+        has_helper=0
     fi
 
     source=$(source_from_header "$file")
     survey_category=$(inventory_category "$source")
     if [ -n "$survey_category" ] && [ "$survey_category" != translated_passes ]; then
         printf '%s\t%s\t%s\t-\t-\t-\t%s\t%s\t-\t-\t-\n' \
-            "$file" "$mode" "$has_assert" \
+            "$file" "$mode" "$has_helper" \
             survey_out_of_scope "inventory category: $survey_category for $source" >> "$OUT_TSV"
         continue
     fi
@@ -216,14 +216,14 @@ for file in "$GENERATED_DIR"/*_he.metta "$GENERATED_DIR"/*_he_sequential.metta "
         upstream_out='HE_METTA_BIN missing'
     fi
 
-    class_pair=$(classify_row "$file" "$mode" "$has_assert" \
+    class_pair=$(classify_row "$file" "$mode" "$has_helper" \
         "$petta_rc" "$cetta_rc" "$upstream_rc" \
         "$petta_out" "$cetta_out" "$upstream_out")
     class_name=${class_pair%%$'\t'*}
     notes=${class_pair#*$'\t'}
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$file" "$mode" "$has_assert" \
+        "$file" "$mode" "$has_helper" \
         "$petta_rc" "$cetta_rc" "$upstream_rc" \
         "$class_name" "$notes" \
         "$petta_out" "$cetta_out" "$upstream_out" >> "$OUT_TSV"

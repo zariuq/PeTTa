@@ -10,4 +10,4 @@
 (= (mate) (case (match &self (num (M $t)) $t) (($t (case (once (match &self (num (W $t)) $t)) (($t (add-atom-no-duplicate &self (num (C $t))))))))))
 (= (expandK $n) (if (== $n 0) done (let $temp1 (expand) (expandK (- $n 1)))))
 (= (mate-space-demo $K) (let* (($s (add-atom &self (num Z))) ($g (expandK $K)) ($h (mate))) (match &self (num $1) (num $1))))
-!(assertEqualToEval (let $__tr_tuple_1 (collapse (mate-space-demo 390)) (size-atom $__tr_tuple_1)) 1063919)
+!(test (let $__tr_tuple_1 (collapse (mate-space-demo 390)) (size-atom $__tr_tuple_1)) 1063919)

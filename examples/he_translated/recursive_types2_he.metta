@@ -10,5 +10,5 @@
 (= (Greater (S $x) Z) True)
 (= (Greater Z $x) False)
 (= (Greater (S $x) (S $y)) (Greater $x $y))
-!(assertEqualToEval (Greater (S Z) (S Z)) false)
-!(assertEqualToEval (Greater (S (S Z)) (S Z)) true)
+!(test (Greater (S Z) (S Z)) false)
+!(test (Greater (S (S Z)) (S Z)) true)

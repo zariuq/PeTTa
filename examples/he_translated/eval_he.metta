@@ -5,6 +5,6 @@
 ; Portability: portable/default HE lowering
 
 (= (f $L $a $b) (let $result (+ $a $b) (append ($result) $L)))
-!(assertEqualToEval (let $fbody_specialized (match &self (= (f (42) 40.7 2) $x) $x) (unquote (quote $fbody_specialized))) (42.7 42))
+!(test (let $fbody_specialized (match &self (= (f (42) 40.7 2) $x) $x) (unquote (quote $fbody_specialized))) (42.7 42))
 (= (evalCustom $body) (let* (($a (add-atom &self (= (myfunc) $body))) ($res (unquote (quote (myfunc)))) ($r (remove-atom &self (= (myfunc) $body)))) $res))
-!(assertEqualToEval (evalCustom (match &self (= (f (42) 40.7 2) $x) $x)) (42.7 42))
+!(test (evalCustom (match &self (= (f (42) 40.7 2) $x) $x)) (42.7 42))

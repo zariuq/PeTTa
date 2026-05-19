@@ -18,4 +18,4 @@
 (= (STV b) (stv 0.4 0.9))
 (= (STV c) (stv 0.4 0.9))
 (= (|- (($LinkType $A $B) $T1) (($LinkType $B $C) $T2)) (if (SyllogisticRuleGuard $LinkType) (($LinkType $A $C) (Truth_Deduction (STV $A) (STV $B) (STV $C) $T1 $T2)) (empty)))
-!(assertEqualToEval (|- ((Inheritance a b) (stv 0.9 0.9)) ((Inheritance b c) (stv 0.8 0.9))) ((Inheritance a c) (stv 0.7333333333333334 0.9)))
+!(test (|- ((Inheritance a b) (stv 0.9 0.9)) ((Inheritance b c) (stv 0.8 0.9))) ((Inheritance a c) (stv 0.7333333333333334 0.9)))

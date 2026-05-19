@@ -17,4 +17,4 @@
 (= (only $C $X) (let $constraint $C $X))
 (= (animal $X) (only ((living $X) (being $X)) $X))
 (= (cat (animal $X)) (only (small $X) $X))
-!(assertEqualToEval (msort (collapse (cat $X))) (cat42 garfield))
+!(test (msort (collapse (cat $X))) (cat42 garfield))

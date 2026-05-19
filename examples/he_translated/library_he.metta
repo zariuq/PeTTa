@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 !(import! &self (library lib_roman))
-!(assertEqualToEval (map-flat (+ 1) (1 2 3)) (2 3 4))
+!(test (map-flat (+ 1) (1 2 3)) (2 3 4))

@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (f $x) (* $x $x))
-!(assertEqualToEval (f 1) 1)
+!(test (f 1) 1)

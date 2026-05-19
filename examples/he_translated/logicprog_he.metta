@@ -12,4 +12,4 @@
 (= (successor g f) True)
 (= (later-in-alphabet $X $Y) (successor $X $Y))
 (= (later-in-alphabet $X $Y) (and (successor $X $Z) (later-in-alphabet $Z $Y)))
-!(assertEqualToEval (collapse ((later-in-alphabet d $1) $1)) ((True c) (True b) (True a)))
+!(test (collapse ((later-in-alphabet d $1) $1)) ((True c) (True b) (True a)))

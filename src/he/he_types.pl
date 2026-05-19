@@ -120,8 +120,7 @@ he_list_function_types(X, Types) :-
     Types \= [].
 
 get_type_candidate(X, 'Number')   :- number(X), !.
-get_type_candidate(X, _) :- \+ he_profile_enabled, var(X), !.
-get_type_candidate(X, '%Undefined%') :- he_profile_enabled, var(X), !.
+get_type_candidate(X, '%Undefined%') :- var(X), !.
 get_type_candidate(X, 'String')   :- string(X), !.
 get_type_candidate(true, 'Bool')  :- !.
 get_type_candidate(false, 'Bool') :- !.

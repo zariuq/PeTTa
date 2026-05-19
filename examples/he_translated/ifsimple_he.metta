@@ -4,4 +4,4 @@
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertEqualToEval (if True 42) 42)
+!(test (if True 42) 42)

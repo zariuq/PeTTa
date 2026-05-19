@@ -9,5 +9,5 @@
 (: f (-> Atom String Atom))
 (= (f $g $x) (repra ($g $x)))
 !(f g 42)
-!(assertEqualToEval (match &self (: f_Spec_[g] (-> Atom Number Atom)) ok) ok)
-!(assertEqualToEval (match &self (: f_Spec_[g] (-> Atom String Atom)) ok) ok)
+!(test (match &self (: f_Spec_[g] (-> Atom Number Atom)) ok) ok)
+!(test (match &self (: f_Spec_[g] (-> Atom String Atom)) ok) ok)

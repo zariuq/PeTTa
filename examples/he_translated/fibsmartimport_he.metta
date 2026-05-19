@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 !(import! &self ../fibsmart.metta)
-!(assertEqualToEval (fib 100) 354224848179261915075)
+!(test (fib 100) 354224848179261915075)

@@ -18,4 +18,4 @@
 (= (sentence (Inheritance a b) (stv 0.9 0.9)) (once True))
 (= (sentence (Inheritance b c) (stv 0.9 0.9)) (once True))
 (= (sentence (Inheritance $A $C) $TV) (once (and (and (sentence (Inheritance $A $B) $T1) (sentence (Inheritance $B $C) $T2)) (= $TV (Truth_Deduction (STV $A) (STV $B) (STV $C) $T1 $T2)))))
-!(assertEqualToEval (let $derivation (sentence (Inheritance a c) $TV) $TV) (stv 0.8166666666666668 0.9))
+!(test (let $derivation (sentence (Inheritance a c) $TV) $TV) (stv 0.8166666666666668 0.9))

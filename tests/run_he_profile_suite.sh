@@ -43,6 +43,10 @@ run_case_env() {
     fi
 }
 
+normalize_suite_output() {
+    sed -e '/^MORK init: done$/d'
+}
+
 expect_output() {
     local label=$1
     local expected=$2
@@ -55,7 +59,8 @@ expect_output() {
         status=1
         return
     fi
-    if diff -u "$expected" <(printf '%s\n' "$actual"); then
+    if diff -u <(normalize_suite_output < "$expected") \
+              <(printf '%s\n' "$actual" | normalize_suite_output); then
         printf 'PASS %s\n' "$label"
     else
         printf 'FAIL %s output\n' "$label"
@@ -126,7 +131,8 @@ run_case 'default PeTTa does not expose HE arithmetic helpers' "$RUN_SH" "$ROOT/
 run_case 'PeTTa --he private user-head namespace' "$RUN_SH" --he "$ROOT/tests/he_private_namespace.metta" --silent
 run_case 'PeTTa --he partial callables' "$RUN_SH" --he "$ROOT/tests/he_partial_application.metta" --silent
 run_case 'PeTTa --he variable-head data' "$RUN_SH" --he "$ROOT/tests/he_variable_head_data.metta" --silent
-run_case 'PeTTa --he source test lowered to assertEqualToEval' "$RUN_SH" --he "$ROOT/tests/he_source_test_assert_equal_to_eval.metta" --silent
+run_case 'PeTTa --he source test surface' "$RUN_SH" --he "$ROOT/tests/he_spec_core.metta" --silent
+run_case 'PeTTa --he source test get-type variable surface' "$RUN_SH" --he "$ROOT/tests/he_source_test_get_type_variable_surface.metta" --silent
 run_case 'PeTTa --he assertEqualToEval surface' "$RUN_SH" --he "$ROOT/tests/he_assert_equal_to_eval_surface.metta" --silent
 run_case 'PeTTa --he library import surface' "$RUN_SH" --he "$ROOT/tests/he_library_import_surface.metta" --silent
 run_case 'PeTTa --he collapse tuple cartesian surface' "$RUN_SH" --he "$ROOT/tests/he_collapse_tuple_cartesian_surface.metta" --silent

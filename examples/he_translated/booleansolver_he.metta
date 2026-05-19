@@ -4,4 +4,4 @@
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertEqualToEval (if (and (or $x True) $y) ($x $y)) ((True True) (False True)))
+!(test (if (and (or $x True) $y) ($x $y)) ((True True) (False True)))

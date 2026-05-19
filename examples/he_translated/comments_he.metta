@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (f) 42)
-!(assertEqualToEval (f) 42)
+!(test (f) 42)

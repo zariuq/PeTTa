@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (casetest $x) (case $x ((4 42) ($otherpattern 44) ($otherother $45))))
-!(assertEqualToEval (casetest 5) 44)
+!(test (casetest 5) 44)

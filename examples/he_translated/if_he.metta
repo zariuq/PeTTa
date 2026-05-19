@@ -4,4 +4,4 @@
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertEqualToEval (if (> 1 2) (3 4) (5 6)) (5 6))
+!(test (if (> 1 2) (3 4) (5 6)) (5 6))

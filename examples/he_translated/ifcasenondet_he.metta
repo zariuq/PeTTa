@@ -6,5 +6,5 @@
 
 (= (if-nondet $y) (if (superpose $y) a b))
 (= (case-nondet $y) (case (superpose $y) ((True a) (False b))))
-!(assertEqualToEval (collapse (if-nondet (True False True))) (a b a))
-!(assertEqualToEval (collapse (case-nondet (True False True))) (a b a))
+!(test (collapse (if-nondet (True False True))) (a b a))
+!(test (collapse (case-nondet (True False True))) (a b a))

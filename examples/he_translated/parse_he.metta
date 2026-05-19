@@ -5,8 +5,8 @@
 ; Portability: portable/default HE lowering
 
 (= (quoted-syntax (quote $expr)) $expr)
-!(assertEqualToEval (parse "A") A)
-!(assertEqualToEval (parse "(R A B)") (R A B))
-!(assertEqualToEval (parse "(R A (S B C))") (R A (S B C)))
-!(assertEqualToEval (parse "(* 2 21)") (quoted-syntax (quote (* 2 21))))
-!(assertEqualToEval (parse "\"42\"") "42")
+!(test (parse "A") A)
+!(test (parse "(R A B)") (R A B))
+!(test (parse "(R A (S B C))") (R A (S B C)))
+!(test (parse "(* 2 21)") (quoted-syntax (quote (* 2 21))))
+!(test (parse "\"42\"") "42")

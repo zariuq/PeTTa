@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (myf $M) (and (and (member a $M) (member b $M)) (== (size-atom $M) 2)))
-!(assertEqualToEval (if (once (myf $M)) $M) (a b))
+!(test (if (once (myf $M)) $M) (a b))

@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (f (cons $a (cons $b $L))) $b)
-!(assertEqualToEval (f (a b c d)) b)
+!(test (f (a b c d)) b)

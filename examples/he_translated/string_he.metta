@@ -4,4 +4,4 @@
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertEqualToEval "a test (with newlines and parentheses)" "a test (with newlines and parentheses)")
+!(test "a test (with newlines and parentheses)" "a test (with newlines and parentheses)")

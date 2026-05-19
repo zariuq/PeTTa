@@ -4,4 +4,4 @@
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertEqualToEval (case (1 2 3) (((cons $h $t) $h))) 1)
+!(test (case (1 2 3) (((cons $h $t) $h))) 1)

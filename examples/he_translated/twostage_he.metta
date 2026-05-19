@@ -7,5 +7,5 @@
 (= (f) (g))
 (= (g) 42)
 (= (h) (g))
-!(assertEqualToEval (f) 42)
-!(assertEqualToEval (h) 42)
+!(test (f) 42)
+!(test (h) 42)

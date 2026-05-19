@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (h (justdata haha $B) $C) (+ $B $C))
-!(assertEqualToEval (h (justdata haha 30) 40) 70)
+!(test (h (justdata haha 30) 40) 70)

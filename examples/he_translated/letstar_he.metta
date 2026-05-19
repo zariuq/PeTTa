@@ -4,4 +4,4 @@
 ; Intended runtime: ./run.sh --he
 ; Portability: portable/default HE lowering
 
-!(assertEqualToEval (let* (($x 1) ($y 2)) (+ $x $y)) 3)
+!(test (let* (($x 1) ($y 2)) (+ $x $y)) 3)

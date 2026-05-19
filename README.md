@@ -15,6 +15,37 @@ Example run:
 
 `time sh run.sh ./examples/nars_tuffy.metta`
 
+### HE compatibility mode
+
+PeTTa also provides a `--he` execution mode for Hyperon Experimental-facing
+MeTTa workloads:
+
+`time sh run.sh --he ./examples/he_translated/tilepuzzle_he.metta`
+
+This mode is implemented as a PeTTa compatibility/backend layer rather than a
+separate executable. Default PeTTa behavior without `--he` is unchanged.
+
+The exact scope of `--he` is documented here:
+
+- `specs/petta-he-compatibility-profile.md`
+- `specs/he-native-backend-contracts.md`
+- `src/he/DIVERGENCES.md`
+- `HE_MODE_TUTORIAL.md`
+
+Those documents describe:
+
+- what is treated as HE-core exact behavior
+- what is supported as PeTTa HE compatibility or extension behavior
+- which backend contracts are intentionally narrow
+- where current divergences or support-more surfaces are tracked
+
+The translated-example performance budget is:
+
+`he_wall <= default_wall * 2.23 + 0.25s`
+
+The survey writes budget margins to `.he-logs/he_translation_bench.tsv`; run
+`tests/tools/summarize_he_translation_budget.awk` for a compact margin report.
+
 ### MORK and FAISS spaces
 
 If MORK and FAISS is installed, execute `sh build.sh` to support MORK-based atom spaces and FAISS-based atom-vector spaces.

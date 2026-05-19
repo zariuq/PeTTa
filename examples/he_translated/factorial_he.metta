@@ -5,4 +5,4 @@
 ; Portability: portable/default HE lowering
 
 (= (facF $n) (if (== $n 0) 1 (* $n (facF (- $n 1)))))
-!(assertEqualToEval (facF 10) 3628800)
+!(test (facF 10) 3628800)
