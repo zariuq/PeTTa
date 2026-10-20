@@ -26,7 +26,7 @@ prolog:error_message(type_conflict(existing(Existing), required(Required))) -->
     [ 'Type conflict: value is constrained as ~w but also required as ~w'-[E, R] ].
 prolog:error_message(no_matching_overload(Fun)) -->
     [ 'No matching typed overload for ~w'-[Fun] ].
-metta_text(T, S) :- copy_term_nat(T, C), mapsubterms([X, A]>>( compound(X), X = '$rigid'(I, _), format(atom(A), '$~w', [I]) ), C, D),
+metta_text(T, S) :- copy_term_nat(T, C), mapsubterms([X, A]>>( compound(X), X = '$rigid'(I), format(atom(A), '$~w', [I]) ), C, D),
                     swrite(D, S).
 
 is_silent_flag(silent).

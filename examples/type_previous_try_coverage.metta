@@ -52,7 +52,7 @@
           ($result (catch (eval $expr)))
           ($type (car-atom (cdr-atom $result))))
          (repr $type))
-   "(literal_type_mismatch \"oops\" Number)")
+   "(type_conflict (existing String) (required Number))")
 !(test
    (let* (($expr (quote (sid (noType 7 8))))
           ($result (catch (eval $expr))))

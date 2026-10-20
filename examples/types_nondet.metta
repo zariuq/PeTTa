@@ -17,6 +17,7 @@
 
 !(test (f T1in) T1out)
 !(test (f T2in) T2out)
-!(test (f T3in) ()) ;Type1 of T3in does not go along with Type2 output
+;Type1 of T3in does not go along with the Type2 output: a type error, not an empty result
+!(test (car-atom (catch (f T3in))) Error)
 (: T3in Type2)      ;But if we make T3in also of Type2 then it is fine if output is Type2:
 !(test (f T3in) Tdefault)

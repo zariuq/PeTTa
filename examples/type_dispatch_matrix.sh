@@ -1,150 +1,109 @@
 #!/bin/sh
-set -eu
-
+# Generated code of typed programs: a check is emitted exactly where the
+# compiler cannot establish a type (see TYPES.md), a definite conflict is a
+# compile-time error, and the --oracle / --no-type-checks flags behave.
+set -u
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 TMP_DIR=$(mktemp -d /tmp/type_dispatch_matrix_XXXX)
 trap 'rm -rf "$TMP_DIR"' EXIT
+FAILED=0
 
-run_capture() {
-    name=$1
-    shift
-    out="$TMP_DIR/$name.out"
-    if "$@" >"$out" 2>&1; then
-        status=0
-    else
-        status=$?
-    fi
-    printf '%s\n' "$status" >"$TMP_DIR/$name.status"
+# run NAME FLAGS... < program: compiles and runs the program, keeping output and status
+run() {
+    name=$1; shift
+    cat > "$TMP_DIR/$name.metta"
+    sh "$ROOT_DIR/run.sh" "$TMP_DIR/$name.metta" "$@" > "$TMP_DIR/$name.out" 2>&1
+    echo $? > "$TMP_DIR/$name.status"
 }
+fail() { echo "[FAIL] $1: $2"; sed 's/^/    /' "$TMP_DIR/$1.out" | tail -30; FAILED=1; }
+status_is() { [ "$(cat "$TMP_DIR/$1.status")" = "$2" ] || fail "$1" "exit $(cat "$TMP_DIR/$1.status"), expected $2"; }
+has() { grep -qF -- "$2" "$TMP_DIR/$1.out" || fail "$1" "missing: $2"; }
+lacks() { if grep -qF -- "$2" "$TMP_DIR/$1.out"; then fail "$1" "unexpected: $2"; fi; }
+# the code compiled for the program's last runnable only (not for its imports):
+last_goal_lacks() { if awk '/metta runnable/ { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' "$TMP_DIR/$1.out" | grep -qF -- "$2"; then fail "$1" "unexpected in the last runnable: $2"; fi; }
 
-status_of() {
-    cat "$TMP_DIR/$1.status"
-}
+TYPED_CALLS='
+(: dbl (-> Number Number))
+(= (dbl $x) (* $x 2))
+(: quad (-> Number Number))
+(= (quad $x) (dbl (dbl $x)))
+!(test (quad 3) 12)'
 
-assert_status() {
-    name=$1
-    expected=$2
-    actual=$(status_of "$name")
-    if [ "$actual" != "$expected" ]; then
-        echo "[FAIL] $name: expected exit $expected, got $actual"
-        cat "$TMP_DIR/$name.out"
-        exit 1
-    fi
-}
+# Types established statically need no check at all:
+echo "$TYPED_CALLS" | run established
+status_is established 0; lacks established "typecheck"; lacks established "number("
 
-assert_contains() {
-    name=$1
-    pattern=$2
-    if ! grep -F "$pattern" "$TMP_DIR/$name.out" >/dev/null; then
-        echo "[FAIL] $name: missing pattern: $pattern"
-        cat "$TMP_DIR/$name.out"
-        exit 1
-    fi
-}
+# ... and --oracle checks them at runtime anyway, which must pass:
+echo "$TYPED_CALLS" | run oracle --oracle
+status_is oracle 0; has oracle "typecheck_or_error"; lacks oracle "❌"
 
-assert_not_contains() {
-    name=$1
-    pattern=$2
-    if grep -F "$pattern" "$TMP_DIR/$name.out" >/dev/null; then
-        echo "[FAIL] $name: unexpected pattern: $pattern"
-        cat "$TMP_DIR/$name.out"
-        exit 1
-    fi
-}
+# A value of unknown type is checked where it meets a declared one:
+run guard <<'EOF'
+(= (untyped) 5)
+(: dbl (-> Number Number))
+(= (dbl $x) (* $x 2))
+!(test (dbl (untyped)) 10)
+EOF
+status_is guard 0; has guard "number("
 
-assert_tail_not_contains() {
-    name=$1
-    pattern=$2
-    if tail -n 20 "$TMP_DIR/$name.out" | grep -F "$pattern" >/dev/null; then
-        echo "[FAIL] $name: unexpected tail pattern: $pattern"
-        tail -n 40 "$TMP_DIR/$name.out"
-        exit 1
-    fi
-}
+# ... unless --no-type-checks erases every check:
+run erased --no-type-checks <<'EOF'
+(= (untyped) 5)
+(: dbl (-> Number Number))
+(= (dbl $x) (* $x 2))
+!(test (dbl (untyped)) 10)
+EOF
+status_is erased 0; lacks erased "number("; lacks erased "typecheck"
 
-assert_tail_contains() {
-    name=$1
-    pattern=$2
-    if ! tail -n 20 "$TMP_DIR/$name.out" | grep -F "$pattern" >/dev/null; then
-        echo "[FAIL] $name: missing tail pattern: $pattern"
-        tail -n 40 "$TMP_DIR/$name.out"
-        exit 1
-    fi
-}
+# Definite conflicts are compile-time errors, naming the value or the types:
+run literal <<'EOF'
+(: dbl (-> Number Number))
+(= (dbl $x) (* $x 2))
+!(dbl "s")
+EOF
+status_is literal 2; has literal 'Type mismatch: got "s" but expected Number'
 
-run_capture single_monomorphic sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/type_single_monomorphic_resolved.metta"
-assert_status single_monomorphic 0
-assert_not_contains single_monomorphic "typecheck_match"
-assert_not_contains single_monomorphic "typecheck_or_error"
-assert_not_contains single_monomorphic "no_matching_overload"
+run nominal <<'EOF'
+(: a A)
+(: f (-> A B))
+(= (f $x) $x)
+EOF
+status_is nominal 2; has nominal "Type conflict: value is constrained as A but also required as B"
 
-run_capture single_poly_resolved sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/type_single_poly_resolved.metta"
-assert_status single_poly_resolved 0
-assert_tail_contains single_poly_resolved "'map-flat_Spec_[partial(+,[1])]'(partial(+, [1]),"
-assert_tail_not_contains single_poly_resolved "typecheck_match"
-assert_tail_not_contains single_poly_resolved "typecheck_or_error"
-assert_tail_not_contains single_poly_resolved "no_matching_overload"
+run poly_mismatch <<'EOF'
+!(import! &self (library lib_roman))
+!(map-flat (+ 1) ("s" 2))
+EOF
+status_is poly_mismatch 2; has poly_mismatch 'Type mismatch: got ("s" 2) but expected (List Number)'
 
-run_capture single_poly_compile_fail sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fail_single_poly_compile_mismatch.metta"
-assert_status single_poly_compile_fail 2
-assert_contains single_poly_compile_fail "Type mismatch: got [\"s\",2] but expected ['List','Number']"
-assert_not_contains single_poly_compile_fail ":- findall(_,"
-assert_not_contains single_poly_compile_fail "(   fail"
+# A polymorphic library call over established types is guard-free:
+run poly_resolved <<'EOF'
+!(import! &self (library lib_roman))
+!(test (map-flat (+ 1) (1 2)) (2 3))
+EOF
+status_is poly_resolved 0; last_goal_lacks poly_resolved "typecheck"
 
-run_capture overload_resolved sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/type_overload_resolved.metta"
-assert_status overload_resolved 0
-assert_tail_contains overload_resolved "f(1,"
+# Overloads: arguments that fit one declaration call it directly; only the
+# result, which the overloaded body does not establish, is checked:
+run overload <<'EOF'
+(: f (-> Number Number))
+(: f (-> String String))
+(= (f $x) $x)
+!(test (f 1) 1)
+EOF
+status_is overload 0; has overload "f(1,"; lacks overload "no_matching_overload"; has overload "typecheck_ok(B, 'Number')"
 
-run_capture overload_unresolved sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/type_overload_runtime_error.metta" -s
-assert_status overload_unresolved 0
-assert_contains overload_unresolved "(no_matching_overload f)"
+# Untyped code compiles as before: native arithmetic, no checks:
+sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fib.metta" > "$TMP_DIR/fib.out" 2>&1; echo $? > "$TMP_DIR/fib.status"
+status_is fib 0; lacks fib "typecheck"; has fib "A<2"; has fib " is "
 
-run_capture higher_order_partial sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/type_list_parametric.metta" -s
-assert_status higher_order_partial 0
-assert_contains higher_order_partial "is (2 3 4), should (2 3 4)."
+# A foreign function's primitive result is checked, not trusted:
+run foreign <<'EOF'
+!(import_prolog_function atom_length)
+(: atom_length (-> Symbol Number))
+!(test (atom_length abc) 3)
+EOF
+status_is foreign 0; has foreign "number("
 
-run_capture list_mismatch sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fail_list_type_mismatch.metta" -s
-assert_status list_mismatch 2
-assert_contains list_mismatch "Type mismatch: got [1,\"oops\",3] but expected ['List','Number']"
-
-run_capture strict_pass sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/strict_pass_declared.metta" --strict -s
-assert_status strict_pass 0
-assert_contains strict_pass "3"
-
-run_capture strict_runtime_guard sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fail_strict_runtime_guard.metta" --strict -s
-assert_status strict_runtime_guard 2
-assert_contains strict_runtime_guard "Strict mode rejected residual runtime type goal"
-
-run_capture strict_missing_type sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fail_strict_missing_type.metta" --strict -s
-assert_status strict_missing_type 2
-assert_contains strict_missing_type "Strict mode requires a declared or inferable type for idish/1"
-
-# Inference + codegen: an untyped fib infers (-> Number Number) and compiles to
-# guard-free native arithmetic with a fused comparison.
-run_capture inferred_fib sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fib.metta"
-assert_status inferred_fib 0
-assert_not_contains inferred_fib "typecheck_or_error"
-assert_not_contains inferred_fib "typecheck_match"
-assert_contains inferred_fib "A<2"
-assert_contains inferred_fib "B is D+F"
-
-# Inference semantics: knowledge only (never rejects), taint on conflicting
-# use, and the closure fast path from head-use arrow inference.
-run_capture inference sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/type_inference.metta"
-assert_status inference 0
-assert_contains inference "is A+1"
-assert_contains inference "apply_fn1"
-
-printf '%s\n' "[PASS] single monomorphic resolved"
-printf '%s\n' "[PASS] single polymorphic resolved"
-printf '%s\n' "[PASS] single polymorphic compile-time mismatch"
-printf '%s\n' "[PASS] multi-overload resolved"
-printf '%s\n' "[PASS] multi-overload unresolved"
-printf '%s\n' "[PASS] higher-order partial"
-printf '%s\n' "[PASS] list element mismatch"
-printf '%s\n' "[PASS] strict mode declared pass"
-printf '%s\n' "[PASS] strict mode runtime-guard rejection"
-printf '%s\n' "[PASS] strict mode missing-type rejection"
-printf '%s\n' "[PASS] inferred fib compiles guard-free to native arithmetic"
-printf '%s\n' "[PASS] inference: knowledge-only, taint, closure fast path"
+if [ $FAILED -eq 0 ]; then echo "OK: type_dispatch_matrix.sh"; else echo "FAILURES in type_dispatch_matrix.sh"; exit 1; fi

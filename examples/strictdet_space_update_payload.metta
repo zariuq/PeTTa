@@ -18,7 +18,7 @@
    (let $_old (remove-atom &flags ($k $on)) $on))
 
 ; A row whose first field is an Atom-typed variable.
-(: put-head (-[det]-> Key Atom))
+(: put-head (-[det]-> Key %Undefined%))
 (= (put-head $key)
    (let* (($head (tag-of $key))
           ($_row (add-atom &flags ($head $key))))

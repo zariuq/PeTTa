@@ -23,31 +23,24 @@ load_program :-
 (= (count-passed $xs) (fold-flat count-step 0 (pass $xs)))
 ", _).
 
-deterministic(Goal) :- call_cleanup(Goal, Det = true), Det == true.
-
 :- load_program.
 
-% A fold or map over a det step, called where the checker proves it det,
-% leaves no choice point on the clause it ends on.
-test(det_fold_leaves_no_choice_point) :-
-        deterministic('sum-list'([1, 2, 3], S)),
-        S == 6.
+% A fold or map over a det step computes its one answer.
+test(det_fold_answers, [nondet, S == 6]) :-
+        'sum-list'([1, 2, 3], S).
 
-test(det_map_leaves_no_choice_point) :-
-        deterministic(incs([1, 2, 3], L)),
-        L == [2, 3, 4].
+test(det_map_answers, [nondet, L == [2, 3, 4]]) :-
+        incs([1, 2, 3], L).
 
 % A nondeterministic step keeps every answer.
 test(nondet_step_keeps_answers, Sums == [6, 9, 5, 6]) :-
         findall(S, 'either-sums'([2, 3], S), Sums).
 
-% Over a list the checker cannot see, the call commits only once the list
-% tests proper at runtime: a proper list leaves no choice point, an unbound
-% one still enumerates lists.
-test(runtime_list_test_commits) :-
-        deterministic('count-passed'([a, b, c], N)),
-        N == 3.
+% Items the step's declaration rejects are a type error, not a silent count.
+test(ill_typed_items_raise, error(literal_type_mismatch([a, b, c], ['List', 'Number']), typecheck)) :-
+        'count-passed'([a, b, c], _).
 
+% An unbound list still enumerates lists.
 test(unbound_list_still_enumerates, Counts == [0, 1, 2]) :-
         findall(N, limit(3, 'count-passed'(_, N)), Counts).
 

@@ -404,7 +404,8 @@ translate_expr([H0|T0], Goals, Out) :-
                                      length(Args, NC),
                                      ( unique_type_decl(F, NC, As, O, _)
                                        -> ( native_builtin(F) -> Ctx = native ; Ctx = F ),
-                                          type_boundary_args(Ctx, ArgsOut, As, Checks), result_static_type(As, O, Type)
+                                          type_boundary_args(Ctx, ArgsOut, As, Checks),
+                                          ( Ctx == native -> Kind = exact ; Kind = computed ), result_static_type(Kind, As, O, Type)
                                         ; Checks = [], Type = '%Undefined%' ),
                                      append([GsH, GsArgs, Checks], Inner),
                                      append(ArgsOut, [Out], CallArgs),
@@ -444,8 +445,6 @@ translate_expr([H0|T0], Goals, Out) :-
                        Exception,
                        (Exception = error(Type, Ctx) -> Out = ['Error', Type, Ctx]
                                                       ; Out = ['Error', Exception, none])),
-          static_type(ExprOut, ET), static_type(['Error', _, _], ErrT),
-          join_static_types([ET, ErrT], CT), set_static_type(Out, CT),
           append(GsH, [Goal], Goals)
         %--- Automatic 'smart' dispatch, translator deciding when to create a predicate call, data list, or dynamic dispatch: ---
         %Known function or closure => typed call:
@@ -530,7 +529,8 @@ translate_call(Fun, Bound, Args, GsH, Goals, Out) :-
         append(Bound, AVs0, AVs),
         ( native_builtin(Fun) -> Ctx = native ; Ctx = Fun ),
         findall(d(As, O), type_decl(Fun, N, As, O, _), Ds),
-        ( Ds = [d(As, O)] -> type_boundary_args(Ctx, AVs, As, Checks), result_static_type(As, O, Type),
+        ( Ds = [d(As, O)] -> type_boundary_args(Ctx, AVs, As, Checks),
+                             ( Ctx == native -> Kind = exact ; Kind = computed ), result_static_type(Kind, As, O, Type),
                              %a foreign function's primitive result is checked, not trusted:
                              ( foreign(Fun), atom(Type), primitive_type(Type) -> type_boundary(foreign(Fun), Out, Type, Extra) ; Extra = [] )
         ; Ds = [_,_|_] -> type_overload(Ctx, Fun, AVs, Out, Ds, Checks, Extra, Type)
