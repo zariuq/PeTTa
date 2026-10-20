@@ -548,11 +548,11 @@ types it cannot decide statically.
 
 | | v1.0.6 | v1.1 | now |
 |---|---:|---:|---:|
-| `src/*.pl` | 1,229 | 13,661 | 2,572 |
-| type checking | ~40 (in the translator) | 10,357 (`src/typecheck*`) + the translator's typing | 400 (`src/types.pl`) + ~80 lines of calls into it and error messages |
-| `src/translator.pl` | 475 | 1,566 | 687 |
+| `src/*.pl` | 1,229 | 13,661 | 2,587 |
+| type checking | ~40 (in the translator) | 10,357 (`src/typecheck*`) + the translator's typing | 417 (`src/types.pl`) + ~80 lines of calls into it and error messages |
+| `src/translator.pl` | 475 | 1,566 | 685 |
 
-`src/types.pl` is about 290 lines of code and 110 of comments. The rest of the
+`src/types.pl` is about 260 lines of code and 115 of comments. The rest of the
 growth since v1.0.6 is not type checking: the load cache (`load_cache.pl`),
 specialization, `hyperpose`, and the other changes of v1.1, all kept.
 
@@ -611,29 +611,34 @@ are historical: they run like all the others.
 
 ## 8. Measurements
 
-Inferences and the median CPU seconds of 5 runs, SWI-Prolog 10.1.9 on a
-4-vCPU machine; `measure.pl` (from the review bundle) separates setup, the
-compilation of the query and its execution. Inferences are exact; times vary
-by about 10% from run to run.
+Inferences, exact, and median CPU seconds, SWI-Prolog 10.1.9 on a 4-vCPU
+machine. `measure.pl` (from the review bundle) separates setup, the compilation
+of the query and its execution; the v1.1 and current chainer and nilbc runs
+were interleaved, 6 of each, since times vary by 10% or more from run to run.
 
 | | v1.0.6 | v1.1 | v1.1 candidate | now |
 |---|---:|---:|---:|---:|
-| typed numeric loop, 5 × 100,000 | 6,000,125 / 0.301 | 500,119 / 0.013 | 500,119 / 0.015 | 500,119 / 0.013 |
-| untyped numeric loop | 3,000,095 / 0.099 | 500,089 / 0.013 | 500,089 / 0.018 | 500,089 / 0.013 |
-| nilbc, 20 queries | 291,542,965 / 19.5 | 2,307,804 / 0.54 | 2,307,804 / 0.49 | 2,319,684 / 0.52 |
-| nilbc setup | 18,350,330 / 1.16 | 847,672 / 0.09 | 829,173 / 0.09 | 370,760 / 0.07 |
-| chainer, 100 queries | does not run | 2,685,672 / 0.61 | 3,546,872 / 1.42 | 2,475,124 / 0.56 |
-| chainer setup | | 31,884,900 / 3.07 | 32,112,454 / 3.41 | 4,426,244 / 0.59 |
-| chainer peak memory | | 64 MB | 81 MB | 26 MB |
+| typed numeric loop, 5 × 100,000 | 6,000,125 / 0.30 | 500,119 / 0.013 | 500,119 / 0.015 | 500,119 / 0.013 |
+| untyped numeric loop | 3,000,095 / 0.10 | 500,089 / 0.013 | 500,089 / 0.018 | 500,089 / 0.014 |
+| nilbc, 20 queries | 291,542,965 / 19.5 | 2,307,804 / 0.50 | 2,307,804 / 0.49 | 2,319,684 / 0.49 |
+| nilbc setup | 18,350,330 / 1.16 | 847,672 / 0.10 | 829,173 / 0.09 | 371,293 / 0.05 |
+| chainer, 100 queries | does not run | 2,685,672 / 0.59 | 3,546,872 / 1.42 | 2,504,924 / 0.56 |
+| chainer setup | | 31,884,900 / 3.03 | 32,112,454 / 3.41 | 4,478,615 / 0.63 |
+| chainer peak memory | | 64 MB | 81 MB | 30 MB |
 
 v1.1 cannot load the chainer as released: `if-error` is defined in both
-`lib_he` and `lib_roman` with overlapping `-[det]->` clauses. Its column uses
-v1.1 with the candidate's `lib_error` (keeping `lib_roman`'s `(List $a)` result
-for `\?/`, on which v1.1's type unification loops). Execution is as fast as
-v1.1 everywhere: the chainer runs 8% fewer inferences, and nilbc 0.5% more,
-since a variable-headed expression in its proofs goes through `apply_fn1`
+`lib_he` and `lib_roman` with overlapping `-[det]->` clauses. Its chainer
+column uses v1.1 with the candidate's `lib_error` (keeping `lib_roman`'s
+`(List $a)` result for `\?/`, on which v1.1's type unification loops).
+
+Execution is as fast as v1.1: the chainer runs 7% fewer inferences, nilbc 0.5%
+more, as a variable-headed expression in its proofs goes through `apply_fn1`
 before `reduce`. Loading the chainer takes a seventh of v1.1's inferences and a
-fifth of its time, in less than half its memory.
+fifth of its time, in less than half its memory. With `--no-type-checks` the
+chainer runs 2,475,124 inferences: its checks, at the boundaries between its
+untyped code and the typed libraries, cost 1.2%, within the noise in time.
+`examples/tilepuzzle.metta`, an untyped search over the typed queues of
+`lib_datastructures`, runs 20,196,703 inferences, against 20,151,892 in v1.1.
 
 ## 9. Next steps
 
