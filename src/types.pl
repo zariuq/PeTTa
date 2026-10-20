@@ -145,9 +145,10 @@ static_type([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), type_d
                           ( unique_type_decl(C, N, As, O, _), instantiate(Fs, As), maplist(value_established, Fs, As)
                             -> result_static_type(constructor, As, O, T) ; T = '%Undefined%' ).
 %Other data is a list of the type its elements agree on, else the tuple of their
-%types, headed by the head symbol itself if it has no type (a tag, see typecheck_ok/2):
-static_type([X|Xs], T) :- is_list(Xs), !, maplist(static_type, [X|Xs], [S|Ss]),
-                          ( agreed_type([S|Ss], E) -> T = ['List', E] ; atom(X), S == '%Undefined%' -> T = [X|Ss] ; T = [S|Ss] ).
+%types; but a symbol without a type gives the expression it heads none, as an
+%undeclared function gives none to its calls:
+static_type([X|Xs], T) :- is_list(Xs), static_type(X, S), \+ ( atom(X), S == '%Undefined%' ), !, maplist(static_type, Xs, Ss),
+                          ( agreed_type([S|Ss], E) -> T = ['List', E] ; T = [S|Ss] ).
 static_type(_, '%Undefined%').
 
 %A function, or its partial application to K arguments, as a value: the rest of
@@ -176,8 +177,13 @@ strip_static_types(Term) :- term_attvars(Term, Vs), maplist([V]>>del_attr(V, pt)
 
 %Established: every value of type S satisfies T. Free variables of S are
 %copied (a bottom value fits each use), variables of T stand for any type.
+%A value is established by its static type; if ground, by a check at compile
+%time; and data checked against a tuple type element by element, a symbol
+%fitting itself as its tag, as in typecheck_ok/2:
 value_established(V, T) :- static_type(V, S), established(S, T), !.
-value_established(V, T) :- ground(V), closed(T), typecheck_ok(V, T).    %checked once, at compile time
+value_established(V, T) :- ground(V), closed(T), typecheck_ok(V, T), !.
+value_established(V, T) :- is_list(V), tuple_type(T), same_length(V, T), maplist(fits_position, V, T).
+fits_position(X, T) :- atom(X), X == T, ! ; value_established(X, T).
 established(S, T) :- \+ \+ ( copy_term(S, S1), est(S1, T) ).
 est(S, T) :- var(T), !, T = S.
 est(S, T) :- var(S), !, S = T.
@@ -273,7 +279,7 @@ closed(T) :- checkable(T, C), C =@= T.
 type_boundary(_, _, T, []) :- ( var(T) ; wildcard(T) ; type_flag('--no-type-checks') ), !.
 type_boundary(Ctx, V, T, Gs) :- static_type(V, S0), ( Ctx = the(_) -> forget_open(S0, S) ; S = S0 ),
                                 boundary(Ctx, V, S, T, Gs).
-boundary(_, V, S, T, Gs) :- checkable(T, C), ( established(S, C) ; ground(V), typecheck_ok(V, C) ), !,
+boundary(_, V, _, T, Gs) :- checkable(T, C), value_established(V, C), !,
                             ( type_flag('--oracle'), \+ wildcard(C) -> guard(V, C, G), Gs = [G] ; Gs = [] ).
 boundary(_, V, S, T, _) :- conflict(S, T), !,
                            ( ground(V), \+ rigid(S) -> throw(error(literal_type_mismatch(V, T), typecheck))

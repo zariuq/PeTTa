@@ -81,7 +81,7 @@ fits `(List $a)` for every `$a`.
 | a symbol with exactly one declared type `T` | `T` |
 | a function's or constructor's name; a partial application | its arrow type (the rest of it), if it has one declaration; for an undeclared function, `(-> %Undefined% ..)` of its arity |
 | a constructor application `(c X1 .. Xn)` | the declared result, if the fields establish the declared field types |
-| other data `(X1 .. Xn)` | `(List T)` if the elements' types agree on `T`, else the tuple of their types, headed by `X1` itself if it is a symbol without a type (a tag) |
+| other data `(X1 .. Xn)` | `(List T)` if the elements' types agree on `T`, else the tuple of their types; unknown if `X1` is a symbol without a type, as for the call of an undeclared function |
 | a parameter of the clause | its declared type (§2.8) |
 | a head argument rebuilt in the body | the parameter's type |
 | a variable bound by a pattern | the part of the matched value's type (§2.9) |
@@ -114,6 +114,13 @@ needed:
 
 The variables of `S` are copied first, so that each use of `()` is independent;
 a variable of `T` stands for any type.
+
+A *value* is established at `T` by its static type; if it is ground at compile
+time, by a check then; and if it is data `(X1 .. Xn)` and `T` a tuple type
+`(T1 .. Tn)`, element by element, where a symbol establishes itself, as in the
+value relation. This is checking mode for data: the result of
+`(= (enqueue $e (queue $in $out $n)) (queue (cons $e $in) $out (+ $n 1)))`
+establishes `(queue (List $a) (List $a) Number)` although `queue` has no type.
 
 ### 2.4 Consistency: `S ~ T`
 
@@ -158,8 +165,8 @@ primitive types stay closed, since the value relation decides them without
 What a runtime check can test of a required type is its *known part*: its type
 variables, rigid or not, are unknown there. `(List $a)` is checked as a list,
 `(-> $a $b)` as a function of one argument, and a rigid result type not at all
-(§4.4). A boundary needs no check when the static type establishes this known
-part, and a value that is ground at compile time is checked once, then.
+(§4.4). A boundary needs no check when the value is established at this known
+part (§2.3).
 
 A check is compiled to an inline test of the common case, falling back to the
 value relation: `(number(V) -> true ; typecheck_or_error(V, 'Number'))`, and
@@ -411,8 +418,11 @@ that gave `S` (§2.2):
 
 *Claim.* If `S ⊑ T` and a value fits `S`, it fits `T`. *Argument*, by induction
 on the rules of §2.3, against the table of §2.1: every rule of `⊑` is one of
-the value relation read for all the values of `S`. So a check that the compiler
-leaves out, because `S` establishes the known part of `T`, would have succeeded.
+the value relation read for all the values of `S`. Data established element by
+element fits a tuple type by the tuple row of §2.1, and a ground value fits at
+runtime as it did when it was checked at compile time. So a check that the
+compiler leaves out, because the value is established at the known part of `T`,
+would have succeeded.
 
 `examples/soundness_matrix.sh` (phase A, `--oracle`) compiles every example
 with the left-out checks put back in, and requires that none of them fails.
@@ -548,11 +558,11 @@ types it cannot decide statically.
 
 | | v1.0.6 | v1.1 | now |
 |---|---:|---:|---:|
-| `src/*.pl` | 1,229 | 13,661 | 2,587 |
-| type checking | ~40 (in the translator) | 10,357 (`src/typecheck*`) + the translator's typing | 417 (`src/types.pl`) + ~80 lines of calls into it and error messages |
-| `src/translator.pl` | 475 | 1,566 | 685 |
+| `src/*.pl` | 1,229 | 13,661 | 2,595 |
+| type checking | ~40 (in the translator) | 10,357 (`src/typecheck*`) + the translator's typing | 423 (`src/types.pl`) + ~80 lines of calls into it and error messages |
+| `src/translator.pl` | 475 | 1,566 | 687 |
 
-`src/types.pl` is about 260 lines of code and 115 of comments. The rest of the
+`src/types.pl` is about 265 lines of code and 115 of comments. The rest of the
 growth since v1.0.6 is not type checking: the load cache (`load_cache.pl`),
 specialization, `hyperpose`, and the other changes of v1.1, all kept.
 
@@ -609,36 +619,44 @@ results, closures and `catch`), `strictdet_let_value_cut` and
 `make-list`). The `strict_` and `strictdet_` prefixes of the remaining examples
 are historical: they run like all the others.
 
+The chainer's own tests (its `tests/*.metta`, run from its root) give the same
+results as on v1.1: the same 370 passing tests in 30 files, and the same two
+files that fail to load on both, since they import files that are not where
+they look. They run in 19 seconds, against 83 on v1.1.
+
 ## 8. Measurements
 
 Inferences, exact, and median CPU seconds, SWI-Prolog 10.1.9 on a 4-vCPU
 machine. `measure.pl` (from the review bundle) separates setup, the compilation
 of the query and its execution; the v1.1 and current chainer and nilbc runs
-were interleaved, 6 of each, since times vary by 10% or more from run to run.
+were interleaved, 6 of each (18 for nilbc), since times vary by 10% or more from
+run to run.
 
 | | v1.0.6 | v1.1 | v1.1 candidate | now |
 |---|---:|---:|---:|---:|
 | typed numeric loop, 5 × 100,000 | 6,000,125 / 0.30 | 500,119 / 0.013 | 500,119 / 0.015 | 500,119 / 0.013 |
 | untyped numeric loop | 3,000,095 / 0.10 | 500,089 / 0.013 | 500,089 / 0.018 | 500,089 / 0.014 |
-| nilbc, 20 queries | 291,542,965 / 19.5 | 2,307,804 / 0.50 | 2,307,804 / 0.49 | 2,319,684 / 0.49 |
-| nilbc setup | 18,350,330 / 1.16 | 847,672 / 0.10 | 829,173 / 0.09 | 371,293 / 0.05 |
-| chainer, 100 queries | does not run | 2,685,672 / 0.59 | 3,546,872 / 1.42 | 2,504,924 / 0.56 |
-| chainer setup | | 31,884,900 / 3.03 | 32,112,454 / 3.41 | 4,478,615 / 0.63 |
-| chainer peak memory | | 64 MB | 81 MB | 30 MB |
+| nilbc, 20 queries | 291,542,965 / 19.5 | 2,307,804 / 0.48 | 2,307,804 / 0.49 | 2,319,684 / 0.50 |
+| nilbc setup | 18,350,330 / 1.16 | 847,672 / 0.09 | 829,173 / 0.09 | 367,937 / 0.06 |
+| chainer, 100 queries | does not run | 2,685,672 / 0.62 | 3,546,872 / 1.42 | 2,488,524 / 0.56 |
+| chainer setup | | 31,884,900 / 3.05 | 32,112,454 / 3.41 | 4,460,946 / 0.63 |
+| chainer peak memory | | 64 MB | 81 MB | 29 MB |
 
 v1.1 cannot load the chainer as released: `if-error` is defined in both
 `lib_he` and `lib_roman` with overlapping `-[det]->` clauses. Its chainer
 column uses v1.1 with the candidate's `lib_error` (keeping `lib_roman`'s
 `(List $a)` result for `\?/`, on which v1.1's type unification loops).
 
-Execution is as fast as v1.1: the chainer runs 7% fewer inferences, nilbc 0.5%
-more, as a variable-headed expression in its proofs goes through `apply_fn1`
-before `reduce`. Loading the chainer takes a seventh of v1.1's inferences and a
-fifth of its time, in less than half its memory. With `--no-type-checks` the
-chainer runs 2,475,124 inferences: its checks, at the boundaries between its
-untyped code and the typed libraries, cost 1.2%, within the noise in time.
-`examples/tilepuzzle.metta`, an untyped search over the typed queues of
-`lib_datastructures`, runs 20,196,703 inferences, against 20,151,892 in v1.1.
+The chainer runs 7% fewer inferences than on v1.1, in 9% less time. nilbc runs
+0.5% more, as a variable-headed expression in its proofs goes through
+`apply_fn1` before `reduce`, and is within the noise in time: over 18
+interleaved runs its median is 3.5% and its fastest run 1.6% slower. Loading the
+chainer takes a seventh of v1.1's inferences and a fifth of its time, in less
+than half its memory. With `--no-type-checks` the chainer runs 2,458,724
+inferences: its checks, at the boundaries between its untyped code and the
+typed libraries, cost 1.2%. `examples/tilepuzzle.metta`, an untyped search over
+the typed queues of `lib_datastructures`, runs 20,196,335 inferences, against
+20,151,892 in v1.1.
 
 ## 9. Next steps
 

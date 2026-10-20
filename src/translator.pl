@@ -86,11 +86,13 @@ recompile_function_clauses(F) :- findall(Ref-Term, ( translated_from(Ref, Term),
                                         ( nonvar(E) -> throw(E) ; true ) ) ).
 
 %Record atoms compiled as plain symbol heads, so a late function registration
-%can be flagged, and the clauses that used it as data retranslated:
+%can be flagged; a declared function's definition may come later, and then the
+%clauses that used its name as data are retranslated:
 :- dynamic symbol_head/1.
 note_symbol_head(HV) :- atom(HV), !,
                         ( symbol_head(HV) -> true ; assertz(symbol_head(HV)) ),
-                        ( nb_current('$compiling', F), F \== none, \+ symbol_use(HV, F) -> assertz(symbol_use(HV, F)) ; true ).
+                        ( nb_current('$compiling', F), F \== none, type_decl(HV, _, _, _, _), \+ symbol_use(HV, F)
+                          -> assertz(symbol_use(HV, F)) ; true ).
 note_symbol_head(_).
 late_function(F) :- note_function(F),
                     forall(retract(symbol_use(F, G)), ( G == F -> true ; recompile_function_clauses(G) )).

@@ -94,6 +94,25 @@ run overload <<'EOF'
 EOF
 status_is overload 0; has overload "f(1,"; lacks overload "no_matching_overload"; has overload "typecheck_ok(B, 'Number')"
 
+# Data is checked against a tuple type element by element, its symbol as the tag:
+run tagged <<'EOF'
+(: push (-> Number (stack (List Number)) (stack (List Number))))
+(= (push $x (stack $xs)) (stack (cons $x $xs)))
+!(test (push 1 (stack ())) (stack (1)))
+EOF
+status_is tagged 0; lacks tagged "typecheck"
+
+# A symbol without a type gives the expression it heads none: untyped code using
+# it compiles, and a typed use of it is checked when it runs:
+run untyped_data <<'EOF'
+(= (grow $h) (+ 1 (size $h)))
+(: dbl (-> Number Number))
+(= (dbl $x) (* $x 2))
+(= (dbl-size $h) (dbl (size $h)))
+!(test (dbl 2) 4)
+EOF
+status_is untyped_data 0; has untyped_data "typecheck_or_error([size, A], 'Number')"
+
 # Untyped code compiles as before: native arithmetic, no checks:
 sh "$ROOT_DIR/run.sh" "$ROOT_DIR/examples/fib.metta" > "$TMP_DIR/fib.out" 2>&1; echo $? > "$TMP_DIR/fib.status"
 status_is fib 0; lacks fib "typecheck"; has fib "A<2"; has fib " is "
