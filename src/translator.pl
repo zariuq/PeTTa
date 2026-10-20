@@ -38,9 +38,7 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
                                                ( atom(F), nb_current(F, Prev) -> true ; Prev = [] ),
                                                copy_term_nat(fun_meta(Args1, BodyExpr), Meta),
                                                nb_setval(F, [Meta | Prev]),
-                                               %parameters get the declared types, as instantiated by constant
-                                               %head arguments (a specialization's closure); the type variables
-                                               %left are the caller's choice, rigid here:
+                                               %the contract the clause is compiled against (see types.pl):
                                                clause_contract(F, N, Args1, PTs, OT, Det),
                                                with_compiling(F, Args1-PTs,
                                                               ( ( nonvar(PTs) -> maplist(type_pattern, Args1, PTs) ; true ),
