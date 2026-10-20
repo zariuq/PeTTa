@@ -213,8 +213,9 @@ translate_expr([H0|T0], Goals, Out) :-
                                               append(GsH, [Goal1], G1),
                                               append(G1, GsE, G2),
                                               append(G2, [test(Actual, ExpVal, Out)], Goals)
+        %(Conj -> true) is once(Conj), but compiled inline rather than meta-called:
         ; HV == once, T = [X] -> translate_expr_to_conj(X, Conj, Out),
-                                 append(GsH, [once(Conj)], Goals)
+                                 append(GsH, [(Conj -> true)], Goals)
         ; HV == hyperpose, T = [L]
           -> ( nonvar(L), is_list(L)
                -> build_hyperpose_branches(L, Branches, Types),

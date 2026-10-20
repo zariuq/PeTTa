@@ -558,9 +558,9 @@ types it cannot decide statically.
 
 | | v1.0.6 | v1.1 | now |
 |---|---:|---:|---:|
-| `src/*.pl` | 1,229 | 13,661 | 2,595 |
+| `src/*.pl` | 1,229 | 13,661 | 2,596 |
 | type checking | ~40 (in the translator) | 10,357 (`src/typecheck*`) + the translator's typing | 423 (`src/types.pl`) + ~80 lines of calls into it and error messages |
-| `src/translator.pl` | 475 | 1,566 | 687 |
+| `src/translator.pl` | 475 | 1,566 | 688 |
 
 `src/types.pl` is about 265 lines of code and 115 of comments. The rest of the
 growth since v1.0.6 is not type checking: the load cache (`load_cache.pl`),
@@ -629,34 +629,42 @@ they look. They run in 19 seconds, against 83 on v1.1.
 Inferences, exact, and median CPU seconds, SWI-Prolog 10.1.9 on a 4-vCPU
 machine. `measure.pl` (from the review bundle) separates setup, the compilation
 of the query and its execution; the v1.1 and current chainer and nilbc runs
-were interleaved, 6 of each (18 for nilbc), since times vary by 10% or more from
+were interleaved, 6 of each (12 for nilbc), since times vary by 10% or more from
 run to run.
 
 | | v1.0.6 | v1.1 | v1.1 candidate | now |
 |---|---:|---:|---:|---:|
 | typed numeric loop, 5 × 100,000 | 6,000,125 / 0.30 | 500,119 / 0.013 | 500,119 / 0.015 | 500,119 / 0.013 |
 | untyped numeric loop | 3,000,095 / 0.10 | 500,089 / 0.013 | 500,089 / 0.018 | 500,089 / 0.014 |
-| nilbc, 20 queries | 291,542,965 / 19.5 | 2,307,804 / 0.48 | 2,307,804 / 0.49 | 2,319,684 / 0.50 |
-| nilbc setup | 18,350,330 / 1.16 | 847,672 / 0.09 | 829,173 / 0.09 | 367,937 / 0.06 |
-| chainer, 100 queries | does not run | 2,685,672 / 0.62 | 3,546,872 / 1.42 | 2,488,524 / 0.56 |
-| chainer setup | | 31,884,900 / 3.05 | 32,112,454 / 3.41 | 4,460,946 / 0.63 |
-| chainer peak memory | | 64 MB | 81 MB | 29 MB |
+| nilbc, 20 queries | 291,542,965 / 19.5 | 2,307,804 / 0.46 | 2,307,804 / 0.49 | 2,319,684 / 0.48 |
+| nilbc setup | 18,350,330 / 1.16 | 847,672 / 0.09 | 829,173 / 0.09 | 367,937 / 0.05 |
+| chainer, 100 queries | does not run | 2,685,672 / 0.62 | 3,546,872 / 1.42 | 2,471,724 / 0.52 |
+| chainer setup | | 31,884,900 / 2.88 | 32,112,454 / 3.41 | 4,451,337 / 0.58 |
+| chainer peak memory | | 65 MB | 81 MB | 29 MB |
+| `examples/tilepuzzle.metta`, load and run | 17,438,053 / 3.23 | 20,151,894 / 3.59 | | 17,535,506 / 3.36 |
 
 v1.1 cannot load the chainer as released: `if-error` is defined in both
 `lib_he` and `lib_roman` with overlapping `-[det]->` clauses. Its chainer
 column uses v1.1 with the candidate's `lib_error` (keeping `lib_roman`'s
 `(List $a)` result for `\?/`, on which v1.1's type unification loops).
 
-The chainer runs 7% fewer inferences than on v1.1, in 9% less time. nilbc runs
+The chainer runs 8% fewer inferences than on v1.1, in 15% less time. nilbc runs
 0.5% more, as a variable-headed expression in its proofs goes through
-`apply_fn1` before `reduce`, and is within the noise in time: over 18
-interleaved runs its median is 3.5% and its fastest run 1.6% slower. Loading the
-chainer takes a seventh of v1.1's inferences and a fifth of its time, in less
-than half its memory. With `--no-type-checks` the chainer runs 2,458,724
-inferences: its checks, at the boundaries between its untyped code and the
-typed libraries, cost 1.2%. `examples/tilepuzzle.metta`, an untyped search over
-the typed queues of `lib_datastructures`, runs 20,196,335 inferences, against
-20,151,892 in v1.1.
+`apply_fn1` before `reduce`, and is within the noise in time: its median is 3%
+slower, its fastest run as fast as v1.1's. Loading the chainer takes a seventh
+of v1.1's inferences and a fifth of its time, in less than half its memory.
+With `--no-type-checks` the chainer runs 2,441,924 inferences: its checks, at
+the boundaries between its untyped code and the typed libraries, cost 1.2%.
+`examples/tilepuzzle.metta`, an untyped breadth-first search over the typed
+queues of `lib_datastructures`, runs 13% fewer inferences than on v1.1 and
+0.6% more than on v1.0.6, whose queues are untyped; its checks cost 1.1%.
+
+Checks are cheap only where SWI-Prolog compiles them inline. It meta-calls
+`once/1` around a compound goal, building the goal at every call, which made a
+check inside `(once ...)` ten times as expensive as the same check inline (in
+tilepuzzle, 10-20% of its time); MeTTa's `once` therefore compiles to the
+equivalent `(Goal -> true)`. Checks inside other meta-called goals (`findall`,
+`forall`, `catch`) still pay the meta-call.
 
 ## 9. Next steps
 
