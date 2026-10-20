@@ -73,7 +73,7 @@
 (= (\=a $a $b) (\? =alpha $a $b))
 
 ;Unification
-(: \?/ (-[$e]-> (-[$e]-> $a $b Bool) (List $a) (List $b) (List $a)))
+(: \?/ (-[$e]-> (-[$e]-> $a $b Bool) (List $a) (List $b) (List (| $a $b))))
 (= (\?/ $pred () $bs) $bs)
 (= (\?/ $pred (cons $a $as) $bs)
   (if (fold-flat bool-or False (map-flat ($pred $a) $bs))
@@ -106,9 +106,7 @@
 
 ;Error handling
 
-(: if-error (-[det]-> $value $result $result $result))
-(= (if-error $value $then $else)
-   (if (= $value (cons Error $_)) $then $else))
+!(import! &self (library lib_error))
 
 (: checked-number (-[det]-> %Undefined% Number))
 (= (checked-number $value) (the Number $value))

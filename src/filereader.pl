@@ -5,6 +5,7 @@
 :- dynamic working_dir/1.
 :- dynamic active_metta_load/2.
 :- dynamic metta_source_functions_started/1.
+:- dynamic metta_runnable_error/0.
 
 push_working_dir(Filename) :- file_directory_name(Filename, Dir0),
                               ( absolute_file_name(Dir0, Dir, [file_type(directory), file_errors(fail)])
@@ -55,14 +56,6 @@ rethrow_metta_file_error(_, Error) :- throw(Error).
 
 current_metta_file(File) :- ( nb_current('$metta_file', File) -> true ; File = '<string>' ).
 
-%Run Goal as though it were being compiled from File. Dependency revalidation
-%uses this interface without owning the filereader's thread-local state.
-in_metta_file(File, Goal) :-
-    current_metta_file(Prev),
-    setup_call_cleanup(nb_setval('$metta_file', File),
-                       Goal,
-                       nb_setval('$metta_file', Prev)).
-
 %Parse MeTTa source into its balanced top-level forms:
 metta_string_forms(S, Forms) :- string_codes(S, Cs),
                                 strip(Cs, 0, Codes),
@@ -73,55 +66,24 @@ process_metta_string(S, Results) :- process_metta_string(S, Results, '&self').
 process_metta_string(S, Results, Space) :-
     process_metta_string(S, Results, Space, compile_functions).
 process_metta_string(S, Results, Space, Mode) :- metta_string_forms(S, Forms),
-                                           maplist(parse_form, Forms, ParsedForms),
-                                           %declaration prepass: every function type declaration in the
-                                           %file is visible to every definition in it, independent of order
-                                           with_decl_notifications_batched(
-                                               forall(member(parsed(expression, FormStr, Line, Decl), ParsedForms),
-                                                      with_form_location(Line, FormStr,
-                                                                         precache_fn_type_decl(Space, Decl)))),
-                                           %clause-BODY prepass, same rationale: the output-certificate
-                                           %prover (output_cert/3) may need a later definition's bodies
-                                           %while an earlier one is validated - mutually recursive
-                                           %bound-Bool functions in source order. Keyed by file so a
-                                           %nested import cannot clobber the outer file's set, and
-                                           %cleaned on the way out, error or not:
-                                           current_metta_file(File),
-                                           setup_call_cleanup(
-                                               precache_pending_bodies(File, ParsedForms),
-                                               with_unified_file_analysis_for_mode(
-                                                   Mode, ParsedForms,
-                                                   ( %exhaustiveness is a property of the whole clause set, so it
-                                                     %is judged here, once the file's clauses and declarations are
-                                                     %all visible, and before any of its forms runs:
-                                                     det_exhaustiveness_prepass(ParsedForms),
-                                                     maplist(process_form(Space, Mode), ParsedForms, ResultsList) )),
-                                               retractall(pending_clause_body(File, _, _, _))), !,
-                                           append(ResultsList, Results).
-
-% Re-importing a source into another MeTTa space only replays its atoms.  Its
-% functions remain the already-compiled clauses from the first load, so a
-% second whole-file IR solve has no consumer and cannot affect code generation.
-with_unified_file_analysis_for_mode(compile_functions, ParsedForms, Goal) :- !,
-    with_unified_file_analysis(ParsedForms, Goal).
-with_unified_file_analysis_for_mode(_, _, Goal) :-
-    call(Goal).
+                                                 maplist(parse_form, Forms, ParsedForms),
+                                                 %declaration prepass: every function type declaration in the
+                                                 %file is visible to every definition in it, independent of order
+                                                 forall(member(parsed(expression, FormStr, Line, Decl), ParsedForms),
+                                                        with_form_location(Line, FormStr, note_type_decl(Decl))),
+                                                 maplist(process_form(Space, Mode), ParsedForms, ResultsList), !,
+                                                 append(ResultsList, Results).
 
 register_function_signature(F, Arity) :- warn_if_used_as_symbol(F),
                                          register_fun(F),
-                                         ( catch(arity(F, Arity), _, fail) -> true ; assertz(arity(F, Arity)) ).
+                                         ( catch(arity(F, Arity), _, fail) -> true ; assertz(arity(F, Arity)) ),
+                                         late_function(F).
 
 %A function arriving after expressions already compiled its name as a plain symbol
 %cannot be called by those expressions anymore, which usually means an import came too late:
 warn_if_used_as_symbol(F) :- \+ fun(F), symbol_head(F), !,
                              format(user_error, "Warning: ~w is defined or imported after already being used; earlier expressions treat it as a plain symbol. Move the import or definition above the first use.~n", [F]).
 warn_if_used_as_symbol(_).
-
-precache_pending_bodies(File, ParsedForms) :-
-    forall(( member(parsed(function, _, _, Term), ParsedForms),
-             Term = [=, [F|Args], Body], atom(F) ),
-           ( length(Args, N),
-             assertz(pending_clause_body(File, F, N, Body)) )).
 
 %First pass to convert MeTTa to Prolog Terms and register functions:
 parse_form(form(S, L), parsed(T, S, L, Term)) :- sread(S, Term),
@@ -130,60 +92,48 @@ parse_form(form(S, L), parsed(T, S, L, Term)) :- sread(S, Term),
                                                                                   ; T=expression ).
 parse_form(runnable(S, L), parsed(runnable, S, L, Term)) :- sread(S, Term).
 
-%Report where a static type/determinism error was raised before rethrowing it,
-%and publish the same source location while declaration caching runs so the
-%canonical declaration record retains its provenance.
+%Report where a static type error was raised before rethrowing it:
 with_form_location(Line, FormStr, Goal) :-
     current_metta_file(File),
-    setup_call_cleanup(
-        asserta(declaration_provenance(source(File, Line)), Ref),
-        catch(Goal, error(E, Ctx),
-              ( ( nonvar(Ctx), static_error_ctx(Ctx)
-                  -> format(user_error, "Type error at ~w:~w in:~n  ~w~n",
-                            [File, Line, FormStr])
-                ; true ),
-                throw(error(E, Ctx)) )),
-        erase(Ref)).
-
-static_error_ctx(typecheck).
-static_error_ctx(determinism).
+    catch(Goal, error(E, Ctx),
+          ( ( Ctx == typecheck
+              -> format(user_error, "Type error at ~w:~w in:~n  ~w~n", [File, Line, FormStr])
+            ; true ),
+            throw(error(E, Ctx)) )).
 
 %Second pass to compile / run / add the Terms:
-process_form(Space, _, parsed(expression, FormStr, Line, Term), []) :-
-                                                           with_form_location(
-                                                               Line, FormStr,
-                                                               with_unified_preanalyzed_form(
-                                                                   'add-atom'(Space, Term, true))),
+process_form(Space, _, parsed(expression, FormStr, Line, Term), []) :- with_form_location(Line, FormStr, 'add-atom'(Space, Term, true)),
                                                            ( silent(true) -> true ; swrite(Term,STerm),
                                                                                     format("\e[33m--> metta sexpr -->~n\e[36m~w~n", [STerm]),
                                                                                     format("\e[33m^^^^^^^^^^^^^^^^^^^~n\e[0m") ).
-process_form(_, _, parsed(runnable, FormStr, Line, Term), Result) :- with_form_location(Line, FormStr,
-                                                                                     translate_expr([collapse, Term], Goals, Result)),
-                                                                  ( silent(true) -> true ; format("\e[33m--> metta runnable  -->~n\e[36m!~w~n\e[33m-->  prolog goal  -->\e[35m ~n", [FormStr]),
-                                                                                           forall(member(G, Goals), portray_clause((:- G))),
-                                                                                           format("\e[33m^^^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ),
-                                                                  call_goals(Goals).
+%A type error ends its runnable, not the file: the runnable's result is the
+%error, and the run as a whole reports failure (see main/0).
+process_form(_, _, parsed(runnable, FormStr, Line, Term), Result) :- !,
+    catch(process_runnable(FormStr, Line, Term, Result), error(Detail, typecheck),
+          ( Result = [['Error', Detail, typecheck]],
+            print_message(error, error(Detail, typecheck)),
+            ( metta_runnable_error -> true ; assertz(metta_runnable_error) ) )).
 process_form(Space, space_only, parsed(function, _, _, Term), []) :- !, add_sexp(Space, Term).
 process_form(Space, compile_functions, parsed(function, FormStr, Line, Term), []) :- add_sexp(Space, Term),
-                                                                  with_form_location(Line, FormStr,
-                                                                                     translate_clause(Term, Clause, true,
-                                                                                                      Dependencies)),
+                                                                  with_form_location(Line, FormStr, translate_clause(Term, Clause)),
                                                                   assertz(Clause, Ref),
                                                                   assertz(translated_from(Ref, Term)),
-                                                                  Term = [=, [Fn|Args], _],
-                                                                  length(Args, N),
-                                                                  record_compiled_dependencies(Ref, Fn/N, Dependencies),
-                                                                  notify_mutation(
-                                                                      clause_changed(Fn/N,
-                                                                                     prevalidated)),
+                                                                  Term = [=, [Fn|_], _],
                                                                   metta_on_function_changed(Fn),
                                                                   ( silent(true) -> true ; format("\e[33m--> metta function -->~n\e[36m~w~n\e[33m--> prolog clause -->~n\e[32m", [FormStr]),
                                                                                            clause(Head, Body, Ref),
                                                                                            ( Body == true -> Show = Head; Show = (Head :- Body) ),
                                                                                            portray_clause(current_output, Show),
                                                                                            format("\e[33m^^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ).
+
 process_form(_, _, In, _) :- format(atom(Msg), "failed to process form: ~w", [In]), throw(error(syntax_error(Msg), none)).
 
+process_runnable(FormStr, Line, Term, Result) :- with_form_location(Line, FormStr, translate_expr([collapse, Term], Goals, Result)),
+                                                 strip_static_types(Goals-Result),
+                                                 ( silent(true) -> true ; format("\e[33m--> metta runnable  -->~n\e[36m!~w~n\e[33m-->  prolog goal  -->\e[35m ~n", [FormStr]),
+                                                                          forall(member(G, Goals), portray_clause((:- G))),
+                                                                          format("\e[33m^^^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ),
+                                                 call_goals(Goals).
 %Like blanks but counts newlines:
 newlines(C0, C2) --> blanks_to_nl, !, {C1 is C0+1}, newlines(C1,C2).
 newlines(C, C) --> blanks.

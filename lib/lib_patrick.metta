@@ -12,7 +12,7 @@
 (= (@ $a $b) (let $a $b $a))
 
 ;For loop
-(: for (-[det]-> Atom Atom Atom Atom))
+(: for (-[det]-> Atom Atom Atom %Undefined%))
 (= (for $var $collection $body)
    (quote (let $var (superpose $collection)
                     $body)))
