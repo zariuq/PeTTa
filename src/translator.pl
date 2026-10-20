@@ -42,16 +42,17 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
                                                %head arguments (a specialization's closure); the type variables
                                                %left are the caller's choice, rigid here:
                                                clause_contract(F, N, Args1, PTs, OT, Det),
-                                               ( nonvar(PTs) -> maplist(type_pattern, Args1, PTs) ; true ),
-                                               with_compiling(F, translate_declared_body(F, N, BodyExpr, GoalsBody, ExpOut)),
+                                               with_compiling(F, Args1-PTs,
+                                                              ( ( nonvar(PTs) -> maplist(type_pattern, Args1, PTs) ; true ),
+                                                                translate_declared_body(F, N, BodyExpr, GoalsBody, ExpOut),
+                                                                ( nonvar(ExpOut), ExpOut = partial(_, _) -> OutChecks = []
+                                                                ; type_boundary(output(F), ExpOut, OT, OutChecks) ) )),
                                                (  nonvar(ExpOut) , ExpOut = partial(Base,Bound)
                                                -> arity(Base, Arity), length(Bound, NB), M is (Arity - NB) - 1,
                                                   length(ExtraArgs, M), append(Bound, ExtraArgs, CallInArgs),
                                                   resolve_memoization(Base, CallInArgs, Out, Goal),
-                                                  append(GoalsBody,[Goal],FinalGoals), append(Args1,ExtraArgs,HeadArgs),
-                                                  OutChecks = []
-                                               ; FinalGoals= GoalsBody , HeadArgs = Args1, Out = ExpOut,
-                                                 type_boundary(output(F), Out, OT, OutChecks) ),
+                                                  append(GoalsBody,[Goal],FinalGoals), append(Args1,ExtraArgs,HeadArgs)
+                                               ; FinalGoals= GoalsBody , HeadArgs = Args1, Out = ExpOut ),
                                                append(HeadArgs, [Out], FinalArgs),
                                                Head =.. [F|FinalArgs],
                                                length(FinalArgs, CompiledArity),
@@ -64,8 +65,12 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
 translate_declared_body(F, N, Expr, [], Expr) :- atom(F), type_decl(F, N, _, Out, _), Out == 'Atom', !.
 translate_declared_body(_, _, Expr, Goals, Out) :- translate_expr(Expr, Goals, Out).
 
-with_compiling(F, Goal) :- ( nb_current('$compiling', Prev) -> true ; Prev = none ),
-                           setup_call_cleanup(b_setval('$compiling', F), Goal, b_setval('$compiling', Prev)).
+%While F's clause is translated, '$compiling' names F and '$params' holds its
+%head arguments with their types (see static_type/2):
+with_compiling(F, Params, Goal) :- ( nb_current('$compiling', Prev) -> true ; Prev = none ),
+                                   ( nb_current('$params', PrevPs) -> true ; PrevPs = none ),
+                                   setup_call_cleanup(( b_setval('$compiling', F), b_setval('$params', Params) ), Goal,
+                                                      ( b_setval('$compiling', Prev), b_setval('$params', PrevPs) )).
 
 %Retranslate F's clauses in source order, once they all translate: a type
 %declaration arrived late, or a name they used as data became a function.
@@ -89,7 +94,8 @@ note_symbol_head(HV) :- atom(HV), !,
                         ( symbol_head(HV) -> true ; assertz(symbol_head(HV)) ),
                         ( nb_current('$compiling', F), F \== none, \+ symbol_use(HV, F) -> assertz(symbol_use(HV, F)) ; true ).
 note_symbol_head(_).
-late_function(F) :- forall(retract(symbol_use(F, G)), ( G == F -> true ; recompile_function_clauses(G) )).
+late_function(F) :- note_function(F),
+                    forall(retract(symbol_use(F, G)), ( G == F -> true ; recompile_function_clauses(G) )).
 
 %Print compiled clause:
 maybe_print_compiled_clause(_, _, _) :- silent(true), !.
@@ -211,7 +217,8 @@ translate_expr([H0|T0], Goals, Out) :-
                                  append(GsH, [once(Conj)], Goals)
         ; HV == hyperpose, T = [L]
           -> ( nonvar(L), is_list(L)
-               -> build_hyperpose_branches(L, Branches),
+               -> build_hyperpose_branches(L, Branches, Types),
+                  join_static_types(Types, Type), force_static_type(Out, Type),
                   append(GsH, [concurrent_and(member((Goal,Res), Branches), (call(Goal), Out = Res))], Goals)
                ; translate_expr(L, GsL, LV),
                  append(GsH, GsL, Inner),
@@ -290,6 +297,7 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == 'let*', T = [Binds, Body] -> letstar_to_rec_let(Binds,Body,RecLet),
                                              translate_expr(RecLet,  Goals, Out)
         ; HV == sealed, T = [Vars, Expr] -> translate_expr_to_conj(Expr, Con, Val),
+                                            static_type(Val, VT), set_static_type(Out, VT),
                                             Goals = [copy_term(Vars,[Con,Val],_,[Ncon,Out]),Ncon]
         %--- Iterating over non-deterministic generators without reification ---:
         ; HV == 'forall', T = [GF, TF]
@@ -322,24 +330,33 @@ translate_expr([H0|T0], Goals, Out) :-
                               GenList = [GFHV] ),
              append(GsH, GsAF, Tmp1),
              append(Tmp1, GsGF, Tmp2),
+             static_type(Init, IT), static_type(AFV, AT),
+             ( nonvar(AT), AT = [A|ATs], A == '->' -> last(ATs, RT) ; RT = '%Undefined%' ),
+             join_static_types([IT, RT], Type), set_static_type(Out, Type),
              append(Tmp2, [ConjInit, foldall(agg_reduce(AFV, V), reduce(GenList, V), Init, Out)], Goals)
         %--- Higher-order functions with pseudo-lambdas and lambdas ---:
         ; HV == 'foldl-atom', T = [List, Init, AccVar, XVar, Body]
           -> translate_expr_to_conj(List, ConjList, L),
              translate_expr_to_conj(Init, ConjInit, InitV),
+             element_static_type(L, XVar),
              translate_expr_to_conj(Body, BodyConj, BG),
+             static_type(InitV, IT), static_type(BG, BT), join_static_types([IT, BT], Type), set_static_type(Out, Type),
              exclude(==(true), [ConjList, ConjInit], CleanConjs),
              append(GsH, CleanConjs, GsMid),
              append(GsMid, [foldl([XVar, AccVar, NewAcc]>>(BodyConj, ( number(BG) -> NewAcc is BG ; NewAcc = BG )), L, InitV, Out)], Goals)
         ; HV == 'map-atom', T = [List, XVar, Body]
           -> translate_expr_to_conj(List, ConjList, L),
+             element_static_type(L, XVar),
              translate_expr_to_conj(Body, BodyCallConj, BodyCall),
+             static_type(BodyCall, BT), set_static_type(Out, ['List', BT]),
              exclude(==(true), [ConjList], CleanConjs),
              append(GsH, CleanConjs, GsMid),
              append(GsMid, [maplist([XVar, Y]>>(BodyCallConj, ( number(BodyCall) -> Y is BodyCall ; Y = BodyCall )), L, Out)], Goals)
         ; HV == 'filter-atom', T = [List, XVar, Cond]
           -> translate_expr_to_conj(List, ConjList, L),
+             element_static_type(L, XVar),
              translate_expr_to_conj(Cond, CondConj, CondGoal),
+             static_type(L, LT), set_static_type(Out, LT),
              exclude(==(true), [ConjList], CleanConjs),
              append(GsH, CleanConjs, GsMid),
              append(GsMid, [include([XVar]>>(CondConj, CondGoal), L, Out)], Goals)
@@ -385,12 +402,15 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == call,  T = [Expr] -> Expr = [F|Args],
                                      translate_args(Args, GsArgs, ArgsOut),
                                      length(Args, NC),
-                                     ( unique_type_decl(F, NC, As, _, _), \+ native_builtin(F)
-                                       -> type_boundary_args(F, ArgsOut, As, Checks) ; Checks = [] ),
+                                     ( unique_type_decl(F, NC, As, O, _)
+                                       -> ( native_builtin(F) -> Ctx = native ; Ctx = F ),
+                                          type_boundary_args(Ctx, ArgsOut, As, Checks), result_static_type(As, O, Type)
+                                        ; Checks = [], Type = '%Undefined%' ),
                                      append([GsH, GsArgs, Checks], Inner),
                                      append(ArgsOut, [Out], CallArgs),
                                      Goal =.. [F|CallArgs],
-                                     append(Inner, [Goal], Goals)
+                                     append(Inner, [Goal], Goals),
+                                     set_static_type(Out, Type)
         %Produce a dynamic dispatch, translating Args for nesting:
         ; HV == reduce, T = [Expr] -> ( var(Expr) -> translate_expr(Expr, GsH, ExprOut),
                                                      Goals = [reduce(ExprOut, Out)|GsH]
@@ -398,6 +418,10 @@ translate_expr([H0|T0], Goals, Out) :-
                                                      translate_args(Args, GsArgs, ArgsOut),
                                                      append(GsH, GsArgs, Inner),
                                                      ExprOut = [F|ArgsOut],
+                                                     length(Args, NR),
+                                                     ( atom(F), fun(F), unique_type_decl(F, NR, As, O, _)
+                                                       -> type_instantiate(ArgsOut, As), result_static_type(As, O, RT), set_static_type(Out, RT)
+                                                        ; true ),
                                                      append(Inner, [reduce(ExprOut, Out)], Goals) )
         %Invoke translator to evaluate MeTTa code as data/list:
         ; HV == eval, T = [Arg] -> ( nonvar(Arg), Arg = [Q, Quoted], Q == quote
@@ -420,6 +444,8 @@ translate_expr([H0|T0], Goals, Out) :-
                        Exception,
                        (Exception = error(Type, Ctx) -> Out = ['Error', Type, Ctx]
                                                       ; Out = ['Error', Exception, none])),
+          static_type(ExprOut, ET), static_type(['Error', _, _], ErrT),
+          join_static_types([ET, ErrT], CT), set_static_type(Out, CT),
           append(GsH, [Goal], Goals)
         %--- Automatic 'smart' dispatch, translator deciding when to create a predicate call, data list, or dynamic dispatch: ---
         %Known function or closure => typed call:
@@ -504,7 +530,9 @@ translate_call(Fun, Bound, Args, GsH, Goals, Out) :-
         append(Bound, AVs0, AVs),
         ( native_builtin(Fun) -> Ctx = native ; Ctx = Fun ),
         findall(d(As, O), type_decl(Fun, N, As, O, _), Ds),
-        ( Ds = [d(As, O)] -> type_boundary_args(Ctx, AVs, As, Checks), Extra = [], result_static_type(As, O, Type)
+        ( Ds = [d(As, O)] -> type_boundary_args(Ctx, AVs, As, Checks), result_static_type(As, O, Type),
+                             %a foreign function's primitive result is checked, not trusted:
+                             ( foreign(Fun), atom(Type), primitive_type(Type) -> type_boundary(foreign(Fun), Out, Type, Extra) ; Extra = [] )
         ; Ds = [_,_|_] -> type_overload(Ctx, Fun, AVs, Out, Ds, Checks, Extra, Type)
         %a partial application checks the arguments it is given:
         ; Arity is N + 1, \+ arity(Fun, Arity),
@@ -611,6 +639,9 @@ eval_data_list([E|Es], Goals, [V|Vs]) :- ( is_list(E) -> eval_data_term(E, G1, V
                                          eval_data_list(Es, G2, Vs),
                                          append(G1, G2, Goals).
 
+%The variable of map-atom, filter-atom and foldl-atom ranges over the list's elements:
+element_static_type(L, X) :- static_type(L, LT), ( nonvar(LT), LT = [Li, E], Li == 'List' -> type_pattern(X, E) ; true ).
+
 %Convert let* to recusrive let:
 letstar_to_rec_let([[Pat,Val]],Body,[let,Pat,Val,Body]).
 letstar_to_rec_let([[Pat,Val]|Rest],Body,[let,Pat,Val,Out]) :- letstar_to_rec_let(Rest,Body,Out).
@@ -663,9 +694,10 @@ build_superpose_branches([E|Es], Out, [B|Bs], [T|Ts]) :- translate_expr_to_conj(
                                                          build_superpose_branches(Es, Out, Bs, Ts).
 
 %Build hyperpose branch as a goal list for concurrent_maplist to consume:
-build_hyperpose_branches([], []).
-build_hyperpose_branches([E|Es], [(Goal, Res)|Bs]) :- translate_expr_to_conj(E, Goal, Res),
-                                                      build_hyperpose_branches(Es, Bs).
+build_hyperpose_branches([], [], []).
+build_hyperpose_branches([E|Es], [(Goal, Res)|Bs], [T|Ts]) :- translate_expr_to_conj(E, Goal, Res),
+                                                              static_type(Res, T),
+                                                              build_hyperpose_branches(Es, Bs, Ts).
 
 %Runtime hyperpose path for variable/computed list arguments.
 hyperpose_runtime(Exprs, Out) :- is_list(Exprs),

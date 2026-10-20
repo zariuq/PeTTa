@@ -27,7 +27,14 @@ count=$(grep -c 'Not specialized' "$log" || true)
 [ "$count" -eq 11 ] || { echo "repro2 expected 11 failed-specialization attempts, got $count"; cat "$log"; exit 1; }
 
 # Failed specializations must not leave observable type atoms in &self.
-log=$(run_ok repro3 tests/regression/repro3_failed_specialization_self_leak.metta)
+# This fixture supplies a function where Number is required. Each runnable
+# reports its error; the final query must still inspect the surviving types.
+log="$TMPDIR/petta-repro3-$$.log"
+status=0
+timeout 15s sh "$ROOT/run.sh" "$ROOT/tests/regression/repro3_failed_specialization_self_leak.metta" > "$log" 2>&1 || status=$?
+[ "$status" -eq 2 ] || { echo "repro3 expected type-error status 2, got $status"; cat "$log"; exit 1; }
+count=$(grep -c 'Type mismatch: got myfun but expected' "$log" || true)
+[ "$count" -eq 4 ] || { echo "repro3 expected 4 type diagnostics, got $count"; cat "$log"; exit 1; }
 if grep -q ' (wrap_Spec_' "$log"; then
     echo "repro3 leaked wrap_Spec_ into &self output"
     cat "$log"

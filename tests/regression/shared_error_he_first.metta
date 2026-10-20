@@ -1,0 +1,5 @@
+!(import! &self (library lib_he))
+!(import! &self (library lib_roman))
+!(test (if-error (Error bad) 3 "s") 3)
+!(test (if-error ok 3 "s") "s")
+!(test (collapse (if-error (Error bad) 3 "s")) (3))

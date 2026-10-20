@@ -17,12 +17,17 @@
 :- multifile prolog:error_message//1.
 
 % Type error messages (see types.pl); examples/fail_*.metta expect them.
+% Values and types print as MeTTa, a rigid type variable as $1, $2, ...:
 prolog:error_message(literal_type_mismatch(Value, Required)) -->
-    [ 'Type mismatch: got ~p but expected ~p'-[Value, Required] ].
+    { metta_text(Value, V), metta_text(Required, R) },
+    [ 'Type mismatch: got ~w but expected ~w'-[V, R] ].
 prolog:error_message(type_conflict(existing(Existing), required(Required))) -->
-    [ 'Type conflict: value is constrained as ~p but also required as ~p'-[Existing, Required] ].
+    { metta_text(Existing, E), metta_text(Required, R) },
+    [ 'Type conflict: value is constrained as ~w but also required as ~w'-[E, R] ].
 prolog:error_message(no_matching_overload(Fun)) -->
-    [ 'No matching typed overload for ~p'-[Fun] ].
+    [ 'No matching typed overload for ~w'-[Fun] ].
+metta_text(T, S) :- copy_term_nat(T, C), mapsubterms([X, A]>>( compound(X), X = '$rigid'(I, _), format(atom(A), '$~w', [I]) ), C, D),
+                    swrite(D, S).
 
 is_silent_flag(silent).
 is_silent_flag('--silent').
