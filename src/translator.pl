@@ -38,9 +38,13 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
                                                ( atom(F), nb_current(F, Prev) -> true ; Prev = [] ),
                                                copy_term_nat(fun_meta(Args1, BodyExpr), Meta),
                                                nb_setval(F, [Meta | Prev]),
-                                               ( unique_type_decl(F, N, ATs, OT, Det) -> opaque_type(ATs, PTs),
-                                                                                   maplist(type_pattern, Args1, PTs)
-                                                                                 ; OT = '%Undefined%', Det = plain ),
+                                               %parameters get the declared types, as instantiated by constant
+                                               %head arguments (a specialization's closure); the type variables
+                                               %left are the caller's choice, unknown here:
+                                               ( unique_type_decl(F, N, ATs, OT, Det) -> type_instantiate(Args1, ATs),
+                                                                                       opaque_type(ATs, PTs),
+                                                                                       maplist(type_pattern, Args1, PTs)
+                                                                                     ; OT = '%Undefined%', Det = plain ),
                                                with_compiling(F, translate_declared_body(F, N, BodyExpr, GoalsBody, ExpOut)),
                                                (  nonvar(ExpOut) , ExpOut = partial(Base,Bound)
                                                -> arity(Base, Arity), length(Bound, NB), M is (Arity - NB) - 1,
@@ -365,6 +369,7 @@ translate_expr([H0|T0], Goals, Out) :-
         ; ( HV == 'add-atom' ; HV == 'remove-atom' ), T = [Space,Atom] ->
                                                                    translate_expr(Space, G1, S),
                                                                    Goal =.. [HV,S,Atom,Out],
+                                                                   set_static_type(Out, 'Bool'),
                                                                    append([GsH,G1,[Goal]], Goals)
         ; HV == match, T = [Space, Pattern, Body] -> translate_expr(Space, G1, S),
                                                      translate_expr(Body, GsB, Out),
@@ -436,11 +441,13 @@ translate_expr([H0|T0], Goals, Out) :-
         ; translate_args(T, GsT, AVs),
           append(GsH, GsT, Inner),
           ( var(HV), AVs \== []
-            -> ( static_type(HV, K), K = ['->'|_], copy_term(K, ['->'|Ts]),
-                 length(AVs, NA), length(Ts, NT), NT =:= NA + 1
-                 -> append(ATs, [RT], Ts),
+            -> ( static_type(HV, K), nonvar(K), K = [A|_], A == '->', copy_term(K, [_|Ts]),
+                 length(AVs, NA), length(Ts, NT), NT > NA
+                 -> length(ATs, NA), append(ATs, Rest, Ts),
                     type_boundary_args(closure, AVs, ATs, Checks),
-                    result_static_type(ATs, RT, OutT), set_static_type(Out, OutT)
+                    ( Rest = [RT] -> result_static_type(ATs, RT, OutT)
+                                   ; result_static_type(ATs, ['->'|Rest], OutT) ),
+                    set_static_type(Out, OutT)
                   ; Checks = [] ),
                closure_apply_goal(HV, AVs, Out, Goal),
                append([Inner, Checks, [Goal]], Goals)
@@ -497,6 +504,7 @@ translate_call(Fun, Bound, Args, GsH, Goals, Out) :-
         ; Arity is N + 1, \+ arity(Fun, Arity),
           findall(As, (type_decl(Fun, M, As0, _, _), M > N, length(As, N), append(As, _, As0)), [As])
           -> type_boundary_args(Ctx, AVs, As, Checks), Extra = [], Type = '%Undefined%'
+        ; ( Fun == cons ; Fun == 'cons-atom' ), AVs = [H, Tl] -> Checks = [], Extra = [], cons_static_type(H, Tl, Type)
         ; Checks = [], Extra = [], Type = '%Undefined%' ),
         append([GsH, GsT, Checks], Inner),
         ( Extra == [], arith_inline(Fun, AVs, Out, ArithGs)

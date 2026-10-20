@@ -18,8 +18,8 @@
                    unique_type_decl/5, type_arg_policy/3, type_normalize/2, add_builtin_signatures/2,
                    static_type/2, set_static_type/2, force_static_type/2, join_static_types/2,
                    strip_static_types/1, opaque_type/2, result_static_type/3, type_pattern/2,
-                   type_boundary/4, type_boundary_args/4, type_overload/8,
-                   typecheck_or_error/2, typecheck_ok/2, strict_mode/1, warn_runtime_checks/1 ]).
+                   type_boundary/4, type_boundary_args/4, type_overload/8, type_instantiate/2, cons_static_type/3,
+                   typecheck_or_error/2, typecheck_ok/2, fn_type/4 ]).
 
 :- dynamic type_decl/5, native_builtin/1.
 % type_decl(F, N, ArgTypes, OutType, Det) for each declaration of F with N arguments,
@@ -100,8 +100,8 @@ static_type(V, 'String') :- string(V), !.
 static_type(V, 'Bool') :- ( V == true ; V == false ), !.
 static_type([], ['List', _]) :- !.
 static_type(V, T) :- atom(V), fun(V), callable_type(V, 0, T), !.
-static_type(partial(F, Bs), T) :- atom(F), length(Bs, K), callable_type(F, K, T), !.
-static_type([C|Fs], T) :- atom(C), \+ fun(C), length(Fs, N), unique_type_decl(C, N, As, O, _),
+static_type(partial(F, Bs), T) :- atom(F), is_list(Bs), length(Bs, K), callable_type(F, K, T), !.
+static_type([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), unique_type_decl(C, N, As, O, _),
                           instantiate(Fs, As), maplist(value_established, Fs, As), !, result_static_type(As, O, T).
 static_type([X|Xs], ['List', T]) :- is_list(Xs), !, maplist(static_type, [X|Xs], Ts), join_static_types(Ts, T).
 static_type(_, '%Undefined%').
@@ -117,6 +117,12 @@ force_static_type(V, T) :- ( var(V) -> ( T == '%Undefined%' -> del_attr(V, pt) ;
 pt:attr_unify_hook(T, Y) :- ( var(Y), get_attr(Y, pt, T2), T2 \=@= T -> del_attr(Y, pt) ; true ).
 strip_static_types(Term) :- term_attvars(Term, Vs), maplist([V]>>del_attr(V, pt), Vs).
 
+%cons and cons-atom build a list whose elements have what the head and the
+%tail's elements agree on:
+cons_static_type(H, Tl, ['List', E]) :- static_type(Tl, TT), list_type(TT, E0), !,
+                                        static_type(H, S), join_static_types([S, E0], E).
+cons_static_type(_, _, '%Undefined%').
+
 %The type of a merge of alternatives (if, case, superpose): what all agree on.
 join_static_types(Ts, T) :- copy_term(Ts, [T0|Rest]), ( maplist(=(T0), Rest) -> T = T0 ; T = '%Undefined%' ).
 
@@ -130,28 +136,36 @@ est(S, T) :- var(T), !, T = S.
 est(S, T) :- var(S), !, S = T.
 est(_, T) :- wildcard(T), !.
 est(S, _) :- wildcard(S), !, fail.
-est(S, ['|'|Ts]) :- !, member(T, Ts), est(S, T), !.
-est(['|'|Ss], T) :- !, forall(member(S, Ss), est(S, T)).
+est(S, T) :- list_type(S, SE), !, list_type(T, TE), est(SE, TE).
+est(_, T) :- list_type(T, _), !, fail.                          %a list is never a tuple
+est(S, [U|Ts]) :- U == '|', !, member(T, Ts), est(S, T), !.
+est([U|Ss], T) :- U == '|', !, forall(member(S, Ss), est(S, T)).
 est(S, T) :- atom(T), !, S == T.
 est(S, T) :- is_list(S), is_list(T), same_length(S, T), maplist(est, S, T).
 
 %A conflict: no value has both types. Only the shapes of primitive, list and
 %arrow types are disjoint, since get-type may give any other value any other type.
 conflict(S, T) :- ( var(S) ; var(T) ), !, fail.
-conflict(['|'|Ss], T) :- !, forall(member(S, Ss), conflict(S, T)).
-conflict(S, ['|'|Ts]) :- !, forall(member(T, Ts), conflict(S, T)).
-conflict(['List', S], ['List', T]) :- !, conflict(S, T).
+conflict([U|Ss], T) :- U == '|', !, forall(member(S, Ss), conflict(S, T)).
+conflict(S, [U|Ts]) :- U == '|', !, forall(member(T, Ts), conflict(S, T)).
+conflict(S, T) :- list_type(S, SE), list_type(T, TE), !, conflict(SE, TE).
 conflict(S, T) :- shape(S, A), shape(T, B), A \== B.
 shape(T, T) :- atom(T), memberchk(T, ['Number', 'String', 'Bool']), !.
-shape(['List', _], list).
-shape(['->'|_], arrow).
+shape(T, list) :- list_type(T, _), !.
+shape(T, arrow) :- nonvar(T), T = [A|_], A == '->'.
+
+%(List E), tested without binding a variable in the head of a tuple type:
+list_type(T, E) :- nonvar(T), T = [L, E], L == 'List'.
 
 %Instantiate a fresh declaration instance with what the arguments establish,
 %before any argument is checked, so the result is independent of their order:
+type_instantiate(Vs, Ts) :- instantiate(Vs, Ts).
 instantiate(Vs, Ts) :- maplist([V, T]>>( static_type(V, S), ( learn(S, T) -> true ; true ) ), Vs, Ts).
 learn(S, _) :- ( var(S) ; wildcard(S) ), !.
 learn(S, T) :- var(T), !, ( \+ ( sub_term(X, S), atom(X), wildcard(X) ) -> copy_term(S, T) ; true ).
 learn(_, T) :- wildcard(T), !.
+learn(S, T) :- list_type(S, SE), !, ( list_type(T, TE) -> learn(SE, TE) ; true ).
+learn(_, T) :- list_type(T, _), !.
 learn(S, T) :- is_list(S), is_list(T), S = [H|_], \+ H == '|', same_length(S, T), !, maplist(learn, S, T).
 learn(_, _).
 
@@ -178,9 +192,10 @@ type_boundary(_, V, T, _) :- static_type(V, S), conflict(S, T), !,
 type_boundary(_, _, T, []) :- \+ ground(T), !.          %polymorphic content is trusted
 type_boundary(native, _, _, []) :- !.                    %a native builtin tests its own arguments
 type_boundary(Ctx, V, T, [G]) :- guard(V, T, G),
-                                 ( strict_mode(true), Ctx \= the(_) -> throw(error(strict_runtime_typecheck(Ctx, G), typecheck))
-                                 ; warn_runtime_checks(true) -> format(user_error, "Warning: runtime type check in ~w against ~p~n", [Ctx, T])
-                                 ; true ).
+                                 ( warn_runtime_checks(true)
+                                   -> ( nb_current('$compiling', F), F \== none -> true ; F = 'a runnable' ),
+                                      format(user_error, "Warning: runtime type check of ~w against ~p in ~w~n", [Ctx, T, F])
+                                    ; true ).
 
 %The arguments of a call against a fresh declaration instance:
 type_boundary_args(Ctx, Vs, Ts, Goals) :- instantiate(Vs, Ts), maplist(type_boundary(Ctx), Vs, Ts, Gss), append(Gss, Goals).
@@ -222,9 +237,15 @@ typecheck_ok(V, 'Number') :- !, number(V).
 typecheck_ok(V, 'String') :- !, string(V).
 typecheck_ok(V, 'Bool') :- !, ( V == true -> true ; V == false ).
 typecheck_ok(_, T) :- wildcard(T), !.
-typecheck_ok(V, ['List', T]) :- !, list_ok(V, T).
-typecheck_ok(V, ['->'|_]) :- !, ( atom(V) -> true ; V = partial(_, _) ).
-typecheck_ok(V, ['|'|Ts]) :- !, member(T, Ts), typecheck_ok(V, T), !.
+typecheck_ok(V, T) :- list_type(T, E), !, list_ok(V, E).
+typecheck_ok(V, [A|_]) :- A == '->', !, ( atom(V) -> true ; V = partial(_, _) ).
+typecheck_ok(V, [U|Ts]) :- U == '|', !, member(T, Ts), typecheck_ok(V, T), !.
+%A constructor application fits by its declaration, a tuple field by field
+%(a type's atom head may be the value's literal tag); anything else as get-type says:
+typecheck_ok([C|Fs], T) :- atom(C), is_list(Fs), length(Fs, N), type_decl(C, N, As, O, _),
+                           \+ \+ ( O = T, maplist(typecheck_ok, Fs, As) ), !.
+typecheck_ok(V, Ts) :- is_list(Ts), is_list(V), same_length(V, Ts),
+                       maplist([X, T]>>( X == T, atom(T) -> true ; typecheck_ok(X, T) ), V, Ts), !.
 typecheck_ok(V, T) :- \+ \+ ( 'get-type'(V, T) ; 'get-metatype'(V, T) ).
 list_ok(V, _) :- var(V), !.
 list_ok([], _) :- !.
@@ -237,16 +258,12 @@ list_ok([X|Xs], T) :- typecheck_ok(X, T), list_ok(Xs, T).
 type_pattern(P, T) :- copy_term(T, T1), bind_pattern(P, T1).
 bind_pattern(P, T) :- var(P), !, ( get_attr(P, pt, _) -> true ; set_static_type(P, T) ).
 bind_pattern(_, T) :- ( var(T) ; wildcard(T) ), !.
-bind_pattern(P, ['List', E]) :- !, ( P = [H|R] -> bind_pattern(H, E), bind_pattern(R, ['List', E]) ; true ).
-bind_pattern([C|Fs], T) :- atom(C), \+ fun(C), length(Fs, N), unique_type_decl(C, N, As, O, _), O = T, !,
+bind_pattern(P, T) :- list_type(T, E), !, ( P = [H|R] -> bind_pattern(H, E), bind_pattern(R, T) ; true ).
+bind_pattern([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), unique_type_decl(C, N, As, O, _), O = T, !,
                            maplist(bind_pattern, Fs, As).
 bind_pattern(Ps, [H|Ts]) :- is_list(Ps), ( var(H) ; is_list(H) ; shape(H, _) ; wildcard(H) ),
                             same_length(Ps, [H|Ts]), !, maplist(bind_pattern, Ps, [H|Ts]).
 bind_pattern(_, _).
 
-%%% Flags %%%
-
-:- dynamic strict_mode/1, warn_runtime_checks/1.
-:- current_prolog_flag(argv, Argv),
-   ( memberchk('--strict', Argv) -> assertz(strict_mode(true)) ; assertz(strict_mode(false)) ),
-   ( memberchk('--warn-runtime-checks', Argv) -> assertz(warn_runtime_checks(true)) ; assertz(warn_runtime_checks(false)) ).
+%--warn-runtime-checks reports each runtime guard the compiler emits:
+warn_runtime_checks(true) :- current_prolog_flag(argv, Argv), memberchk('--warn-runtime-checks', Argv).

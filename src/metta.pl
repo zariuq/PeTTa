@@ -199,8 +199,7 @@ member_alpha(X, [_|T]) :- member_alpha(X, T).
                                                             ; 'intersection-atom'(T, B, Out) ).
 
 %%% Type system: %%%
-get_function_type([F|Args], T) :- nonvar(F), match('&self', [':',F,[->|Ts]], _, _),
-                                  append(As,[T],Ts),
+get_function_type([F|Args], T) :- nonvar(F), match('&self', [':',F,FT], _, _), fn_type(FT, As, T, _),
                                   maplist('get-type',Args,As).
 
 :- dynamic 'get-type'/2.

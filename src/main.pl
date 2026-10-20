@@ -23,8 +23,6 @@ prolog:error_message(type_conflict(existing(Existing), required(Required))) -->
     [ 'Type conflict: value is constrained as ~p but also required as ~p'-[Existing, Required] ].
 prolog:error_message(no_matching_overload(Fun)) -->
     [ 'No matching typed overload for ~p'-[Fun] ].
-prolog:error_message(strict_runtime_typecheck(Context, Goal)) -->
-    [ 'Strict mode rejected residual runtime type goal in ~p: ~p'-[Context, Goal] ].
 
 is_silent_flag(silent).
 is_silent_flag('--silent').
