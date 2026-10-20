@@ -45,7 +45,8 @@ run_oracle_phases() {
     typed=$(timeout -k 5 240 swipl --stack_limit="$PETTA_STACK_LIMIT" -q -g "$REPORT_TYPE_ERRORS" \
                 -s "$ROOT_DIR/src/main.pl" -- "$f" -s 2>&1)
     st1=$?
-    echo "$typed" | grep -q "TYPE ERROR RAISED" && return
+    if echo "$typed" | grep -q "TYPE ERROR RAISED"; then echo "$base" >> "$TMP_DIR/raised"; return; fi
+    echo "$base" >> "$TMP_DIR/compared"
     erased=$(timeout -k 5 240 sh "$ROOT_DIR/run.sh" "$f" --no-type-checks -s 2>&1)
     st2=$?
     if [ $st1 -eq 124 ] || [ $st1 -eq 137 ] || [ $st2 -eq 124 ] || [ $st2 -eq 137 ]; then
@@ -78,6 +79,8 @@ for c in "$TMP_DIR"/chunk*; do
 done
 wait
 cat "$TMP_DIR"/chunk*.log
+count() { if [ -f "$TMP_DIR/$1" ]; then wc -l < "$TMP_DIR/$1" | tr -d ' '; else echo 0; fi; }
+echo "Phase A: $i examples. Phase B: $(count compared) compared, $(count raised) skipped (a type error was raised)."
 
 if [ -f "$TMP_DIR/failed" ]; then
     echo "FAILURES in soundness_matrix.sh"

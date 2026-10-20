@@ -11,7 +11,7 @@
 % type S with the required type T:
 %   S establishes T               -> nothing to do,
 %   S and T are not consistent    -> a type error at compile time,
-%   otherwise                     -> a check at runtime, where T can be checked.
+%   otherwise                     -> a check at runtime of what is known of T.
 % A failing check raises a type error: types never filter answers, so a run
 % without type errors computes what the program computes with its types erased.
 
@@ -68,8 +68,7 @@ forget_type_decl(_).
 %closure check (see dynamic_boundary/2) and recompiles F's clauses against them:
 redeclared(F) :- retractall(checked_params(F, _, _)),
                  forall(( \+ type_flag('--no-type-checks'), unique_type_decl(F, N, As, _, _),
-                          maplist([A, C]>>( closed(A), \+ wildcard(A) -> C = A ; C = '%Undefined%' ), As, Cs),
-                          \+ maplist(==('%Undefined%'), Cs) ),
+                          maplist(checkable, As, Cs), \+ maplist(wildcard, Cs) ),
                         assertz(checked_params(F, N, Cs))),
                  ( translated_from(_, [=, [G|_], _]), G == F
                    -> format(user_error, "Warning: the type declarations of ~w changed after its definition; recompiling it~n", [F]),
@@ -138,20 +137,25 @@ static_type(V, 'Number') :- number(V), !.
 static_type(V, 'String') :- string(V), !.
 static_type(V, 'Bool') :- ( V == true ; V == false ), !.
 static_type([], ['List', _]) :- !.
-static_type(V, T) :- atom(V), fun(V), callable_type(V, 0, T), !.
+static_type(V, T) :- atom(V), ( fun(V) ; type_decl(V, _, _, _, _) ), callable_type(V, 0, T), !.
 static_type(V, T) :- atom(V), !, ( findall(T0, symbol_type(V, T0), [T]) -> true ; T = '%Undefined%' ).
 static_type(partial(F, Bs), T) :- atom(F), is_list(Bs), length(Bs, K), callable_type(F, K, T), !.
 %A constructor application has its declared type, if its fields establish it:
 static_type([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), type_decl(C, N, _, _, _), !,
                           ( unique_type_decl(C, N, As, O, _), instantiate(Fs, As), maplist(value_established, Fs, As)
                             -> result_static_type(constructor, As, O, T) ; T = '%Undefined%' ).
-%Other data is a list of the type its elements agree on, else the tuple of theirs:
-static_type([X|Xs], T) :- is_list(Xs), !, maplist(static_type, [X|Xs], Ts), ( agreed_type(Ts, E) -> T = ['List', E] ; T = Ts ).
+%Other data is a list of the type its elements agree on, else the tuple of their
+%types, headed by the head symbol itself if it has no type (a tag, see typecheck_ok/2):
+static_type([X|Xs], T) :- is_list(Xs), !, maplist(static_type, [X|Xs], [S|Ss]),
+                          ( agreed_type([S|Ss], E) -> T = ['List', E] ; atom(X), S == '%Undefined%' -> T = [X|Ss] ; T = [S|Ss] ).
 static_type(_, '%Undefined%').
 
-%A function, or its partial application to K arguments, as a value:
-callable_type(F, K, ['->'|Ts]) :- findall(As-O, (type_decl(F, N, As, O, _), N > K), [As-O]),
+%A function, or its partial application to K arguments, as a value: the rest of
+%its declared arrow, or of the arrow of its arity if it has no declaration:
+callable_type(F, K, ['->'|Ts]) :- findall(As-O, (type_decl(F, N, As, O, _), N > K), [As-O]), !,
                                   length(Bound, K), append(Bound, Rest, As), append(Rest, [O], Ts).
+callable_type(F, K, ['->'|Ts]) :- \+ type_decl(F, _, _, _, _), findall(A, arity(F, A), [A]), N is A - K, N > 1,
+                                  length(Ts, N), maplist(=('%Undefined%'), Ts).
 
 set_static_type(V, T) :- var(V), \+ T == '%Undefined%', !, put_attr(V, pt, T).
 set_static_type(_, _).
@@ -191,7 +195,7 @@ est(S, T) :- is_list(S), is_list(T), same_length(S, T), maplist(est, S, T).
 %every type. Every alternative of a union S must be consistent with T, and some
 %alternative of a union T with S. A value of a rigid type is used only at that
 %type, while any value may be returned at it (trusted, see TYPES.md). Types
-%that are not consistent are a conflict: the program is wrong whatever the value.
+%that are not consistent are a conflict, a type error at compile time.
 conflict(S, T) :- \+ consistent(S, T).
 consistent(S, T) :- ( var(S) ; var(T) ; unknown(S) ; unknown(T) ), !.
 consistent([U|Ss], T) :- U == '|', !, forall(member(S, Ss), consistent(S, T)).
@@ -256,8 +260,12 @@ rigid(T) :- compound(T), T = '$rigid'(_).
 forget_open(T, U) :- ( rigid(T) ; nonvar(T), T = [B|_], B == '|' ), !, U = '%Undefined%'.
 forget_open(T, U) :- is_list(T), !, maplist(forget_open, T, U).
 forget_open(T, T).
-%Closed types can be checked at runtime; a variable or rigid one is trusted:
-closed(T) :- ground(T), \+ ( sub_term(X, T), rigid(X) ).
+%What a runtime check can test of T: a type variable, rigid or not, is unknown
+%there, so (List $a) is checked as a list and a rigid result type is trusted:
+checkable(T, C) :- ( var(T) ; rigid(T) ), !, C = '%Undefined%'.
+checkable(T, C) :- is_list(T), !, maplist(checkable, T, C).
+checkable(T, T).
+closed(T) :- checkable(T, C), C =@= T.
 
 %%% Boundaries %%%
 
@@ -265,14 +273,14 @@ closed(T) :- ground(T), \+ ( sub_term(X, T), rigid(X) ).
 type_boundary(_, _, T, []) :- ( var(T) ; wildcard(T) ; type_flag('--no-type-checks') ), !.
 type_boundary(Ctx, V, T, Gs) :- static_type(V, S0), ( Ctx = the(_) -> forget_open(S0, S) ; S = S0 ),
                                 boundary(Ctx, V, S, T, Gs).
-boundary(_, V, S, T, Gs) :- ( established(S, T) ; ground(V), closed(T), typecheck_ok(V, T) ), !,
-                            ( type_flag('--oracle'), closed(T) -> guard(V, T, G), Gs = [G] ; Gs = [] ).
+boundary(_, V, S, T, Gs) :- checkable(T, C), ( established(S, C) ; ground(V), typecheck_ok(V, C) ), !,
+                            ( type_flag('--oracle'), \+ wildcard(C) -> guard(V, C, G), Gs = [G] ; Gs = [] ).
 boundary(_, V, S, T, _) :- conflict(S, T), !,
                            ( ground(V), \+ rigid(S) -> throw(error(literal_type_mismatch(V, T), typecheck))
                                                      ; throw(error(type_conflict(existing(S), required(T)), typecheck)) ).
-boundary(_, _, _, T, []) :- \+ closed(T), !.          %polymorphic content is trusted
 boundary(native, _, _, _, []) :- !.                    %a native builtin tests its own arguments
-boundary(Ctx, V, _, T, [G]) :- guard(V, T, G),
+boundary(_, _, _, T, []) :- checkable(T, C), wildcard(C), !.
+boundary(Ctx, V, _, T, [G]) :- checkable(T, C), guard(V, C, G),
                                  ( type_flag('--warn-runtime-checks')
                                    -> ( nb_current('$compiling', F), F \== none -> true ; F = 'a runnable' ),
                                       format(user_error, "Warning: runtime type check of ~w against ~p in ~w~n", [Ctx, T, F])
@@ -320,9 +328,9 @@ type_overload(Ctx, Fun, AVs, Out, Ds, Checks, Extra, Type) :-
         test_goal(JointTests, throw(error(literal_type_mismatch(Out, O1), typecheck)), Extra).
 overload_tests(Ctx, AVs, Out, d(As0, O0), ArgTest, JointTest, Type) :-
         copy_term(As0-O0, As-O), instantiate(AVs, As),
-        foldl([V, T, G0, G]>>( value_established(V, T) -> G = G0 ; closed(T) -> and(G0, typecheck_ok(V, T), G) ; G = G0 ),
+        foldl([V, T, G0, G]>>( checkable(T, C), \+ value_established(V, T), \+ wildcard(C) -> and(G0, typecheck_ok(V, C), G) ; G = G0 ),
               AVs, As, true, ArgTest),
-        ( closed(O) -> and(ArgTest, typecheck_ok(Out, O), JointTest) ; JointTest = ArgTest ),
+        ( checkable(O, OC), \+ wildcard(OC) -> and(ArgTest, typecheck_ok(Out, OC), JointTest) ; JointTest = ArgTest ),
         result_static_type(Ctx, As, O, Type).
 %Some alternative must hold, or Else: no goal when one surely does.
 test_goal(Alts, _, []) :- memberchk(true, Alts), !.
@@ -333,13 +341,21 @@ and(G0, G, (G0, G)).
 %%% Runtime %%%
 
 %A call whose callee is known only at runtime (a closure, reduce) checks the
-%callee's closed parameter types here, as a known call site would statically:
+%known parts of the callee's parameter types here, as a known call site would:
 dynamic_boundary(F, Args) :- ( length(Args, N), checked_params(F, N, Ts) -> maplist(typecheck_or_error, Args, Ts) ; true ).
 
-guard(V, 'Number', (number(V) -> true ; typecheck_or_error(V, 'Number'))) :- !.
-guard(V, 'String', (string(V) -> true ; typecheck_or_error(V, 'String'))) :- !.
-guard(V, 'Bool', ((V == true ; V == false) -> true ; typecheck_or_error(V, 'Bool'))) :- !.
+%A runtime check: an inline test of the common case, else the value relation.
+guard(V, T, ( Fast -> true ; typecheck_or_error(V, T) )) :- fast_test(V, T, Fast), !.
 guard(V, T, typecheck_or_error(V, T)).
+fast_test(V, 'Number', number(V)) :- !.
+fast_test(V, 'String', string(V)) :- !.
+fast_test(V, 'Bool', ( V == true ; V == false )) :- !.
+fast_test(V, T, ( V == [] ; nonvar(V), V = [_|_] )) :- list_type(T, E), wildcard(E), !.
+fast_test(V, Ts, ( is_list(V), V = Xs, Test )) :- tuple_type(Ts), length(Ts, N), length(Xs, N),
+        foldl([X, T, G0, G]>>( wildcard(T) -> G = G0
+                             ; atom(T), \+ primitive(T) -> and(G0, ( X == T -> true ; typecheck_ok(X, T) ), G)
+                             ; fast_test(X, T, F) -> and(G0, F, G)
+                             ; and(G0, typecheck_ok(X, T), G) ), Xs, Ts, true, Test).
 
 typecheck_or_error(V, T) :- ( typecheck_ok(V, T) -> true ; throw(error(literal_type_mismatch(V, T), typecheck)) ).
 
@@ -351,7 +367,7 @@ typecheck_ok(V, 'Number') :- !, number(V).
 typecheck_ok(V, 'String') :- !, string(V).
 typecheck_ok(V, 'Bool') :- !, ( V == true -> true ; V == false ).
 typecheck_ok(_, T) :- wildcard(T), !.
-typecheck_ok(V, T) :- list_type(T, E), !, list_ok(V, E).
+typecheck_ok(V, T) :- list_type(T, E), !, ( wildcard(E) -> ( V == [] -> true ; V = [_|_] ) ; list_ok(V, E) ).
 typecheck_ok(V, [A|Ts]) :- A == '->', !, length(Ts, N), callable_arity(V, N).
 typecheck_ok(V, [U|Ts]) :- U == '|', !, member(T, Ts), typecheck_ok(V, T), !.
 typecheck_ok(V, _) :- opaque(V), !.
@@ -366,8 +382,8 @@ typecheck_ok(V, T) :- \+ \+ ( 'get-type'(V, T) ; 'get-metatype'(V, T) ).
 %inspected: it fits every type that is not primitive, a list or an arrow.
 opaque(V) :- compound(V), !, \+ is_list(V), V \= partial(_, _).
 opaque(V) :- blob(V, B), B \== text.
-%A function, or a partial application, taking N - 1 more arguments:
-callable_arity(F, N) :- atom(F), !, arity(F, N).
+%A function or constructor, or a partial application, taking N - 1 more arguments:
+callable_arity(F, N) :- atom(F), !, ( arity(F, N) -> true ; M is N - 1, type_decl(F, M, _, _, _) ).
 callable_arity(partial(F, Bs), N) :- atom(F), length(Bs, K), M is N + K, arity(F, M).
 list_ok(V, _) :- var(V), !.
 list_ok([], _) :- !.
@@ -383,7 +399,8 @@ bind_pattern(_, T) :- ( var(T) ; wildcard(T) ), !.
 bind_pattern(P, T) :- list_type(T, E), !, ( P = [H|R] -> bind_pattern(H, E), bind_pattern(R, T) ; true ).
 bind_pattern([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), unique_type_decl(C, N, As, O, _), O = T, !,
                            maplist(bind_pattern, Fs, As).
-%a tuple type, whose head is the first element's type rather than a type constructor:
+%a tuple type headed by the pattern's own tag, or by the first element's type:
+bind_pattern([C|Ps], [H|Ts]) :- atom(C), C == H, same_length(Ps, Ts), !, maplist(bind_pattern, Ps, Ts).
 bind_pattern(Ps, [H|Ts]) :- is_list(Ps), ( var(H) ; is_list(H) ; rigid(H) ; primitive(H) ; wildcard(H) ),
                             same_length(Ps, [H|Ts]), !, maplist(bind_pattern, Ps, [H|Ts]).
 bind_pattern(_, _).
