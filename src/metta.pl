@@ -310,7 +310,7 @@ call_goals([G|Gs]) :- call(G),
 
 %%% Prolog interop: %%%
 argv(K, Arg) :- current_prolog_flag(argv, Argv), nth0(K, Argv, A), ( atom_number(A, N) -> Arg = N ; Arg = A ).
-import_prolog_function(N, true) :- register_fun(N), ( foreign(N) -> true ; assertz(types:foreign(N)) ), late_function(N).
+import_prolog_function(N, true) :- register_fun(N), note_foreign(N), late_function(N).
 'Predicate'([F|Args], Term) :- Term =.. [F|Args].
 callPredicate(G, true) :- call(G).
 assertzPredicate(G, true) :- assertz(G).

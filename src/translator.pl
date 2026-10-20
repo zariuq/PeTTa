@@ -198,7 +198,7 @@ translate_expr([H0|T0], Goals, Out) :-
         %--- Non-determinism ---:
         ; HV == superpose, T = [Args], is_list(Args) -> build_superpose_branches(Args, Out, Branches, Types),
                                                         disj_list(Branches, Disj),
-                                                        join_static_types(Types, Type), force_static_type(Out, Type),
+                                                        merge_static_type(Out, Types),
                                                         append(GsH, [Disj], Goals)
         ; HV == collapse, T = [E] -> translate_expr_to_conj(E, Conj, EV),
                                      static_type(EV, ET), set_static_type(Out, ['List', ET]),
@@ -218,7 +218,7 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == hyperpose, T = [L]
           -> ( nonvar(L), is_list(L)
                -> build_hyperpose_branches(L, Branches, Types),
-                  join_static_types(Types, Type), force_static_type(Out, Type),
+                  merge_static_type(Out, Types),
                   append(GsH, [concurrent_and(member((Goal,Res), Branches), (call(Goal), Out = Res))], Goals)
                ; translate_expr(L, GsL, LV),
                  append(GsH, GsL, Inner),
@@ -242,7 +242,7 @@ translate_expr([H0|T0], Goals, Out) :-
                                         translate_expr_to_conj(Then, ConT, Tv),
                                         static_type(Tv, TT),
                                         build_branch(ConT, Tv, Out, BT),
-                                        force_static_type(Out, TT),
+                                        merge_static_type(Out, [TT]),
                                         ( ConC == true -> append(GsH, [ ( CondGoal -> BT ) ], Goals)
                                                         ; append(GsH, [ ( ConC, ( CondGoal -> BT ) ) ], Goals) )
         ; HV == if, T = [Cond, Then, Else] -> translate_if_cond(Cond, ConC, CondGoal),
@@ -251,7 +251,7 @@ translate_expr([H0|T0], Goals, Out) :-
                                               static_type(Tv, TT), static_type(Ev, TE),
                                               build_branch(ConT, Tv, Out, BT),
                                               build_branch(ConE, Ev, Out, BE),
-                                              join_static_types([TT, TE], Type), force_static_type(Out, Type),
+                                              merge_static_type(Out, [TT, TE]),
                                               ( ConC == true -> append(GsH, [ (CondGoal -> BT ; BE) ], Goals)
                                                               ; append(GsH, [ (ConC, (CondGoal -> BT ; BE)) ], Goals) )
         %A case whose arguments do not fit (case Key ((Pattern Value) ...))
@@ -270,12 +270,12 @@ translate_expr([H0|T0], Goals, Out) :-
                                                        translate_expr_to_conj(DefaultExpr, ConD, DOut),
                                                        static_type(DOut, DT),
                                                        build_branch(ConD, DOut, Out, DefaultThen),
-                                                       join_static_types([DT|Types], Type), force_static_type(Out, Type),
+                                                       merge_static_type(Out, [DT|Types]),
                                                        case_with_empty(GkConj, CaseGoal, DefaultThen, Combined),
                                                        append([GsH, KeyGoal, [Combined]], Goals)
                                                      ; translate_expr(KeyExpr, Gk, Kv),
                                                        translate_case(PairsExpr, Kv, Out, IfGoal, KeyGoal, Types),
-                                                       join_static_types(Types, Type), force_static_type(Out, Type),
+                                                       merge_static_type(Out, Types),
                                                        append([GsH, Gk, KeyGoal, [IfGoal]], Goals) )
         %--- Short-circuit boolean operators ---:
         ; HV == 'and-then', T = [A, B] -> translate_expr_to_conj(A, ConjA, Av),
@@ -332,21 +332,21 @@ translate_expr([H0|T0], Goals, Out) :-
              append(Tmp1, GsGF, Tmp2),
              static_type(Init, IT), static_type(AFV, AT),
              ( nonvar(AT), AT = [A|ATs], A == '->' -> last(ATs, RT) ; RT = '%Undefined%' ),
-             join_static_types([IT, RT], Type), set_static_type(Out, Type),
+             merge_static_type(Out, [IT, RT]),
              append(Tmp2, [ConjInit, foldall(agg_reduce(AFV, V), reduce(GenList, V), Init, Out)], Goals)
         %--- Higher-order functions with pseudo-lambdas and lambdas ---:
         ; HV == 'foldl-atom', T = [List, Init, AccVar, XVar, Body]
           -> translate_expr_to_conj(List, ConjList, L),
              translate_expr_to_conj(Init, ConjInit, InitV),
-             element_static_type(L, XVar),
+             type_element_var(L, XVar),
              translate_expr_to_conj(Body, BodyConj, BG),
-             static_type(InitV, IT), static_type(BG, BT), join_static_types([IT, BT], Type), set_static_type(Out, Type),
+             static_type(InitV, IT), static_type(BG, BT), merge_static_type(Out, [IT, BT]),
              exclude(==(true), [ConjList, ConjInit], CleanConjs),
              append(GsH, CleanConjs, GsMid),
              append(GsMid, [foldl([XVar, AccVar, NewAcc]>>(BodyConj, ( number(BG) -> NewAcc is BG ; NewAcc = BG )), L, InitV, Out)], Goals)
         ; HV == 'map-atom', T = [List, XVar, Body]
           -> translate_expr_to_conj(List, ConjList, L),
-             element_static_type(L, XVar),
+             type_element_var(L, XVar),
              translate_expr_to_conj(Body, BodyCallConj, BodyCall),
              static_type(BodyCall, BT), set_static_type(Out, ['List', BT]),
              exclude(==(true), [ConjList], CleanConjs),
@@ -354,7 +354,7 @@ translate_expr([H0|T0], Goals, Out) :-
              append(GsMid, [maplist([XVar, Y]>>(BodyCallConj, ( number(BodyCall) -> Y is BodyCall ; Y = BodyCall )), L, Out)], Goals)
         ; HV == 'filter-atom', T = [List, XVar, Cond]
           -> translate_expr_to_conj(List, ConjList, L),
-             element_static_type(L, XVar),
+             type_element_var(L, XVar),
              translate_expr_to_conj(Cond, CondConj, CondGoal),
              static_type(L, LT), set_static_type(Out, LT),
              exclude(==(true), [ConjList], CleanConjs),
@@ -401,29 +401,23 @@ translate_expr([H0|T0], Goals, Out) :-
         %Generate a predicate call on compilation, translating Args for nesting:
         ; HV == call,  T = [Expr] -> Expr = [F|Args],
                                      translate_args(Args, GsArgs, ArgsOut),
-                                     length(Args, NC),
-                                     ( unique_type_decl(F, NC, As, O, _)
-                                       -> ( native_builtin(F) -> Ctx = native ; Ctx = F ),
-                                          type_boundary_args(Ctx, ArgsOut, As, Checks),
-                                          ( Ctx == native -> Kind = exact ; Kind = computed ), result_static_type(Kind, As, O, Type)
-                                        ; Checks = [], Type = '%Undefined%' ),
+                                     type_call(F, ArgsOut, Out, Checks, Extra, Type),
                                      append([GsH, GsArgs, Checks], Inner),
                                      append(ArgsOut, [Out], CallArgs),
                                      Goal =.. [F|CallArgs],
-                                     append(Inner, [Goal], Goals),
+                                     append(Inner, [Goal|Extra], Goals),
                                      set_static_type(Out, Type)
         %Produce a dynamic dispatch, translating Args for nesting:
         ; HV == reduce, T = [Expr] -> ( var(Expr) -> translate_expr(Expr, GsH, ExprOut),
                                                      Goals = [reduce(ExprOut, Out)|GsH]
                                                    ; Expr = [F|Args],
                                                      translate_args(Args, GsArgs, ArgsOut),
-                                                     append(GsH, GsArgs, Inner),
+                                                     ( atom(F), fun(F) -> type_call(F, ArgsOut, Out, Checks, Extra, Type)
+                                                                        ; Checks = [], Extra = [], Type = '%Undefined%' ),
+                                                     append([GsH, GsArgs, Checks], Inner),
                                                      ExprOut = [F|ArgsOut],
-                                                     length(Args, NR),
-                                                     ( atom(F), fun(F), unique_type_decl(F, NR, As, O, _)
-                                                       -> type_instantiate(ArgsOut, As), result_static_type(As, O, RT), set_static_type(Out, RT)
-                                                        ; true ),
-                                                     append(Inner, [reduce(ExprOut, Out)], Goals) )
+                                                     append(Inner, [reduce(ExprOut, Out)|Extra], Goals),
+                                                     set_static_type(Out, Type) )
         %Invoke translator to evaluate MeTTa code as data/list:
         ; HV == eval, T = [Arg] -> ( nonvar(Arg), Arg = [Q, Quoted], Q == quote
                                      -> translate_expr(Quoted, GsQ, Out),           %(eval (quote E)) == E
@@ -468,16 +462,10 @@ translate_expr([H0|T0], Goals, Out) :-
         ; translate_args(T, GsT, AVs),
           append(GsH, GsT, Inner),
           ( var(HV), AVs \== []
-            -> ( static_type(HV, K), nonvar(K), K = [A|_], A == '->', copy_term(K, [_|Ts]),
-                 length(AVs, NA), length(Ts, NT), NT > NA
-                 -> length(ATs, NA), append(ATs, Rest, Ts),
-                    type_boundary_args(closure, AVs, ATs, Checks),
-                    ( Rest = [RT] -> result_static_type(ATs, RT, OutT)
-                                   ; result_static_type(ATs, ['->'|Rest], OutT) ),
-                    set_static_type(Out, OutT)
-                  ; Checks = [] ),
+            -> type_closure_call(HV, AVs, Checks, Type),
                closure_apply_goal(HV, AVs, Out, Goal),
-               append([Inner, Checks, [Goal]], Goals)
+               append([Inner, Checks, [Goal]], Goals),
+               set_static_type(Out, Type)
           ; append(Inner, [reduce([HV|AVs], Out)], Goals) ) ).
 
 closure_apply_goal(HV, [A], Out, apply_fn1(HV, A, Out)) :- !.
@@ -527,19 +515,7 @@ translate_call(Fun, Bound, Args, GsH, Goals, Out) :-
         ( type_arg_policy(Fun, N, Ps) -> length(BoundPs, NB), append(BoundPs, ArgPs, Ps) ; true ),
         translate_args_by_type(Args, ArgPs, GsT, AVs0),
         append(Bound, AVs0, AVs),
-        ( native_builtin(Fun) -> Ctx = native ; Ctx = Fun ),
-        findall(d(As, O), type_decl(Fun, N, As, O, _), Ds),
-        ( Ds = [d(As, O)] -> type_boundary_args(Ctx, AVs, As, Checks),
-                             ( Ctx == native -> Kind = exact ; Kind = computed ), result_static_type(Kind, As, O, Type),
-                             %a foreign function's primitive result is checked, not trusted:
-                             ( foreign(Fun), atom(Type), primitive_type(Type) -> type_boundary(foreign(Fun), Out, Type, Extra) ; Extra = [] )
-        ; Ds = [_,_|_] -> type_overload(Ctx, Fun, AVs, Out, Ds, Checks, Extra, Type)
-        %a partial application checks the arguments it is given:
-        ; Arity is N + 1, \+ arity(Fun, Arity),
-          findall(As, (type_decl(Fun, M, As0, _, _), M > N, length(As, N), append(As, _, As0)), [As])
-          -> type_boundary_args(Ctx, AVs, As, Checks), Extra = [], Type = '%Undefined%'
-        ; ( Fun == cons ; Fun == 'cons-atom' ), AVs = [H, Tl] -> Checks = [], Extra = [], cons_static_type(H, Tl, Type)
-        ; Checks = [], Extra = [], Type = '%Undefined%' ),
+        type_call(Fun, AVs, Out, Checks, Extra, Type),
         append([GsH, GsT, Checks], Inner),
         ( Extra == [], arith_inline(Fun, AVs, Out, ArithGs)
           -> append(Inner, ArithGs, Goals)
@@ -638,9 +614,6 @@ eval_data_list([], [], []).
 eval_data_list([E|Es], Goals, [V|Vs]) :- ( is_list(E) -> eval_data_term(E, G1, V) ; V = E, G1 = [] ),
                                          eval_data_list(Es, G2, Vs),
                                          append(G1, G2, Goals).
-
-%The variable of map-atom, filter-atom and foldl-atom ranges over the list's elements:
-element_static_type(L, X) :- static_type(L, LT), ( nonvar(LT), LT = [Li, E], Li == 'List' -> type_pattern(X, E) ; true ).
 
 %Convert let* to recusrive let:
 letstar_to_rec_let([[Pat,Val]],Body,[let,Pat,Val,Body]).
