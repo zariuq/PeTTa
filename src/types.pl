@@ -15,13 +15,13 @@
 % without a type error runs the same with all of its types erased.
 
 :- module(types, [ type_decl/5, native_builtin/1, note_type_decl/1, forget_type_decl/1,
-                   unique_type_decl/5, type_arg_policy/3, type_normalize/2, add_builtin_signatures/2,
+                   unique_type_decl/5, clause_contract/6, type_arg_policy/3, type_normalize/2, add_builtin_signatures/2,
                    static_type/2, set_static_type/2, force_static_type/2, join_static_types/2,
                    strip_static_types/1, opaque_type/2, result_static_type/3, type_pattern/2,
                    type_boundary/4, type_boundary_args/4, type_overload/8, type_instantiate/2, cons_static_type/3,
-                   typecheck_or_error/2, typecheck_ok/2, fn_type/4 ]).
+                   typecheck_or_error/2, typecheck_ok/2, fn_type/4, dynamic_boundary/2, checked_params/3 ]).
 
-:- dynamic type_decl/5, native_builtin/1.
+:- dynamic type_decl/5, native_builtin/1, checked_params/3.
 % type_decl(F, N, ArgTypes, OutType, Det) for each declaration of F with N arguments,
 % Det is det, semidet or plain. Builtins implemented in Prolog are native_builtin/1:
 % they test their own arguments, so calls to them need no guards.
@@ -55,7 +55,12 @@ forget_type_decl([C, F, T]) :- C == ':', atom(F), fn_type(T, As, O, _), !, lengt
 forget_type_decl(_).
 decl_exists(F, N, As, O) :- type_decl(F, N, As2, O2, _), [As2, O2] =@= [As, O], !.
 
-redeclared(F) :- ( translated_from(_, [=, [G|_], _]), G == F
+redeclared(F) :- retractall(checked_params(F, _, _)),
+                 forall(( unique_type_decl(F, N, As, _, _),
+                          maplist([A, C]>>( closed(A), \+ wildcard(A) -> C = A ; C = '%Undefined%' ), As, Cs),
+                          \+ maplist(==('%Undefined%'), Cs) ),
+                        assertz(checked_params(F, N, Cs))),
+                 ( translated_from(_, [=, [G|_], _]), G == F
                    -> format(user_error, "Warning: the type declarations of ~w changed after its definition; recompiling it~n", [F]),
                       recompile_function_clauses(F)
                     ; true ).
@@ -81,6 +86,19 @@ add_builtin_signatures(Space, true) :- forall(builtin_type(F, T), 'add-atom'(Spa
 
 %The declaration a clause of F/N is compiled against: the only one there is.
 unique_type_decl(F, N, As, O, D) :- findall(d(As0, O0, D0), type_decl(F, N, As0, O0, D0), [d(As, O, D)]).
+
+%The contract a clause of F/N is compiled against: of F's declarations, those
+%its constant head arguments can fit, instantiated by them. One gives the
+%parameter types PTs (opaque, see opaque_type/2), the result type and the
+%commitment; several leave the clause unchecked, since each call is checked
+%against the declarations its arguments fit; none is an error.
+clause_contract(F, N, Args, PTs, OT, Det) :-
+    findall(d(As, O, D), type_decl(F, N, As, O, D), Ds),
+    include({Args}/[d(As, _, _)]>>( instantiate(Args, As),
+                                    \+ ( nth1(I, Args, V), nth1(I, As, T), static_type(V, S), conflict(S, T) ) ), Ds, Fits),
+    ( Fits = [d(As, O, D)] -> opaque_type(As-O, PTs-OT), Det = D
+    ; Ds \== [], Fits == [] -> throw(error(no_matching_overload(F), typecheck))
+    ; OT = '%Undefined%', Det = plain ).
 
 %Argument positions that every declaration of F/N types Atom stay unevaluated.
 %The result is a list of types for translate_args_by_type/4: Atom or unknown.
@@ -140,12 +158,13 @@ est(S, T) :- list_type(S, SE), !, list_type(T, TE), est(SE, TE).
 est(_, T) :- list_type(T, _), !, fail.                          %a list is never a tuple
 est(S, [U|Ts]) :- U == '|', !, member(T, Ts), est(S, T), !.
 est([U|Ss], T) :- U == '|', !, forall(member(S, Ss), est(S, T)).
-est(S, T) :- atom(T), !, S == T.
+est(S, T) :- ( atom(T) ; rigid(T) ), !, S == T.
 est(S, T) :- is_list(S), is_list(T), same_length(S, T), maplist(est, S, T).
 
 %A conflict: no value has both types. Only the shapes of primitive, list and
 %arrow types are disjoint, since get-type may give any other value any other type.
 conflict(S, T) :- ( var(S) ; var(T) ), !, fail.
+conflict(S, T) :- rigid(S), !, \+ wildcard(T), S \== T.     %a parametric value used at another type
 conflict([U|Ss], T) :- U == '|', !, forall(member(S, Ss), conflict(S, T)).
 conflict(S, [U|Ts]) :- U == '|', !, forall(member(T, Ts), conflict(S, T)).
 conflict(S, T) :- list_type(S, SE), list_type(T, TE), !, conflict(SE, TE).
@@ -177,21 +196,30 @@ close_type(Open, T0, T) :- var(T0), !, ( member(V, Open), V == T0 -> T = '%Undef
 close_type(Open, T0, T) :- is_list(T0), !, maplist(close_type(Open), T0, T).
 close_type(_, T, T).
 
-%A function's own declaration as seen from its body: its type variables are
-%whatever the caller chose, so nothing is known about them.
-opaque_type(T, O) :- copy_term(T, O), term_variables(O, Vs), maplist(=('%Undefined%'), Vs).
+%A function's own declaration as seen from its body: each type variable is
+%the caller's choice, a rigid type that equals only itself.
+opaque_type(T, O) :- copy_term(T, O), term_variables(O, Vs), foldl([V, I, J]>>( V = '$rigid'(I), J is I + 1 ), Vs, 1, _).
+rigid(T) :- compound(T), T = '$rigid'(_).
+forget_rigid(T, U) :- rigid(T), !, U = '%Undefined%'.
+forget_rigid(T, U) :- is_list(T), !, maplist(forget_rigid, T, U).
+forget_rigid(T, T).
+%Closed types can be checked at runtime; a variable or rigid one is trusted:
+closed(T) :- ground(T), \+ ( sub_term(X, T), rigid(X) ).
 
 %%% Boundaries %%%
 
-%type_boundary(Ctx, V, T, Goals): what passing value V where T is required needs.
+%type_boundary(Ctx, V, T, Goals): what passing value V where T is required
+%needs. (the T E) casts through the dynamic type, forgetting rigid types.
 type_boundary(_, _, T, []) :- ( var(T) ; wildcard(T) ), !.
-type_boundary(_, V, T, []) :- value_established(V, T), !.
-type_boundary(_, V, T, _) :- static_type(V, S), conflict(S, T), !,
-                             ( ground(V) -> throw(error(literal_type_mismatch(V, T), typecheck))
-                                          ; throw(error(type_conflict(existing(S), required(T)), typecheck)) ).
-type_boundary(_, _, T, []) :- \+ ground(T), !.          %polymorphic content is trusted
-type_boundary(native, _, _, []) :- !.                    %a native builtin tests its own arguments
-type_boundary(Ctx, V, T, [G]) :- guard(V, T, G),
+type_boundary(Ctx, V, T, Gs) :- static_type(V, S0), ( Ctx = the(_) -> forget_rigid(S0, S) ; S = S0 ),
+                                boundary(Ctx, V, S, T, Gs).
+boundary(_, _, S, T, []) :- established(S, T), !.
+boundary(_, V, S, T, _) :- conflict(S, T), !,
+                           ( ground(V), \+ rigid(S) -> throw(error(literal_type_mismatch(V, T), typecheck))
+                                                     ; throw(error(type_conflict(existing(S), required(T)), typecheck)) ).
+boundary(_, _, _, T, []) :- \+ closed(T), !.          %polymorphic content is trusted
+boundary(native, _, _, _, []) :- !.                    %a native builtin tests its own arguments
+boundary(Ctx, V, _, T, [G]) :- guard(V, T, G),
                                  ( warn_runtime_checks(true)
                                    -> ( nb_current('$compiling', F), F \== none -> true ; F = 'a runnable' ),
                                       format(user_error, "Warning: runtime type check of ~w against ~p in ~w~n", [Ctx, T, F])
@@ -222,6 +250,10 @@ disjunction([G|Gs], (G ; R)) :- disjunction(Gs, R).
 
 %%% Runtime %%%
 
+%A call whose callee is known only at runtime (a closure, reduce) checks the
+%callee's closed parameter types here, as a known call site would statically:
+dynamic_boundary(F, Args) :- ( length(Args, N), checked_params(F, N, Ts) -> maplist(typecheck_or_error, Args, Ts) ; true ).
+
 guard(V, 'Number', (number(V) -> true ; typecheck_or_error(V, 'Number'))) :- !.
 guard(V, 'String', (string(V) -> true ; typecheck_or_error(V, 'String'))) :- !.
 guard(V, 'Bool', ((V == true ; V == false) -> true ; typecheck_or_error(V, 'Bool'))) :- !.
@@ -238,7 +270,7 @@ typecheck_ok(V, 'String') :- !, string(V).
 typecheck_ok(V, 'Bool') :- !, ( V == true -> true ; V == false ).
 typecheck_ok(_, T) :- wildcard(T), !.
 typecheck_ok(V, T) :- list_type(T, E), !, list_ok(V, E).
-typecheck_ok(V, [A|_]) :- A == '->', !, ( atom(V) -> true ; V = partial(_, _) ).
+typecheck_ok(V, [A|Ts]) :- A == '->', !, length(Ts, N), callable_arity(V, N).
 typecheck_ok(V, [U|Ts]) :- U == '|', !, member(T, Ts), typecheck_ok(V, T), !.
 %A constructor application fits by its declaration, a tuple field by field
 %(a type's atom head may be the value's literal tag); anything else as get-type says:
@@ -247,6 +279,9 @@ typecheck_ok([C|Fs], T) :- atom(C), is_list(Fs), length(Fs, N), type_decl(C, N, 
 typecheck_ok(V, Ts) :- is_list(Ts), is_list(V), same_length(V, Ts),
                        maplist([X, T]>>( X == T, atom(T) -> true ; typecheck_ok(X, T) ), V, Ts), !.
 typecheck_ok(V, T) :- \+ \+ ( 'get-type'(V, T) ; 'get-metatype'(V, T) ).
+%A function, or a partial application, taking N - 1 more arguments:
+callable_arity(F, N) :- atom(F), !, arity(F, N).
+callable_arity(partial(F, Bs), N) :- atom(F), length(Bs, K), M is N + K, arity(F, M).
 list_ok(V, _) :- var(V), !.
 list_ok([], _) :- !.
 list_ok([X|Xs], T) :- typecheck_ok(X, T), list_ok(Xs, T).
@@ -261,7 +296,7 @@ bind_pattern(_, T) :- ( var(T) ; wildcard(T) ), !.
 bind_pattern(P, T) :- list_type(T, E), !, ( P = [H|R] -> bind_pattern(H, E), bind_pattern(R, T) ; true ).
 bind_pattern([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), unique_type_decl(C, N, As, O, _), O = T, !,
                            maplist(bind_pattern, Fs, As).
-bind_pattern(Ps, [H|Ts]) :- is_list(Ps), ( var(H) ; is_list(H) ; shape(H, _) ; wildcard(H) ),
+bind_pattern(Ps, [H|Ts]) :- is_list(Ps), ( var(H) ; is_list(H) ; shape(H, _) ; wildcard(H) ; rigid(H) ),
                             same_length(Ps, [H|Ts]), !, maplist(bind_pattern, Ps, [H|Ts]).
 bind_pattern(_, _).
 

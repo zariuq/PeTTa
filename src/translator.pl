@@ -40,11 +40,9 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
                                                nb_setval(F, [Meta | Prev]),
                                                %parameters get the declared types, as instantiated by constant
                                                %head arguments (a specialization's closure); the type variables
-                                               %left are the caller's choice, unknown here:
-                                               ( unique_type_decl(F, N, ATs, OT, Det) -> type_instantiate(Args1, ATs),
-                                                                                       opaque_type(ATs, PTs),
-                                                                                       maplist(type_pattern, Args1, PTs)
-                                                                                     ; OT = '%Undefined%', Det = plain ),
+                                               %left are the caller's choice, rigid here:
+                                               clause_contract(F, N, Args1, PTs, OT, Det),
+                                               ( nonvar(PTs) -> maplist(type_pattern, Args1, PTs) ; true ),
                                                with_compiling(F, translate_declared_body(F, N, BodyExpr, GoalsBody, ExpOut)),
                                                (  nonvar(ExpOut) , ExpOut = partial(Base,Bound)
                                                -> arity(Base, Arity), length(Bound, NB), M is (Arity - NB) - 1,
@@ -53,7 +51,7 @@ translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
                                                   append(GoalsBody,[Goal],FinalGoals), append(Args1,ExtraArgs,HeadArgs),
                                                   OutChecks = []
                                                ; FinalGoals= GoalsBody , HeadArgs = Args1, Out = ExpOut,
-                                                 ( ground(OT) -> type_boundary(output(F), Out, OT, OutChecks) ; OutChecks = [] ) ),
+                                                 type_boundary(output(F), Out, OT, OutChecks) ),
                                                append(HeadArgs, [Out], FinalArgs),
                                                Head =.. [F|FinalArgs],
                                                length(FinalArgs, CompiledArity),
@@ -127,7 +125,8 @@ reduce([F|Args], Out) :- nonvar(F), atom(F), fun(F)
                             length(Args, N),
                             Arity is N + 1,
                             ( current_predicate(F/Arity) , \+ (current_op(_, _, F), Arity =< 2)
-                              -> resolve_memoization(F, Args, Out, Goal),
+                              -> ( checked_params(F, N, Ts) -> maplist(typecheck_or_error, Args, Ts) ; true ),
+                                 resolve_memoization(F, Args, Out, Goal),
                                  catch(call(Goal), _, fail)
                             ; incomplete_application_kind(F, Arity, partial)
                               -> Out = partial(F,Args)
@@ -385,7 +384,10 @@ translate_expr([H0|T0], Goals, Out) :-
         %Generate a predicate call on compilation, translating Args for nesting:
         ; HV == call,  T = [Expr] -> Expr = [F|Args],
                                      translate_args(Args, GsArgs, ArgsOut),
-                                     append(GsH, GsArgs, Inner),
+                                     length(Args, NC),
+                                     ( unique_type_decl(F, NC, As, _, _), \+ native_builtin(F)
+                                       -> type_boundary_args(F, ArgsOut, As, Checks) ; Checks = [] ),
+                                     append([GsH, GsArgs, Checks], Inner),
                                      append(ArgsOut, [Out], CallArgs),
                                      Goal =.. [F|CallArgs],
                                      append(Inner, [Goal], Goals)
@@ -461,28 +463,32 @@ closure_apply_goal(HV, AVs, Out, apply_fnN(HV, AVs, Out)).
 %Runtime closure application; the last clause keeps reduce/2 semantics for
 %values that are not callable at this arity (data, or a partial application).
 %Errors raised inside the callee propagate:
-apply_fn1(F, A, Out) :- atom(F), arity(F, 2), !, safe_apply(call(F, A, Out)).
+apply_fn1(F, A, Out) :- atom(F), arity(F, 2), !, ( checked_params(F, 1, [T]) -> typecheck_or_error(A, T) ; true ),
+                        safe_apply(call(F, A, Out)).
 apply_fn1(P, A, Out) :- compound(P), P = partial(F, Bs), length(Bs, K), Arity is K + 2, arity(F, Arity), !,
-                        append(Bs, [A, Out], CallArgs),
+                        append(Bs, [A], Args), dynamic_boundary(F, Args), append(Args, [Out], CallArgs),
                         Goal =.. [F|CallArgs], safe_apply(Goal).
 apply_fn1(F, A, Out) :- reduce([F, A], Out).
 
-apply_fn2(F, A, B, Out) :- atom(F), arity(F, 3), !, safe_apply(call(F, A, B, Out)).
+apply_fn2(F, A, B, Out) :- atom(F), arity(F, 3), !, ( checked_params(F, 2, Ts) -> maplist(typecheck_or_error, [A, B], Ts) ; true ),
+                           safe_apply(call(F, A, B, Out)).
 apply_fn2(P, A, B, Out) :- compound(P), P = partial(F, Bs), length(Bs, K), Arity is K + 3, arity(F, Arity), !,
-                           append(Bs, [A, B, Out], CallArgs),
+                           append(Bs, [A, B], Args), dynamic_boundary(F, Args), append(Args, [Out], CallArgs),
                            Goal =.. [F|CallArgs], safe_apply(Goal).
 apply_fn2(F, A, B, Out) :- reduce([F, A, B], Out).
 
-apply_fn3(F, A, B, C, Out) :- atom(F), arity(F, 4), !, safe_apply(call(F, A, B, C, Out)).
+apply_fn3(F, A, B, C, Out) :- atom(F), arity(F, 4), !, ( checked_params(F, 3, Ts) -> maplist(typecheck_or_error, [A, B, C], Ts) ; true ),
+                              safe_apply(call(F, A, B, C, Out)).
 apply_fn3(P, A, B, C, Out) :- compound(P), P = partial(F, Bs), length(Bs, K), Arity is K + 4, arity(F, Arity), !,
-                              append(Bs, [A, B, C, Out], CallArgs),
+                              append(Bs, [A, B, C], Args), dynamic_boundary(F, Args), append(Args, [Out], CallArgs),
                               Goal =.. [F|CallArgs], safe_apply(Goal).
 apply_fn3(F, A, B, C, Out) :- reduce([F, A, B, C], Out).
 
 apply_fnN(F, Args, Out) :- atom(F), length(Args, N), Arity is N + 1, arity(F, Arity), !,
-                           append(Args, [Out], CallArgs), Goal =.. [F|CallArgs], safe_apply(Goal).
+                           dynamic_boundary(F, Args), append(Args, [Out], CallArgs), Goal =.. [F|CallArgs], safe_apply(Goal).
 apply_fnN(P, Args, Out) :- compound(P), P = partial(F, Bs), append(Bs, Args, All),
-                           length(All, N), Arity is N + 1, arity(F, Arity), !, append(All, [Out], CallArgs),
+                           length(All, N), Arity is N + 1, arity(F, Arity), !,
+                           dynamic_boundary(F, All), append(All, [Out], CallArgs),
                            Goal =.. [F|CallArgs], safe_apply(Goal).
 apply_fnN(F, Args, Out) :- reduce([F|Args], Out).
 
