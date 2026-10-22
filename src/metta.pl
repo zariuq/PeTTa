@@ -61,8 +61,15 @@ parse(Str, R) :- sread(Str, R).
 '!='(A,B,R) :- (A==B -> R=false ; R=true).
 '='(A,B,R) :-  (A=B -> R=true ; R=false).
 '=?'(A,B,R) :- (\+ \+ A=B -> R=true ; R=false).
-'=alpha'(A,B,R) :- (A =@= B -> R=true ; R=false).
-'=@='(A,B,R) :- (A =@= B -> R=true ; R=false).
+%(brand N E) and (the T E) reached at runtime (inside data, or through reduce):
+%a brand is erased, and the checks its value as a compiled (the T E) does.
+brand(_, X, X).
+the(T0, X, X) :- type_normalize(T0, T), runtime_the(X, T).
+'=alpha'(A,B,R) :- (variant(A, B) -> R=true ; R=false).
+'=@='(A,B,R) :- (variant(A, B) -> R=true ; R=false).
+%Variant comparison of values. A type check held on an unbound part of a value
+%(retain_open/2 in types.pl) is no part of it, so attributes are left out:
+variant(A, B) :- ( term_attvars(A-B, []) -> A =@= B ; copy_term(A-B, A1-B1, _), A1 =@= B1 ).
 '<='(A,B,R) :- (A =< B -> R=true ; R=false).
 '>='(A,B,R) :- (A >= B -> R=true ; R=false).
 '@<='(A,B,R) :- (A @=< B -> R=true ; R=false).
@@ -199,8 +206,21 @@ member_alpha(X, [_|T]) :- member_alpha(X, T).
                                                             ; 'intersection-atom'(T, B, Out) ).
 
 %%% Type system: %%%
-get_function_type([F|Args], T) :- nonvar(F), match('&self', [':',F,FT], _, _), fn_type(FT, As, T, _),
+get_function_type([F|Args], T) :- nonvar(F), declared_type(F, FT), fn_type(FT, As, T, _),
                                   maplist('get-type',Args,As).
+
+%The types declared for a term. &self/3 is indexed on the subject's functor,
+%which a compound subject shares with every equation, so a compound or
+%variable subject is looked up only while &self holds a declaration of one
+%(known again after each change of &self/3).
+:- dynamic nonatomic_declaration_at/2.
+declared_type(S, T) :- ( atomic(S) -> true ; nonatomic_declaration ), match('&self', [':',S,T], T, _).
+nonatomic_declaration :- predicate_property('&self'(_, _, _), last_modified_generation(G)), !,
+                         ( nonatomic_declaration_at(G, B) -> true
+                         ; ( '&self'(':', S, _), \+ atomic(S) -> B = true ; B = false ),
+                           retractall(nonatomic_declaration_at(_, _)), assertz(nonatomic_declaration_at(G, B)) ),
+                         B == true.
+nonatomic_declaration.
 
 :- dynamic 'get-type'/2.
 'get-type'(X, T) :- (get_type_candidate(X, T) *-> true ; T = '%Undefined%' ).
@@ -213,7 +233,7 @@ get_type_candidate(X, T) :- get_function_type(X,T).
 get_type_candidate(X, T) :- \+ get_function_type(X, _),
                             is_list(X),
                             maplist('get-type', X, T).
-get_type_candidate(X, T) :- match('&self', [':',X,T], T, _).
+get_type_candidate(X, T) :- declared_type(X, T).
 'get-metatype'(X, 'Variable') :- var(X), !.
 'get-metatype'(X, 'Grounded') :- number(X), !.
 'get-metatype'(X, 'Grounded') :- string(X), !.
@@ -235,11 +255,11 @@ get_type_candidate(X, T) :- match('&self', [':',X,T], T, _).
 'readln!'(Out) :- read_line_to_string(user_input, Str),
                   sread(Str, Out).
 
-test(A,B,true) :- (A =@= B -> E = '✅' ; E = '❌'),
+test(A,B,true) :- (variant(A, B) -> E = '✅' ; E = '❌'),
                   swrite(A, RA),
                   swrite(B, RB),
                   format("is ~w, should ~w. ~w ~n", [RA, RB, E]),
-                  (A =@= B -> true ; halt(1)).
+                  (variant(A, B) -> true ; halt(1)).
 
 assert(Goal, true) :- ( call(Goal) -> true
                                     ; swrite(Goal, RG),
@@ -422,7 +442,7 @@ register_fun(N) :- assertz(fun(N)),
                    sort(Arities0, Arities),
                    forall(member(Arity, Arities),
                           (arity(N, Arity) -> true ; assertz(arity(N, Arity)))).
-:- maplist(register_fun, [superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
+:- maplist(register_fun, [brand, the, superpose, empty, let, 'let*', '+','-','*','/', '%', min, max, 'change-state!', 'get-state', 'bind!',
                           '<','>','@<', '@>', '==', '!=', '=', '=?', '<=', '>=', '@<=', '@>=', and, or, xor, implies, not, sqrt, exp, log, cos, sin,
                           'first-from-pair', 'second-from-pair', 'car-atom', 'cdr-atom', 'unique-atom', 'alpha-unique-atom',
                           repr, repra, parse, 'println!', 'readln!', test, assert, 'mm2-exec', atom_concat, atom_chars, copy_term, term_hash,

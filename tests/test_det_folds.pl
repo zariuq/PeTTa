@@ -37,7 +37,7 @@ test(nondet_step_keeps_answers, Sums == [6, 9, 5, 6]) :-
         findall(S, 'either-sums'([2, 3], S), Sums).
 
 % Items the step's declaration rejects are a type error, not a silent count.
-test(ill_typed_items_raise, error(literal_type_mismatch([a, b, c], ['List', 'Number']), typecheck)) :-
+test(ill_typed_items_raise, throws(error(literal_type_mismatch(_, 'Number'), typecheck))) :-
         'count-passed'([a, b, c], _).
 
 % An unbound list still enumerates lists.

@@ -1,0 +1,17 @@
+;lib_det checks determinism modes when definitions are complete: no more
+;answers than the arrow allows, and (det, multi) no fewer as far as known.
+!(import! &self (library lib_det))
+(: inc (-[det]-> Number Number))
+(= (inc $x) (+ $x 1))
+(: size (-[det]-> (List $a) Number))
+(= (size ()) 0)
+(= (size (cons $h $t)) (+ 1 (size $t)))
+(: positive (-[semidet]-> Number Number))
+(= (positive $x) (if (> $x 0) $x (empty)))
+(: both (-[nondet]-> Number Number))
+(= (both $x) (superpose ($x (inc $x))))
+!(test (det-verdict inc) ((1 proven)))
+!(test (det-verdict size) ((1 proven)))
+!(test (det-verdict positive) ((1 proven)))
+!(test (det-verdict both) ((1 proven)))
+!(test (size (1 2 3)) 3)

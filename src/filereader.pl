@@ -72,6 +72,7 @@ process_metta_string(S, Results, Space, Mode) :- metta_string_forms(S, Forms),
                                                  forall(member(parsed(expression, FormStr, Line, Decl), ParsedForms),
                                                         with_form_location(Line, FormStr, note_type_decl(Decl))),
                                                  maplist(process_form(Space, Mode), ParsedForms, ResultsList), !,
+                                                 forall(metta_on_definitions_settled, true),
                                                  append(ResultsList, Results).
 
 register_function_signature(F, Arity) :- warn_if_used_as_symbol(F),
@@ -119,7 +120,7 @@ process_form(Space, compile_functions, parsed(function, FormStr, Line, Term), []
                                                                   assertz(Clause, Ref),
                                                                   assertz(translated_from(Ref, Term)),
                                                                   Term = [=, [Fn|_], _],
-                                                                  metta_on_function_changed(Fn),
+                                                                  forall(metta_on_function_changed(Fn), true),
                                                                   ( silent(true) -> true ; format("\e[33m--> metta function -->~n\e[36m~w~n\e[33m--> prolog clause -->~n\e[32m", [FormStr]),
                                                                                            clause(Head, Body, Ref),
                                                                                            ( Body == true -> Show = Head; Show = (Head :- Body) ),
@@ -128,7 +129,8 @@ process_form(Space, compile_functions, parsed(function, FormStr, Line, Term), []
 
 process_form(_, _, In, _) :- format(atom(Msg), "failed to process form: ~w", [In]), throw(error(syntax_error(Msg), none)).
 
-process_runnable(FormStr, Line, Term, Result) :- with_form_location(Line, FormStr, translate_expr([collapse, Term], Goals, Result)),
+process_runnable(FormStr, Line, Term, Result) :- forall(metta_on_definitions_settled, true),
+                                                 with_form_location(Line, FormStr, translate_expr([collapse, Term], Goals, Result)),
                                                  strip_static_types(Goals-Result),
                                                  ( silent(true) -> true ; format("\e[33m--> metta runnable  -->~n\e[36m!~w~n\e[33m-->  prolog goal  -->\e[35m ~n", [FormStr]),
                                                                           forall(member(G, Goals), portray_clause((:- G))),

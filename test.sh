@@ -36,7 +36,7 @@ run_expected_fail_test() {
         echo "Expected non-zero exit status, got success"
         return 1
     fi
-    echo "$output" | grep -E -q "Type mismatch|Type conflict|No matching typed overload|Syntax error"
+    echo "$output" | grep -E -q "Type mismatch|Type conflict|No matching typed overload|Syntax error|Determinism:"
     if [ $? -ne 0 ]; then
         echo "FAILURE in $f:"
         echo "Expected type error output"
