@@ -1,0 +1,58 @@
+== checked 0
+"A-skip"
+is false, should false. ✅ 
+"O-skip"
+is true, should true. ✅ 
+"A-left"
+"A-right"
+is false, should false. ✅ 
+"O-left"
+"O-right"
+is true, should true. ✅ 
+is (true false true), should (true false true). ✅ 
+is (true false true), should (true false true). ✅ 
+"A-nondet-right"
+is (true false), should (true false). ✅ 
+"O-nondet-right"
+is (true false), should (true false). ✅ 
+is (), should (). ✅ 
+is (), should (). ✅ 
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+== erased 0
+"A-skip"
+is false, should false. ✅ 
+"O-skip"
+is true, should true. ✅ 
+"A-left"
+"A-right"
+is false, should false. ✅ 
+"O-left"
+"O-right"
+is true, should true. ✅ 
+is (true false true), should (true false true). ✅ 
+is (true false true), should (true false true). ✅ 
+"A-nondet-right"
+is (true false), should (true false). ✅ 
+"O-nondet-right"
+is (true false), should (true false). ✅ 
+is (), should (). ✅ 
+is (), should (). ✅ 
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true

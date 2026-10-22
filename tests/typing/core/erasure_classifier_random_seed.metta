@@ -1,0 +1,5 @@
+!(callPredicate (Predicate (set_random (Predicate (seed 42)))))
+(: N Type)
+(= (get-type n) (progn (random-int 0 1000000) N))
+(= (unknown-n) n)
+!(progn (the N (unknown-n)) (random-int 0 1000000))

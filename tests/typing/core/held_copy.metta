@@ -1,0 +1,5 @@
+(: number-id (-> Number Number))
+(= (number-id $x) $x)
+(= (bind-string $x) (let $x "bad" ok))
+!(let $r (copy_term (number-id $x))
+   (progn (bind-string $r) $r))

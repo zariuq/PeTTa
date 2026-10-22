@@ -1,0 +1,7 @@
+(: number-id (-> Number Number))
+(= (number-id $x) $x)
+(= (bind-string $x) (let $x "bad" ok))
+!(let (Error (bad $v) $ctx)
+     (catch (let $r (number-id $x)
+              (callPredicate (Predicate (throw (bad $r))))))
+   (progn (bind-string $v) $v))

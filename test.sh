@@ -2,6 +2,7 @@
 
 swipl -q -s tests/test_parser_swrite.pl -g run_tests -t halt || exit 1
 swipl -q -s tests/test_det_folds.pl -g "run_tests(det_folds)" -t halt || exit 1
+swipl -q -s tests/test_syntax_heads.pl -g "run_tests(syntax_heads)" -t halt || exit 1
 
 run_test() {
     f="$1"
@@ -36,7 +37,7 @@ run_expected_fail_test() {
         echo "Expected non-zero exit status, got success"
         return 1
     fi
-    echo "$output" | grep -E -q "Type mismatch|Type conflict|No matching typed overload|Syntax error|Determinism:"
+    echo "$output" | grep -E -q "Type mismatch|Type conflict|No matching typed overload|Refinement:|Syntax error|Determinism:"
     if [ $? -ne 0 ]; then
         echo "FAILURE in $f:"
         echo "Expected type error output"
@@ -108,6 +109,29 @@ if [ $status -eq 0 ]; then
     else
         echo "FAILURE in type_dispatch_matrix.sh"
         status=1
+    fi
+    # Typing and determinism tests, compared on full output (tests/*/run.sh):
+    for suite in typing det; do
+        echo ""
+        echo "Running tests/$suite/run.sh"
+        if sh tests/$suite/run.sh; then
+            echo "OK: tests/$suite"
+        else
+            echo "FAILURE in tests/$suite"
+            status=1
+        fi
+    done
+    # Generated typed programs: checked, oracle and erased runs agree (a wider
+    # sweep: python3 tests/typing/differential.py --n 500 --seed <other>):
+    if command -v python3 > /dev/null; then
+        echo ""
+        echo "Running tests/typing/differential.py"
+        if python3 tests/typing/differential.py --n 80 --seed 1; then
+            echo "OK: differential typing audit"
+        else
+            echo "FAILURE in differential typing audit"
+            status=1
+        fi
     fi
 fi
 

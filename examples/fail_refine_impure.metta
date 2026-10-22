@@ -1,0 +1,7 @@
+(: noisy-even (-> Number Bool))
+(= (noisy-even $x) (progn (println! checked) (== (% $x 2) 0)))
+(: EvenNumber (Refine Number noisy-even))
+(: half (-> EvenNumber Number))
+(= (half $x) (/ $x 2))
+(= (six) 6)
+!(half (six))

@@ -1,0 +1,7 @@
+!(import! &self (library lib_det))
+(: both (-[nondet]-> Number Number))
+(= (both $x) (superpose ($x (+ $x 1))))
+(: apply-det (-[det]-> (-[det]-> Number Number) Number Number))
+(= (apply-det $f $x) ($f $x))
+!(det-verdict apply-det)
+!(collapse (apply-det both 1))

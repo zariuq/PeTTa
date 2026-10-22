@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> Number))
+(= (f) (superpose (0 (case (empty) ((unused 2) (Empty 1))))))
+!(det-verdict f)
+!(collapse (f))

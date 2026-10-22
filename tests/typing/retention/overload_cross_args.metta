@@ -1,0 +1,8 @@
+(= (unknown-id $x) $x)
+(= (bind-num $x) (let $x 1 ok))
+(= (bind-str $x) (let $x "s" ok))
+(= (bind-bool $x) (let $x True ok))
+(: f (-> Number Number Number))
+(: f (-> String String String))
+(= (f $x $y) $y)
+!(let $r (f $x $y) (progn (bind-num $x) (bind-str $y) $r))

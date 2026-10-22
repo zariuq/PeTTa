@@ -1,0 +1,6 @@
+(: Shape Type)
+(: mk (-> Number Shape))
+(= (unknown-id $x) $x)
+(= (bind-string $x) (let $x "bad" ok))
+!(let $v (the (pair Shape) (unknown-id (pair (mk $x))))
+   (progn (bind-string $x) (the (pair Shape) $v)))

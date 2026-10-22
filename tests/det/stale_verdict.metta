@@ -1,0 +1,8 @@
+!(import! &self (library lib_det))
+(= (u $x) $x)
+(: f (-[det]-> Number Number))
+(= (f $x) (u $x))
+!(det-verdict f)
+!(add-atom &self (= (u $x) (superpose ($x (+ $x 1)))))
+!(det-verdict f)
+!(collapse (f 1))

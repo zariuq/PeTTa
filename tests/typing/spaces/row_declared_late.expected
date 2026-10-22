@@ -1,0 +1,12 @@
+== checked 2
+true
+true
+(Error typecheck)
+((edge 1 2) (edge 1 "two"))
+()
+== erased 0
+true
+true
+true
+((edge 1 2) (edge 1 "two"))
+((SpaceOf Edge))

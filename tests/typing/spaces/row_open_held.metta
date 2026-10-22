@@ -1,0 +1,8 @@
+(: Edge Type)
+(: edge (-> Number Number Edge))
+(: &g (SpaceOf Edge))
+!(bind! &g (new-space))
+(= (put-open $s) (add-atom $s (edge 1 $y)))
+!(put-open &g)
+!(match &g (edge 1 $y) (let $y 3 (edge 1 $y)))
+!(match &g (edge 1 $y) (let $y "three" (edge 1 $y)))

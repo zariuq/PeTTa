@@ -1,0 +1,8 @@
+!(import! &self (library lib_det))
+(: Choice Type)
+(: a Choice)
+(: (hidden) Choice)
+(: f (-[det]-> Choice Number))
+(= (f a) 1)
+!(det-verdict f)
+!(collapse (f (hidden)))

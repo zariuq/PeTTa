@@ -1,0 +1,5 @@
+(: pick-first (-> Number Number Number))
+(= (pick-first $x $y) $x)
+(: curried (-> Number (-> Number Number)))
+(= (curried $x) (pick-first $x))
+!(curried "bad" 1)

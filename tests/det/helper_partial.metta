@@ -1,0 +1,6 @@
+!(import! &self (library lib_det))
+(= (u 1) 1)
+(: f (-[det]-> Number Number))
+(= (f $x) (u $x))
+!(det-verdict f)
+!(collapse (f 2))

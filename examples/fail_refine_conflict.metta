@@ -1,0 +1,6 @@
+(: is-even (-> Number Bool))
+(= (is-even $x) (== (% $x 2) 0))
+(: EvenNumber (Refine Number is-even))
+(: half (-> EvenNumber Number))
+(= (half $x) (/ $x 2))
+!(half "six")

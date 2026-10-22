@@ -1,0 +1,6 @@
+(: base (-> Number Number Number))
+(: base (-> String String String))
+(= (base $x $y) "bad")
+(: curried (-> Number (-> Number Number)))
+(= (curried $x) (base $x))
+!(curried 1 2)

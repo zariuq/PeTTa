@@ -1,0 +1,5 @@
+(: N Type)
+(: n N)
+(: f (-> Number N))
+(= (f $x) n)
+!(the N (quote (f 1)))

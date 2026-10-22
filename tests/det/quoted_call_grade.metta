@@ -1,0 +1,7 @@
+!(import! &self (library lib_det))
+(: raw (-> Atom))
+(= (raw) (superpose (1 2)))
+(: f (-[det]-> Expression))
+(= (f) (raw))
+!(det-verdict f)
+!(collapse (f))

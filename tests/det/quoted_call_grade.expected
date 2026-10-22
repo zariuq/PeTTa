@@ -1,0 +1,5 @@
+== default 0
+true
+((0 (unproved (g 0 n))))
+((superpose (1 2)))
+== strict 2

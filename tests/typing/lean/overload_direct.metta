@@ -1,0 +1,5 @@
+(: poly (-> $a $a $a))
+(: poly (-> Bool Bool Bool))
+(= (poly $x $y) $x)
+(= (unknown-string) "s")
+!(poly 1 (unknown-string))

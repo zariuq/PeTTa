@@ -1,0 +1,8 @@
+== default 0
+is 100, should 100. ✅ 
+true
+true
+== strict 0
+is 100, should 100. ✅ 
+true
+true

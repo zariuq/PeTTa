@@ -1,0 +1,5 @@
+== default 0
+true
+((0 (unproved (g 0 n))))
+((item a) (item b) (: f (-[det]-> Expression)) (= (f) (get-atoms &self)))
+== strict 2

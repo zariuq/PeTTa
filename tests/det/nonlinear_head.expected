@@ -1,0 +1,5 @@
+== default 0
+true
+((2 (unproved (g 0 1))))
+()
+== strict 2

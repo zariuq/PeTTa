@@ -1,0 +1,6 @@
+(= (app $f $x) ($f $x))
+(= (inc $x) (+ $x 1))
+(= (use $x) (app inc $x))
+!(use 1)
+!(add-atom &self (= (app $f $x) ($f ($f $x))))
+!(collapse (use 1))

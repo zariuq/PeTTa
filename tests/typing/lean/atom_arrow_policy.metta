@@ -1,0 +1,6 @@
+(: held (-[det]-> Atom Atom))
+(= (held $x) $x)
+!(held (+ 1 2))
+!(bind! &callbacks (new-space))
+!(add-atom &callbacks held)
+!(let $f (match &callbacks $name $name) ($f (+ 1 2)))

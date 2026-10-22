@@ -1,0 +1,8 @@
+(: Edge Type)
+(: edge (-> Number Number Edge))
+!(bind! &late (new-space))
+!(add-atom &late (edge 1 2))
+!(add-atom &late (edge 1 "two"))
+!(add-atom &self (: &late (SpaceOf Edge)))
+!(collapse (get-atoms &late))
+!(collapse (match &self (: &late $t) $t))

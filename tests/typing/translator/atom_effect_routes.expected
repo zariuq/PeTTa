@@ -1,0 +1,8 @@
+== checked 0
+true
+(progn (println! direct-effect) 3)
+(progn (println! dynamic-effect) 3)
+== erased 0
+true
+(progn (println! direct-effect) 3)
+(progn (println! dynamic-effect) 3)

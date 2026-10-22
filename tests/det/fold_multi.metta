@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> (List Number) Number))
+(= (f $xs) (foldl-atom $xs 0 $acc $x (superpose ($acc $x))))
+!(det-verdict f)
+!(collapse (f (1)))

@@ -1,0 +1,7 @@
+(= (unknown-id $x) $x)
+(= (bind-num $x) (let $x 1 ok))
+(= (bind-str $x) (let $x "s" ok))
+(= (bind-bool $x) (let $x True ok))
+!(let $v (the (| (Number Number) (String String)) (unknown-id ($x $y)))
+   (let ($a $b) (copy_term $v)
+     (progn (bind-num $a) (bind-str $b) ($a $b))))

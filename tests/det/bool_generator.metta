@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> Bool Bool))
+(= (f $x) (not $x))
+!(det-verdict f)
+!(collapse (f $u))

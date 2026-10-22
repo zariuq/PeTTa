@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> Bool Bool Number))
+(= (f true $x) 1)
+(= (f $x true) 2)
+!(det-verdict f)

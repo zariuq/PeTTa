@@ -1,0 +1,10 @@
+== checked 0
+is 3, should 3. ✅ 
+is found, should found. ✅ 
+true
+true
+== erased 0
+is 3, should 3. ✅ 
+is found, should found. ✅ 
+true
+true

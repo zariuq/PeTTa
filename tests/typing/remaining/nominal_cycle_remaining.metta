@@ -1,0 +1,5 @@
+(= (unknown-id $x) $x)
+(: N Type)
+(: c (-> N N))
+!(let $v (the N (unknown-id (quote (c $x))))
+   (let $x $v ok))

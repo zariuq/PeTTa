@@ -1,0 +1,6 @@
+(: Edge Type)
+(: edge (-> Number Number Edge))
+(: &g (SpaceOf Edge))
+!(bind! &g (new-space))
+!(add-atom &g (edge 1 2))
+!(add-atom &g (edge 1 "two"))

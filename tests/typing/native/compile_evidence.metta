@@ -1,0 +1,8 @@
+(: typed-size (-> (List Number) Number))
+(= (typed-size $xs) (size-atom $xs))
+(: typed-min (-> (List Number) Number))
+(= (typed-min $xs) (min-atom $xs))
+(: typed-max (-> (List Number) Number))
+(= (typed-max $xs) (max-atom $xs))
+(: bool-and (-> Bool Bool Bool))
+(= (bool-and $a $b) (and-then $a $b))

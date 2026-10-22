@@ -1,0 +1,5 @@
+(: N Type)
+(= (get-type n)
+   (progn (callPredicate (Predicate (write "TYPECHECK_EFFECT "))) N))
+(= (unknown-n) n)
+!(progn (the N (unknown-n)) 1)

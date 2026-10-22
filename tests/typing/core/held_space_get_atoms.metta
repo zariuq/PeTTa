@@ -1,0 +1,6 @@
+(: number-id (-> Number Number))
+(= (number-id $x) $x)
+(= (bind-string $x) (let $x "bad" ok))
+!(let $r (number-id $x)
+   (progn (add-atom &s (row $r))
+     (let (row $v) (get-atoms &s) (progn (bind-string $v) $v))))

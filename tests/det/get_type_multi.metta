@@ -1,0 +1,7 @@
+!(import! &self (library lib_det))
+(: x First)
+(: x Second)
+(: f (-[det]-> Expression Expression))
+(= (f $x) (get-type $x))
+!(det-verdict f)
+!(collapse (f x))

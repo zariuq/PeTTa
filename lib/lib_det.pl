@@ -1,25 +1,22 @@
 %%%%%%%%%% Determinism modes: an optional check of the arrows' answer counts %%%%%%%%%%
 %
 % (: f (-[det]-> A B)) says that a call of f has exactly one answer, -[semidet]->
-% at most one, -[nondet]-> any number, and -[multi]-> at least one (Mercury's
-% determinism categories). The core already commits det and semidet functions
-% to their first matching clause; this module checks, when the definitions in
-% use are complete (before each runnable and at the end of each file), that
-% each body can give no more answers than its arrow allows, and no fewer for
-% det and multi. It adds no code to any clause: a program computes the same
-% with or without it. The rules are those of AnswerCardinality in Mettapedia's
-% ContractTyping/Determinism; this file names them alike.
-%
-% A grade is a range of answer counts g(Min, Max), Min in 0..1 and Max in
-% 0, 1, n: zero g(0,0), one g(1,1), optional g(0,1), nonempty g(1,n), any g(0,n).
-% Answers counted are answers when the call returns: termination, exceptions
-% and effects are other questions.
+% at most one, -[multi]-> at least one, -[nondet]-> any number (Mercury's
+% determinism categories). The core commits det and semidet functions to their
+% first matching clause; this module grades each body when the definitions in
+% use are complete (before each runnable and at the end of each file) and adds
+% no code to any clause. A grade is a range g(Min, Max) of answer counts, Min in
+% 0..2 (2: at least two) and Max in 0, 1, n, counting answers of calls that
+% return. A verdict is proven when the body's grade is within the arrow's,
+% assuming the callees' declarations; refuted when the body surely gives at
+% least two answers where one at most is allowed, or surely none where one is
+% needed; otherwise unproved, which includes all that is not graded soundly.
 
 :- module(det_modes, ['det-verdict'/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(solution_sequences)).
-:- dynamic det_dirty/1, det_inferred/3, det_verdict/3.
+:- dynamic det_inferred/3, det_verdict/3, det_snapshot/1.
 %The runtime's own tables (fun/1, arity/2, translated_from/2, match/4, and the
 %declarations types.pl exports) are read through user, this module's default
 %import module; newtype/2 and symbol_type/2 from types directly.
@@ -33,10 +30,10 @@ declared_grade(nondet, g(0, n)).
 
 %seq: G1's answers each continued by G2's; choice: the answers of both;
 %join: those of one or the other; once: at most the first.
-seq(g(A, B), g(C, D), g(E, F)) :- E is min(A, C), max_mul(B, D, F).
-choice(g(A, B), g(C, D), g(E, F)) :- E is max(A, C), max_add(B, D, F).
+seq(g(A, B), g(C, D), g(E, F)) :- E is min(2, A * C), max_mul(B, D, F).
+choice(g(A, B), g(C, D), g(E, F)) :- E is min(2, A + C), max_add(B, D, F).
 join(g(A, B), g(C, D), g(E, F)) :- E is min(A, C), max_max(B, D, F).
-once_grade(g(A, B), g(A, C)) :- max_max(B, 0, B1), ( B1 == 0 -> C = 0 ; C = 1 ).
+once_grade(g(A, B), g(E, C)) :- E is min(A, 1), max_max(B, 0, B1), ( B1 == 0 -> C = 0 ; C = 1 ).
 refines(g(A, B), g(C, D)) :- A >= C, max_le(B, D).
 
 max_mul(0, _, 0) :- !.
@@ -60,16 +57,25 @@ grade(V, g(1, 1), true) :- var(V), !.
 grade(E, g(1, 1), true) :- \+ is_list(E), !.
 grade([], g(1, 1), true) :- !.
 grade([H|T], G, S) :- atom(H), form_grade(H, T, G, S), !.
+grade([H|_], g(0, n), false) :- atom(H), syntax_head(H), !.           %syntax not graded here
 grade([H|T], G, S) :- var(H), !, args_grade(T, GA, SA), closure_grade(H, GC, SC), seq(GA, GC, G), both(SA, SC, S).
 grade([H|T], G, S) :- atom(H), fun(H), length(T, N), partial(H, N), !, args_grade(T, G, S).     %a closure, one value
 grade([H|T], G, S) :- atom(H), fun(H), !, length(T, N), args_grade_for(H, N, T, GA, SA),
                       callee_grade(H, N, T, GC, SC), seq(GA, GC, G), both(SA, SC, S).
 grade(L, G, S) :- args_grade(L, G, S).                         %data: its elements are evaluated
 
-form_grade(quote, _, g(1, 1), true).
-form_grade(empty, _, g(0, 0), true).
-form_grade(collapse, _, g(1, 1), true).
-form_grade(F, _, g(1, 1), true) :- memberchk(F, [foldall, forall, 'map-atom', 'filter-atom', 'foldl-atom']).   %aggregates
+form_grade(quote, [_], g(1, 1), true).
+form_grade(empty, [], g(0, 0), true).
+form_grade(collapse, [_], g(1, 1), true).
+form_grade('|->', [_, _], g(1, 1), true).                                 %a closure
+%forall answers once, after its test expression; the other aggregates run
+%callbacks and inputs whose choices this module does not grade:
+form_grade(forall, [_, Test], G, S) :- grade(Test, G, S).
+form_grade(F, _, g(0, n), false) :- memberchk(F, [foldall, 'map-atom', 'filter-atom', 'foldl-atom']).
+form_grade(F, [A, B], G, S) :- memberchk(F, ['and-then', 'or-else']), grade(A, GA, S1), grade(B, GB, S2),
+                               join(GB, g(1, 1), GJ), seq(GA, GJ, G), both(S1, S2, S).
+form_grade(prog1, Es, G, S) :- args_grade(Es, G, S).
+form_grade(sealed, [_, E], G, S) :- grade(E, G, S).
 form_grade(once, [E], G, S) :- grade(E, G0, S), once_grade(G0, G).
 form_grade(superpose, [L], G, S) :- is_list(L), !, choice_all(L, g(0, 0), true, G, S).
 form_grade(superpose, _, g(0, n), true).
@@ -78,10 +84,12 @@ form_grade(match, _, g(0, n), true).
 form_grade(if, [C, T, E], G, S) :- grade(C, GC, S1), grade(T, GT, S2), grade(E, GE, S3),
                                    join(GT, GE, GB), seq(GC, GB, G), all_sure([S1, S2, S3], S).
 form_grade(if, [C, T], G, S) :- grade(C, GC, S1), grade(T, GT, S2), join(GT, g(0, 0), GB), seq(GC, GB, G), both(S1, S2, S).
-form_grade(let, [P, V, B], G, S) :- grade(V, GV, S1), grade(B, GB, S2), match_grade(P, V, GP),
+form_grade(F, [P, V, B], G, S) :- ( F == let ; F == chain ), grade(V, GV, S1), grade(B, GB, S2), match_grade(P, V, GP),
                                     seq(GV, GP, G0), seq(G0, GB, G), both(S1, S2, S).
 form_grade('let*', [Bs, B], G, S) :- bindings_grade(Bs, g(1, 1), true, GL, SL), grade(B, GB, SB),
                                      seq(GL, GB, G), both(SL, SB, S).
+%An Empty branch runs when the key has no answer, which no grade sequence says:
+form_grade(case, [_, Bs], g(0, n), false) :- is_list(Bs), member([K, _], Bs), K == 'Empty', !.
 form_grade(case, [K, Bs], G, S) :- grade(K, GK, S1), branches_grade(K, Bs, GB, S2), seq(GK, GB, G), both(S1, S2, S).
 form_grade(progn, Es, G, S) :- args_grade(Es, G, S).
 form_grade(the, [_, E], G, S) :- grade(E, G, S).
@@ -136,10 +144,10 @@ decls_grade([D], Args, G, S) :- !, arrow_grade(D, Args, G, S).
 decls_grade([D|Ds], Args, G, S) :- arrow_grade(D, Args, G1, S1), decls_grade(Ds, Args, G2, S2),
                                     join(G1, G2, G), both(S1, S2, S).
 arrow_grade(d(Kind, _), _, G, true) :- declared_grade(Kind, G), !.
-arrow_grade(d(var(E), ArgTs), Args, G, S) :- !,
-        ( nth1(I, ArgTs, T), is_list(T), T = [A|_], atom(A), arrow_effect(A, E1), E1 == E,
-          nth1(I, Args, Fn), passed_grade(Fn, G0, S0)
-          -> G = G0, S = S0 ; G = g(0, n), S = false ).
+%An effect-polymorphic arrow -[$e]-> has the grade of the functions passed for
+%$e only once its body is validated for every instance, which this module does
+%not do yet:
+arrow_grade(d(var(_), _), _, g(0, n), false) :- !.
 arrow_grade(d(plain, _), _, g(0, n), false).
 
 %The grade of a function passed as an argument: a name, or a partial application.
@@ -163,36 +171,26 @@ arrow_kind('-[multi]->', multi) :- !.
 arrow_kind(A, var(E)) :- arrow_effect(A, E).
 arrow_effect(A, E) :- atom(A), atom_concat('-[', R, A), atom_concat(E, ']->', R), sub_atom(E, 0, 1, _, '$').
 
-%Builtins whose answer counts are fixed:
-builtin_grade(F, _, g(1, 1)) :- memberchk(F, ['+', '-', '*', '/', '%', min, max, '<', '>', '<=', '>=', '==', '!=', '=alpha', '=@=',
-                                             and, or, not, xor, 'car-atom', 'cdr-atom', 'cons-atom', cons, 'size-atom', repr,
-                                             'is-var', 'is-expr', 'is-ground', 'get-state', 'change-state!', 'add-atom',
-                                             'remove-atom', 'println!', 'trace!', test, 'new-space', 'new-state', 'bind!',
-                                             'map-atom', 'filter-atom', 'foldl-atom', 'get-type', concat, reverse,
-                                             'pow-math', 'sqrt-math', 'abs-math', 'floor-math', 'round-math', 'ceil-math',
-                                             '=', '=?', '@<', '@>', '<=', '>=', implies, 'first-from-pair', 'second-from-pair',
-                                             length, append, 'unique-atom', 'exclude-item', 'is-member', list_to_set, sort,
-                                             msort, atom_concat, 'index-atom', 'union-atom', 'intersection-atom',
-                                             'subtraction-atom', 'decons-atom', id, 'get-metatype', 'size-atom', 'random-int',
-                                             'random-float', 'collapse', 'is-space', 'get-atoms', term_hash, copy_term,
-                                             'min-atom', 'max-atom', 'sum-atom', nth0, nth1, last, flatten, sum_list,
-                                             max_list, min_list, atom_string, number_string, atom_chars, string_chars,
-                                             'format-args', sread, parse, repra]).
-builtin_grade(foldall, _, g(1, 1)).
-builtin_grade(forall, _, g(1, 1)).
+%Builtins that give exactly one answer, or raise, whatever their arguments
+%(relational or partial builtins - list lookups, membership, enumeration of an
+%open Bool or list - have answer counts that depend on how bound their
+%arguments are, and are not listed):
+builtin_grade(F, _, g(1, 1)) :- memberchk(F,
+        ['+', '-', '*', '/', '%', min, max, '<', '>', '<=', '>=', '==', '!=', '=alpha', '=@=',
+         'car-atom', 'cdr-atom', 'cons-atom', cons, repr, repra, 'is-var', 'is-expr', 'is-ground',
+         'is-space', 'get-state', 'change-state!', 'println!', 'remove-atom', test, '=', '=?', '@<', '@>',
+         'pow-math', 'sqrt-math', 'abs-math', 'floor-math', 'round-math', 'ceil-math',
+         'unique-atom', list_to_set, sort, msort, id, term_hash, copy_term]).
 
-%An undeclared user function: the least grade consistent with its clauses,
-%found by iteration from zero over the finite grade lattice (a recursive call
-%reads the current approximation):
+%An undeclared function does not commit: its answers are those of every clause
+%whose head matches, and a head may not match. A call back into a function being
+%graded (recursion, mutual too) is graded unknown, never an optimistic guess:
 inferred_grade(F, N, G, S) :- det_inferred(F, N, G-S), !.
 inferred_grade(F, N, G, S) :- clause_bodies(F, N, Cs), Cs \== [], !,
-        assertz(det_inferred(F, N, g(0, 0)-true)),
-        infer_fixpoint(F, N, Cs), det_inferred(F, N, G-S).
+        setup_call_cleanup(assertz(det_inferred(F, N, g(0, n)-false), Ref),
+                           clauses_choice(Cs, none, g(0, 0), true, G, S), erase(Ref)),
+        assertz(det_inferred(F, N, G-S)).
 inferred_grade(_, _, g(0, n), false).
-infer_fixpoint(F, N, Cs) :- det_inferred(F, N, G0-_), clauses_grade(Cs, none, G1, S1),
-                            ( G1 == G0 -> retractall(det_inferred(F, N, _)), assertz(det_inferred(F, N, G1-S1))
-                            ; retractall(det_inferred(F, N, _)), assertz(det_inferred(F, N, G1-S1)),
-                              infer_fixpoint(F, N, Cs) ).
 
 clause_bodies(F, N, Cs) :- findall(c(Args, B), ( translated_from(_, [=, [G|Args], B]), G == F, length(Args, N) ), Cs).
 
@@ -205,6 +203,7 @@ param_types(F, N, Ts) :- ( type_decl_arrow(F, N, d(_, Ts0)) -> Ts = Ts0 ; Ts = n
 %A det or semidet function's answers are those of its first matching clause,
 %none if no head matches unless the heads are exhaustive; another function's
 %are those of every clause whose head matches.
+function_grade(_, _, mixed, g(0, n), false) :- !.
 function_grade(F, N, true, G, S) :- clause_bodies(F, N, Cs), param_types(F, N, Ts), clauses_grade(Cs, Ts, G0, S),
         ( exhaustive(F, N, Cs) -> G = G0 ; join(G0, g(0, 0), G) ).
 function_grade(F, N, false, G, S) :- clause_bodies(F, N, Cs), param_types(F, N, Ts),
@@ -271,6 +270,10 @@ constructors(T, [k(nil, []), k(cons, [E, T])]) :- T = [L, E], L == 'List', !.
 constructors('Bool', [k(sym(true), []), k(sym(false), [])]) :- !.
 constructors([U|Alts], Ks) :- U == '|', !, maplist(constructors, Alts, Kss), append(Kss, Ks).
 constructors(T, Ks) :- atom(T), types:newtype(T, R), !, constructors(R, Ks).
+constructors(T, Ks) :- atom(T), types:refinement(T, B, _), !, constructors(B, Ks).   %a superset: still covered
+%A name that get-type rules can return, or any name once an expression is
+%declared with a type, has values beyond its declarations:
+constructors(T, _) :- ( atom(T), types:open_type_name(T) ; user:nonatomic_declaration ), !, fail.
 constructors(T, Ks) :- atom(T), \+ primitive(T), \+ memberchk(T, ['%Undefined%', 'Atom', 'Expression', 'Symbol']),
                        findall(k(con(C), ATs), ( type_decl(C, _, ATs0, O, _), O == T, \+ fun(C),
                                                  copy_term(ATs0, ATs) ), Cons),
@@ -294,15 +297,22 @@ check_function(F) :- forall(( distinct(N, ( translated_from(_, [=, [G|Args], _])
                             check_arrow(F, N, Kind, D)),
                      forall(distinct(N, ( translated_from(_, [=, [G|Args], _]), G == F, length(Args, N) )),
                             check_passed(F, N)).
-check_arrow(F, N, Kind, D) :- ( memberchk(Kind, [det, semidet]) -> Commit = true ; Commit = false ),
+%Each declaration's verdict is kept. The clauses commit as the core compiles
+%them: when every declaration of F/N commits, none, or (mixed) unknown here:
+check_arrow(F, N, Kind, D) :- commit_policy(F, N, Commit),
         function_grade(F, N, Commit, G, S), verdict(G, S, D, V),
-        retractall(det_verdict(F, N, _)), assertz(det_verdict(F, N, V)),
+        assertz(det_verdict(F, N, V)),
         report(F, N, Kind, V).
-%Refuted only when the body surely gives more answers than allowed; fewer
-%answers than det or multi need (a head no clause covers, a branch with no
-%answer) is unproved, the analysis of exhaustiveness being incomplete:
+commit_policy(F, N, Commit) :- findall(K, type_decl_arrow(F, N, d(K, _)), Ks),
+        ( forall(member(K, Ks), memberchk(K, [det, semidet])) -> Commit = true
+        ; \+ ( member(K, Ks), memberchk(K, [det, semidet]) ) -> Commit = false
+        ; Commit = mixed ).
+%Refuted only on a sure lower bound: at least two answers where one at most is
+%allowed, or surely none where one is needed. A grade that merely fails to
+%refine the arrow's (an upper bound of many, a head no clause covers) is
+%unproved: the bound may not be attained.
 verdict(G, _, D, proven) :- refines(G, D), !.
-verdict(g(A, B), true, g(_, D), refuted(g(A, B))) :- \+ max_le(B, D), !.
+verdict(g(A, B), true, g(DA, DB), refuted(g(A, B))) :- ( DB \== n, A > DB ; B == 0, DA >= 1 ), !.
 verdict(G, _, _, unproved(G)).
 report(_, _, _, proven) :- !.
 report(F, N, Kind, refuted(G)) :- !, grade_name(G, Name),
@@ -316,7 +326,8 @@ grade_name(g(0, 0), failure) :- !.
 grade_name(g(1, 1), det) :- !.
 grade_name(g(0, 1), semidet) :- !.
 grade_name(g(1, n), multi) :- !.
-grade_name(g(0, n), nondet).
+grade_name(g(0, n), nondet) :- !.
+grade_name(g(2, n), 'at least two answers').
 
 %A function passed to a parameter declared with a det, semidet, multi or nondet
 %arrow must have that grade or a finer one, since the callee's grade relies on
@@ -332,7 +343,11 @@ arrow_grade_of(T, K, D) :- is_list(T), T = [A|_], atom(A), arrow_kind(A, K), dec
 %The expressions of a body, by elements (a list's tail is no expression), not
 %inside quoted data:
 call_in(E, E) :- is_list(E), E = [H|_], nonvar(H).
-call_in([H|T], C) :- nonvar(H), H \== quote, member(E, [H|T]), nonvar(E), is_list(E), call_in(E, C).
+call_in([H|T], C) :- nonvar(H), H \== quote, evaluated_parts([H|T], Es), member(E, Es), nonvar(E), is_list(E), call_in(E, C).
+%A call's arguments at positions its declarations hold (Atom) are not evaluated:
+evaluated_parts([H|T], [H|Es]) :- atom(H), length(T, N), type_arg_policy(H, N, Ps), !,
+                                  findall(E, ( nth1(I, T, E), nth1(I, Ps, P), P \== 'Atom' ), Es).
+evaluated_parts(L, L).
 passed_respects(F, N, Args, Ts, H, A, K, D) :- var(A), !,
         ( is_list(Ts), nth1(I, Args, P), P == A, nth1(I, Ts, PT), arrow_grade_of(PT, _, G)
           -> passed_verdict(F, N, H, A, K, D, G, true) ; true ).
@@ -351,12 +366,31 @@ passed_name(_, 'a closure').
 
 %%% When definitions settle %%%
 
+%Every function is checked again whenever a definition or a declaration it
+%may depend on has changed since the last check (and once when the module is
+%loaded, so earlier definitions are checked too):
 :- multifile user:metta_on_function_changed/1.
-user:metta_on_function_changed(F) :- det_modes:changed(F).
-changed(F) :- ( det_dirty(F) -> true ; assertz(det_dirty(F)) ), retractall(det_inferred(_, _, _)).
+user:metta_on_function_changed(_) :- retractall(det_modes:det_snapshot(_)).
 :- multifile user:metta_on_definitions_settled/0.
 user:metta_on_definitions_settled :- det_modes:settle.
-settle :- findall(F, retract(det_dirty(F)), Fs0), sort(Fs0, Fs), maplist(check_function, Fs).
+definition_snapshot(Gs) :- findall(G,
+        ( member(P, [user:translated_from(_, _), user:'&self'(_, _, _), user:fun(_), user:arity(_, _),
+                     types:type_decl(_, _, _, _, _), types:symbol_type(_, _), types:newtype(_, _),
+                     types:type_alias(_, _), types:refinement(_, _, _)]),
+          ( predicate_property(P, last_modified_generation(G)) -> true ; G = 0 ) ), Gs).
+settle :- definition_snapshot(Gs),
+          ( det_snapshot(Gs) -> true
+          ; retractall(det_snapshot(_)), retractall(det_inferred(_, _, _)), retractall(det_verdict(_, _, _)),
+            findall(F, ( translated_from(_, [=, [F|_], _]), \+ ho_specialization(_, F) ), Fs0),   %the compiler's copies
+            sort(Fs0, Fs), maplist(check_function, Fs),
+            assertz(det_snapshot(Gs)) ).
+%A runnable passes functions as a body does (check_passed/2):
+:- multifile user:metta_on_runnable/1.
+user:metta_on_runnable(Term) :- det_modes:check_runnable(Term).
+check_runnable(Term) :- forall(( call_in(Term, Call), Call = [H|As], atom(H), fun(H), length(As, M),
+                                 type_decl_arrow(H, M, d(_, PTs)), nth1(I, PTs, PT), arrow_grade_of(PT, K, D),
+                                 nth1(I, As, A), nonvar(A) ),
+                               passed_respects('a runnable', 0, [], none, H, A, K, D)).
 
 %(det-verdict f) gives f's verdicts as (Arity Verdict) for the program to inspect:
 'det-verdict'(F, Vs) :- findall([N, V], det_verdict(F, N, V), Vs).

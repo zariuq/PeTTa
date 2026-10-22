@@ -1,0 +1,5 @@
+(= (unknown-id $x) $x)
+(= (bind-num $x) (let $x 1 ok))
+(= (bind-str $x) (let $x "s" ok))
+!(let $v (the (| (List Number) _) (unknown-id (cons 1 $tail)))
+   (let $tail $v ok))

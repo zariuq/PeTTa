@@ -1,0 +1,6 @@
+== checked 2
+3
+(Error typecheck)
+== erased 0
+3
+(some "s")

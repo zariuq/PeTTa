@@ -1,0 +1,7 @@
+(: f (-[det]-> Atom Atom))
+(= (f $x) $x)
+!(bind! &fns (new-space))
+!(add-atom &fns f)
+!(f (progn (println! direct-effect) 3))
+!(let $f (match &fns $f $f)
+   ($f (progn (println! dynamic-effect) 3)))

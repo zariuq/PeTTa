@@ -1,0 +1,5 @@
+== default 0
+true
+((1 (unproved (g 0 n))))
+(First Second)
+== strict 2

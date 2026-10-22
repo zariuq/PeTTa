@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> (List Number)))
+(= (f) (filter-atom (superpose ((1) (2))) $x true))
+!(det-verdict f)
+!(collapse (f))

@@ -1,0 +1,7 @@
+(: poly (-> $a $a $a))
+(: poly (-> Bool Bool Bool))
+(= (poly $x $y) $x)
+(= (unknown-string) "s")
+!(bind! &callbacks (new-space))
+!(add-atom &callbacks poly)
+!(let $f (match &callbacks $name $name) ($f 1 (unknown-string)))

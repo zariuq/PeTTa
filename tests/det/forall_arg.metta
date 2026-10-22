@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> Bool))
+(= (f) (forall (superpose (() (1))) (|-> ($x) true)))
+!(det-verdict f)
+!(collapse (f))

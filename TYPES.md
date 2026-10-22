@@ -1,22 +1,25 @@
 # Types in PeTTa
 
 A type declaration is a contract. `(: f (-> A1 .. An R))` says that `f`'s
-arguments have the types `A1 .. An` and its results the type `R`. The compiler
-checks a contract where a value meets a declared type: an argument of a call,
-a function's result, `(the T E)`. At each such boundary it compares what it
+arguments have the types `A1 .. An` and its answers the type `R`. Wherever a
+value meets a declared type (a call's argument, a function's answer,
+`(the T E)`, a row added to a typed space), the compiler compares what it
 knows of the value, its *static type* `S`, with the required type `T`:
 
-- `S` establishes `T`: nothing is compiled, the check could not fail;
+- `S` establishes `T`: nothing is compiled, since the check could not fail;
 - `S` and `T` cannot agree: a type error at compile time;
-- otherwise: a fast runtime check of what is known of `T`.
+- otherwise: a runtime check.
 
-A failing check raises a type error. Checks never bind variables and never
-filter answers, so a run without type errors computes exactly what the program
-computes with `--no-type-checks`. Typed code therefore costs what untyped code
-costs, and a function without a declaration is simply untyped.
+A failing check raises a type error. Checks never bind variables, never fail,
+never act and never filter answers, so a run without type errors computes what
+the program computes with `--no-type-checks`. Code whose types are known
+compiles as untyped code does, and a function without a declaration is simply
+untyped.
 
-The implementation is `src/types.pl`. Determinism modes are an optional module,
-`lib/lib_det.pl` (section 6).
+The implementation is `src/types.pl` (what the compiler concludes) and
+`src/types_runtime.pl` (what compiled code calls when a value was not proven to
+fit). Determinism checking is an optional library, `lib/lib_det.pl`
+(section 9).
 
 ## 1. What the compiler produces
 
@@ -37,8 +40,8 @@ loop(A, B, C) :-
     ).
 ```
 
-A value of unknown type is checked where it meets a declared one. The result
-of the undeclared `lookup-width` is checked as `half`'s argument:
+A value of unknown type is checked where it meets a declared one. The answer of
+the undeclared `lookup-width` is checked as `half`'s argument:
 
 ```metta
 (= (lookup-width $k) (match &self (width $k $w) $w))
@@ -70,55 +73,96 @@ area([circle, A], B) :-
     B is 3.14*C.
 ```
 
-A closure is known only at runtime, and its arrow type is checked as its arity,
-so its result is checked where the arrow's result type is demanded:
-
-```metta
-(: twice (-> (-> Number Number) Number Number))
-(= (twice $f $x) ($f ($f $x)))
-```
-```prolog
-twice(A, B, C) :-
-    apply_fn1(A, B, D),
-    (   number(D)
-    ->  true
-    ;   typecheck_or_error(D, 'Number')
-    ),
-    apply_fn1(A, D, C),
-    (   number(C)
-    ->  true
-    ;   typecheck_or_error(C, 'Number')
-    ).
-```
-
 ## 2. Types and values
 
-- `Number`, `String`, `Bool` and `(List T)` are fixed by their representation.
-  A symbol declared with one of them must be one of its values.
+- `Number`, `String` and `Bool` are fixed by their representation. A symbol
+  declared with one of them must already be one of its values.
+- `(List T)` is the finite lists of `T`s; a tuple type `(T1 .. Tn)` is the
+  expressions of length n whose elements have those types.
 - A declared name, `(: Shape Type)`, has as values exactly the symbols declared
-  with it and the applications of its constructors (functions declared with the
-  name as result and without equations). Two names share values only through a
-  symbol or constructor declared with both. Rules of the program for `get-type`
-  can give any value any type; they take part in checks only if no effect is
-  reachable from them, so that a check never acts.
+  with it and the applications of its constructors. A constructor is a
+  function declared with the name (or the name applied to types, as
+  `(Maybe $a)`) as its result and without equations. Two names share values
+  only through a symbol or constructor declared with both, so unrelated names
+  can be told apart at compile time.
 - An atom in a type that names no declared type is a literal tag: its one value
   is the symbol itself, as the head of `(STV Number)` is `STV`.
-- A tuple type `(T1 .. Tn)` is a fixed-length expression, checked element by
-  element.
-- `%Undefined%` (also written `_`), `Atom` and `Expression` say nothing.
-- `(| A B)` is a union. A value of a union fits a type only if every alternative
-  does (narrow it with `(the T E)`); a value fits a union if it fits one
-  alternative.
+- `(| A B)` is a union. A value of a union establishes a type when every
+  alternative does; `(the T E)` narrows it.
+- `%Undefined%` (also written `_`), `Atom` and `Expression` say nothing about
+  the value.
 - `(: N (Alias T))` names `T`.
-- `(: N (Newtype R))` is a type of its own, represented as `R`. Only
-  `(brand N E)` makes a value of `N`: it checks `E` against `R`. A brand fits
-  what its representation fits, a head pattern matches the representation, and
-  brands are erased at runtime.
-- `(: &s (SpaceOf Row))` declares a space whose `match` patterns may apply a
-  function with one `det` declaration, such as the as-pattern `(@ $whole pat)`.
+- `(: N (Newtype R))` is a type of its own, represented as `R`. Only an
+  evaluated `(brand N E)` makes a value of `N`, and it checks `E` against `R`.
+  Brands are erased at runtime, so a runtime check of `N` is a check of `R`.
+  The expression `(brand N E)` held as data (in a row given to `add-atom`, say)
+  is an expression, not a value of `N`.
+- `(: N (Refine R P))` is the values of `R` for which the predicate `P` gives
+  `True` (section 7).
+- `(: &s (SpaceOf Row))` types a space (section 6).
 - `(: Heap (Foreign 1))` is an opaque type of values made by Prolog code.
 
-## 3. Type variables
+## 3. Open values
+
+A value with unbound parts fits a type when some binding of those parts would.
+A check of such a value holds its open parts to what the type asks of them,
+the way `dif/2` holds a constraint: a later binding that breaks it raises a type
+error at that binding.
+
+```metta
+(: f (-> Shape Shape))
+(= (f $x) $x)
+!(let $v (circle $r) (let $_ (f $v) (let $r 3 $v)))      ; (circle 3)
+!(let $v (circle $r) (let $_ (f $v) (let $r "s" $v)))    ; a type error
+```
+
+Held checks are part of the value. They travel with every copy PeTTa makes
+(`collapse`, a row stored in a space, an equation added at runtime), restricted
+to the parts the copy contains. A union whose open value fits several
+alternatives keeps the value fitting one of them as a whole; overloaded calls
+keep each answer fitting one declaration together with its arguments.
+
+## 4. Calls
+
+- A direct call is checked against the declarations its arguments may fit. With
+  one declaration, the function's own clauses check their answers; with several,
+  each answer must fit one declaration jointly with the arguments.
+- **One contract on every route.** A call through a variable, a partial
+  application, `reduce`, a function found in a space, or a specialized copy
+  checks the callee's own contract, as the direct call does.
+- **`Atom` holds an argument unevaluated**, under every arrow kind and on every
+  route. A call through a variable reads the callee's declaration first, then
+  passes the source where the callee holds and evaluates every other argument:
+
+  ```metta
+  (= (call-it $g) ($g (+ 1 2) 4))
+  ```
+  ```prolog
+  'call-it'(A, B) :-
+      (   held_mask(A, 2, [C, _]) ->  true ;   true ),
+      (   C=='Atom' ->  D=[+, 1, 2] ;   D=3 ),
+      apply_fn2(A, D, 4, B).
+  ```
+  Under the plain arrow `->`, an `Atom` result returns the body unevaluated;
+  under the other arrows an `Atom` result is any computed value.
+- `Expression` is a value type: an `Expression` argument is evaluated. (HE also
+  holds an expression argument of an `Expression` parameter.)
+- **Partial application and currying.** `(f a)` with fewer arguments than `f`
+  takes is a closure whose type is the rest of `f`'s arrow; applying it is a
+  call of `f`. A function declared `(-> A (-> B C))` whose body is a partial
+  application returns that closure, checked against `(-> B C)`, and its body
+  runs once per closure. The same declaration types calls with two arguments as
+  `(-> A B C)`.
+- A closure applied where its arrow type is known has its answer checked
+  against that arrow's result.
+- `reduce` turns a call that fails into data, but a type error inside it is an
+  error.
+- `(-[det]-> ..)` and `(-[semidet]-> ..)` commit a function to its first
+  matching clause; a function with several declarations commits when all of
+  them do. The other arrows (`-[nondet]->`, `-[multi]->`, effect-polymorphic
+  `-[$e]->`) do not commit.
+
+## 5. Type variables
 
 A type variable in a declaration is chosen by each call.
 
@@ -127,109 +171,120 @@ A type variable in a declaration is chosen by each call.
   `(: f (-> $a Number)) (= (f $x) (+ $x 1))` is a type error.
 - A variable inside a structured parameter type, `(-> ($a $b) Number)`, names
   an unknown part of it.
-- A result returned at a type variable is trusted (section 5).
-- An argument's runtime check tests the declared type with its variables
-  unknown: what one argument instantiates never decides another's check.
+- At runtime a check tests the declared type with its variables unknown: what
+  one argument instantiates never decides another's check.
+- A caller treats a result at a type variable as the type the arguments
+  instantiate only when the function is parametric: each of its clauses returns
+  a value whose static type carries the rigid variables there. Otherwise the
+  caller checks the result. A clause added later that breaks this has the
+  callers that relied on it compiled again.
 
-## 4. Calls
+## 6. Typed spaces
 
-- A direct call is checked against the declarations its arguments may fit;
-  with one declaration the function's own clauses check its result.
-- A call reached only at runtime - a closure, a partial application, `reduce`,
-  a function picked from a space - is checked by the same contract: with
-  several declarations, the ones the arguments fit admit the call, the body
-  runs once, and each result must fit one of them jointly with the arguments.
-- A check of a value with unbound parts holds those parts to the type: each is
-  checked when it is bound. Comparisons of values (`=alpha`, `=@=`, `test`) do
-  not see these held checks.
-- `reduce` turns a call that fails into data, but a type error inside it is an
-  error.
-- `Atom` holds an argument or a result unevaluated under `->`; under the other
-  arrows `Atom` is any value, computed as usual.
-- `(-[det]-> ..)` and `(-[semidet]-> ..)` commit a function to its first
-  matching clause; a function with several declarations commits when all of
-  them do. The other arrows (`-[nondet]->`, `-[multi]->`, effect-polymorphic
-  `-[$e]->`) do not commit.
+`(: &s (SpaceOf Row))` declares that the space holds rows of `Row`.
 
-## 5. What is guaranteed, and what is trusted
+- Each row added is checked against `Row`: inside `add-atom` for a space passed
+  in a variable, and as a boundary at a literal space, where a row of known
+  type compiles no check. The row's open parts are held and stored with it.
+- `match` on a literal declared space gives the pattern's variables the types
+  of `Row`'s parts, and `get-atoms` gives `Row`. Code that consumes a typed read
+  compiles without a check.
+- Declaring `(SpaceOf Row)` for a space that already holds rows checks them
+  first; a row that does not fit rejects the declaration.
+- A space in a variable gives no read types. Rows written by Prolog code past
+  `add-atom` are trusted.
 
-**Erasure.** A run that raises no type error computes what the program computes
-with every check removed, answers and effects alike.
+## 7. Type tests
 
-**Static types are sound.** A value with static type `S` fits `S` at runtime,
-so a check left out because `S` establishes `T` would have succeeded.
+The program's rules for `get-type` can give values types, and they take part
+in checks only if everything they reach is pure: no output, state, space
+write, randomness, foreign code, or call through a variable, so that a check
+never acts. A rule that is not pure stays an ordinary introspection query, with
+a warning. A rule opens only the names it can return.
 
-**Compile-time errors** follow conventional static typing, each with a stated
-guarantee: two atomic types that conflict share no value; a union conflicts
-with a type when one of its alternatives does, and for atomic alternatives
-that branch can never fit; two list types whose element types are atomic and
-conflict share only `()`; conflicting arrows differ in length, in a parameter
-or in the result, and a call through the demanded arrow with an argument of a
-conflicting atomic parameter type breaks the callee's contract. (Nested types
-are compared part by part: `(List (List Number))` and `(List (List String))`
-conflict although `(())` fits both.)
+A refinement is usually the better way to write such a type:
+
+```metta
+(: is-even (-> Number Bool))
+(= (is-even $n) (== (% $n 2) 0))
+(: EvenNumber (Refine Number is-even))
+(: halve (-> EvenNumber Number))
+(= (halve $n) (/ $n 2))
+(= (halve-twice $n) (halve (+ $n $n)))
+```
+```prolog
+'halve-twice'(A, B) :-
+    C is A+A,
+    typecheck_or_error(C, 'EvenNumber'),
+    halve(C, B).
+```
+
+`EvenNumber` establishes what `Number` does and conflicts with what `Number`
+conflicts with, so names stay closed; `(List EvenNumber)` composes; the
+predicate is checked for purity once, and runs only at runtime.
+
+## 8. What is guaranteed, and what is trusted
+
+**Erasure.** A run that raises no type error has the same output, answers and
+effects alike, as the run of the same program with `--no-type-checks`.
+
+**Check elimination.** A check left out because a static type establishes the
+required one would have succeeded: `--oracle` compiles every check, and gives
+the same output as the default build, type errors included (which check
+reports a type error first may differ).
+
+**Route independence.** A call means the same on every route (section 4).
+
+**Observation boundary.** Held checks are attributes of variables. Comparisons
+of terms (`=alpha`, `=@=`, `test`) and the standard order of unbound variables
+(`@<`) do not see them, and are outside the erasure claim.
 
 These hold under the following trust:
 
 1. Builtins implemented in Prolog return their declared types and check their
-   own arguments.
-2. A result returned at a type variable fits the caller's instance.
-3. Foreign results that are not numbers, strings or booleans.
-4. Declarations come before code relies on them; removing a declaration does
-   not recompile its callers.
+   own arguments. (Arithmetic follows SWI-Prolog: a one-character string is
+   its character code.)
+2. Foreign results other than numbers, strings and booleans.
+3. Rows written to spaces by Prolog code.
+4. Declarations come before the code that relies on them.
 
-The rules are formalized in Lean, in MeTTapedia's
-`Mettapedia/Languages/MeTTa/PeTTa/ContractTyping` (no `sorry`, standard
-axioms only): establishment and its soundness, each conflict rule's
-guarantee, rigid type variables, Newtypes and brand erasure, the call
-contract and its independence of the route a call takes, the check of
-arguments against their declared types, erasure with held checks, and the
-determinism grades together with the soundness of the exhaustiveness check
-below. The table there names each Lean definition after its predicate here.
-Not modelled: effect-polymorphic arrows, the program's `get-type` rules,
-metatypes, and arguments that share an unbound variable.
+**Testing.** `tests/typing/` holds programs run checked, with `--oracle` and
+with `--no-type-checks`, compared on full output; `tests/typing/differential.py`
+generates typed programs (open values, unions, overloads, curried and dynamic
+calls, typed spaces) and checks the same invariants on them; `test.sh` runs
+both.
 
-## 6. Determinism modes (optional)
+## 9. Determinism (optional)
 
 `!(import! &self (library lib_det))` checks determinism declarations when the
 definitions in use are complete. `-[det]->` promises exactly one answer,
 `-[semidet]->` at most one, `-[multi]->` at least one, `-[nondet]->` any
-number.
+number. Each declaration gets a verdict:
 
-- A body is graded by the answer counts of what it does: literals and
-  arithmetic give one, `superpose` several, `match` any, `if` and `case` one of
-  their branches, `once` at most one, and a declared function its arrow's
-  grade. An effect-polymorphic arrow takes the grade of the function passed to
-  it; an undeclared function is graded from its clauses.
-- A det or semidet function answers with its first matching clause; it gives
-  no answer unless its heads cover the declared types, which is decided by
-  the pattern-matrix check (constructors of declared names, lists, Bool,
-  tuples, unions, Newtype representations; `Atom`, `Expression` and other
-  open types are covered by variables only).
-- A function passed to a parameter declared with a determinism arrow must
-  have that grade or a finer one; this is checked for functions passed by
-  name, partial application or lambda, and for parameters passed on. A
-  closure computed at runtime is trusted to keep its declared grade.
-- A body that surely gives more answers than its arrow allows is an error. A
-  body that may give fewer than `det` or `multi` need, or depends on a call the
-  module cannot grade, is reported as a warning (an error under
-  `--strict-det`).
-- `(det-verdict f)` returns `f`'s verdicts.
+- **proven**: the body's answer counts are within the declaration's, assuming
+  the declarations of the functions it calls;
+- **refuted**: the body surely gives at least two answers where one at most is
+  allowed, or surely none where one is needed;
+- **unproved**: anything else, including whatever the library cannot grade
+  soundly (aggregates and maps, `case` with `Empty`, effect-polymorphic arrows,
+  builtins whose answer counts depend on how bound their arguments are, names
+  that `get-type` rules can extend).
 
-The module adds no code to any clause: a program computes the same with or
-without it.
+A refuted declaration is an error; an unproved one is a warning (an error
+under `--strict-det`). Functions passed to parameters declared with a
+determinism arrow are checked in bodies and in runnables. `(det-verdict f)`
+returns `f`'s verdicts. The library adds no code to any clause: a program
+computes the same with or without it.
 
-## 7. Changes from v1.1
+## 10. Changes from v1.2.0
 
-Removed: `--strict`, determinism checking in the core (now `lib_det`), type
-inference for undeclared functions, flow-sensitive narrowing, deferred checks
-of conflicting uses, trust waivers by library, typed rows of spaces.
-
-Changed:
-
-- A type error is always an error; v1.1 dropped some answers instead.
-- Type names are closed, as in section 2.
-- A union fits a type only if every alternative does.
-- A type variable that only the result mentions is the function's own choice.
-- `car-atom` of `()` is `()`.
-- A call reached at runtime checks its callee's whole contract.
+- Held checks are one constraint store on variables, carried by every copy;
+  stored rows and runtime equations keep theirs.
+- Static evidence comes only from what ran or was checked: builtin results,
+  `and-then`/`or-else`, `brand`, constructor results, and polymorphic results
+  (section 5).
+- Every call route checks the callee's contract and lets the callee decide
+  which arguments it holds; curried declarations type every arity.
+- Typed spaces (section 6) and refinements (section 7) are new.
+- `get-type` rules take part in checks only when pure.
+- `lib_det` no longer proves false verdicts (section 9).

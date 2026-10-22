@@ -5,7 +5,8 @@
 %Re-specializing a function already being specialized is refused: its key must differ from the ongoing one
 %(same keys are memoized via ho_specialization), and ever-growing keys - e.g. a recursive call wrapping its
 %higher-order argument, (= (evolve $r $g) (evolve (twice $r) $g)) - would otherwise diverge at compile time:
-maybe_specialize_call(HV, AVs, Out, Goal) :- ( nb_current('$spec_stack', Stack) -> true ; Stack = [] ),
+maybe_specialize_call(HV, AVs, Out, Goal) :- \+ held_function(HV),  %its clauses restore held checks
+                                             ( nb_current('$spec_stack', Stack) -> true ; Stack = [] ),
                                              \+ memberchk(HV, Stack),
                                              setup_call_cleanup( (( nb_current(specneeded, Prev) -> true ; Prev = [] ), nb_setval(specneeded,false),
                                                                   nb_setval('$spec_stack', [HV|Stack])),
@@ -30,7 +31,7 @@ specialize_call(HV, AVs, Out, Goal) :- %1. Retrieve a copy of all meta-clauses s
                                        %2. Copy all clause variables eligible for specialization across all meta-clauses:
                                        bagof(HoVar, ArgsNorm^BodyExpr^HoBinds^HoBindsPerArg^
                                                     ( member(Meta, MetaList),
-                                                      Meta = fun_meta(ArgsNorm, BodyExpr),
+                                                      Meta = fun_meta(_, ArgsNorm, _, BodyExpr),
                                                       maplist(specializable_vars(BodyExpr), AVs, ArgsNorm, HoBinds),
                                                       member(HoBindsPerArg, HoBinds),
                                                       member(HoVar, HoBindsPerArg),
@@ -52,16 +53,15 @@ specialize_call(HV, AVs, Out, Goal) :- %1. Retrieve a copy of all meta-clauses s
                                                forall(member(TypeChain, TypeChains), add_sexp('&self', [':', SpecName, TypeChain])),
                                                %4.3 Translate specialized MeTTa clauseses to Prolog, keeping track of the function we are compiling through recursion:
                                                maplist({SpecName}/[Meta,clause_info(Input,Clause)]>>
-                                                       ( Meta = fun_meta(ArgsNorm, BodyExpr),
+                                                       ( Meta = fun_meta(_, ArgsNorm, HeadGoals, BodyExpr),
                                                          Input = [=,[SpecName|ArgsNorm],BodyExpr],
                                                          %a typecheck error in the specialized instance just means: don't specialize
-                                                         catch(translate_clause(Input,Clause,false), error(_, typecheck), fail) ), MetaList, ClauseInfos),
+                                                         catch(translate_clause(Input,Clause,prefix(HeadGoals)), error(_, typecheck), fail) ), MetaList, ClauseInfos),
                                                %4.4 Only proceeed specializing if this or any recursive call profited from specialization with the specialized function at head position:
                                                nb_getval(specneeded, true),
                                                %4.5 Assert and print each of the created specializations:
                                                forall(member(clause_info(Input, Clause), ClauseInfos),
-                                               ( asserta(Clause, Ref),
-                                                 assertz(translated_from(Ref, Input)),
+                                               ( assert_translated(asserta, Input, Clause, _),
                                                  add_sexp('&self', Input),
                                                  format(atom(Label), "metta specialization (~w)", [SpecName]),
                                                  maybe_print_compiled_clause(Label, Input, Clause) ))
@@ -88,7 +88,8 @@ traverse_list(Pred, From, Into) :- (is_list(From),is_list(Into) -> maplist(trave
 
 %Selects and unifies variable–argument pairs that act as higher-order or head operands in the body:
 eligible_var_pairs([], [], _, []).
-eligible_var_pairs([Var|Vars], [Copy|Copies], BodyExpr, HoVars) :- ( specializable_arg(Copy), (var_use_check(head, Var, BodyExpr) ; var_use_check(ho, Var, BodyExpr))
+eligible_var_pairs([Var|Vars], [Copy|Copies], BodyExpr, HoVars) :- ( specializable_arg(Copy), \+ syntax_head(Copy),   %syntax stays syntax
+                                                                     (var_use_check(head, Var, BodyExpr) ; var_use_check(ho, Var, BodyExpr))
                                                                      -> Var = Copy,
                                                                         HoVars = [Var|RestHoVars]
                                                                       ; HoVars = RestHoVars ),
@@ -126,9 +127,15 @@ forget_symbol(Name) :- retractall('&self'(=, [Name|_], _)),
                        retractall(ho_specialization(Name,_)).
 
 %Invalidate all specializations:
+%A change to F's definition invalidates its specialized copies. Callers compiled
+%earlier call a copy by name, so each copy becomes a plain call of F: its head
+%keeps every argument of F's, the higher-order ones included.
 invalidate_specializations(F) :-
     retractall(ho_specialization_failed(_,_,_)),
     findall(Spec, ho_specialization(F, Spec), Specs),
-    forall(member(S, Specs), invalidate_specializations(S)),
-    forall(member(S, Specs), forget_symbol(S)),
-    retractall(ho_specialization(F,_)).
+    forall(member(S, Specs), ( invalidate_specializations(S), redirect_specialization(S, F) )).
+redirect_specialization(S, F) :-
+    findall(A, arity(S, A), As),
+    forall(( member(A, As), functor(H, S, A), clause(H, _, Ref) ), ( retractall(translated_from(Ref, _)), erase(Ref) )),
+    retractall('&self'(=, [S|_], _)),
+    forall(member(A, As), ( functor(H, S, A), H =.. [S|Args], G =.. [F|Args], assertz((H :- G)) )).

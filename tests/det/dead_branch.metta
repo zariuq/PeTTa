@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> Number))
+(= (f) (if true 1 (superpose (2 3))))
+!(det-verdict f)
+!(collapse (f))

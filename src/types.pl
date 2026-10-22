@@ -15,21 +15,23 @@
 % A failing check raises a type error: types never filter answers, so a run
 % without type errors computes what the program computes with its types erased.
 % A check of a value with unbound parts holds those parts to the type until
-% they are bound (retain_open/2), so what a check establishes stays true.
+% they are bound (the held checks below), so what a check establishes stays true.
 
 :- module(types, [ note_type_decl/1, forget_type_decl/1, note_function/1, note_foreign/1,     % declarations
                    type_decl/5, dynamic_contract/3, add_builtin_signatures/2, fn_type/4, type_normalize/2,
-                   clause_contract/6, type_arg_policy/3,                                    % compiling a clause
+                   clause_contract/6, type_arg_policy/3, decl_at/5, arrow_params/4, may_hold/1, note_parametricity/4,                                    % compiling a clause
                    static_type/2, set_static_type/2, merge_static_type/2, strip_static_types/1,
                    type_boundary/4, type_call/6, type_closure_call/6,                        % boundaries
-                   type_pattern/2, type_element_var/2, newtype_representation/2, space_type/2,
-                   typecheck_ok/2, typecheck_or_error/2, dynamic_call/4, contract_call/5,
-                   rethrow_type_error/1, runtime_the/2 ]).             % runtime
+                   type_pattern/2, type_element_var/2, newtype_representation/2, space_type/2, space_row/2, space_read_types/2,
+                   typecheck_ok/2, typecheck_or_error/2, typecheck_or_error/3, dynamic_call/4, contract_call/5,
+                   rethrow_type_error/1, runtime_the/2, runtime_brand/2,
+                   held_active/0, held_transport/3, held_restore/1, held_types/2, hold/1,
+                   hold_call/4, held_function/1 ]).             % runtime
 
 %%% Declarations %%%
 
 :- dynamic type_decl/5, symbol_type/2, native_builtin/1, foreign/1, dynamic_contract/3,
-           get_type_extended/0, classifier_purity/1, type_alias/2, newtype/2, space_type/2.
+           get_type_extended/0, classifier_purity/1, type_alias/2, newtype/2, space_type/2, refinement/3.
 % type_decl(F, N, ArgTypes, OutType, Det) for each declaration of F with N
 % arguments, Det being plain (->), det, semidet or nondet (the other -[..]->
 % arrows); symbol_type(S, T) for each (: S T) giving a symbol a type that is not
@@ -38,6 +40,8 @@
 % imported from Prolog, whose results are not trusted. type_alias(N, T) for
 % (: N (Alias T)), a name for T; newtype(N, R) for (: N (Newtype R)), a type of
 % its own whose values are represented as R's are (see est/2 and consistent/2);
+% refinement(N, B, P) for (: N (Refine B P)), the values of B for which the pure
+% predicate P gives True;
 % space_type(S, Row) for (: S (SpaceOf Row)), a space whose match patterns may
 % apply functions (see space_pattern/4 in translator.pl).
 
@@ -57,15 +61,25 @@ type_normalize([A|Ts], ['->'|Ns]) :- atom(A), arrow(A, _), !, maplist(type_norma
 type_normalize(T, N) :- is_list(T), !, maplist(type_normalize, T, N).
 type_normalize(T, T).
 
-%Called for every atom added to or removed from &self:
+%Called for every atom added to or removed from &self (a declaration change
+%clears the cached field plans of constructors):
+note_type_decl(A) :- A = [C|_], C == ':', retractall(constructor_plans_cache(_, _, _)), retractall(name_kind_cache(_, _)),
+                     retractall(space_plan_cache(_, _, _)), fail.
+note_type_decl([C, N, [K, B0, P]]) :- C == ':', K == 'Refine', atom(N), atom(P), !, type_normalize(B0, B),
+                                      retractall(refinement(N, _, _)), assertz(refinement(N, B, P)).
 note_type_decl([C, N, [K, T0]]) :- C == ':', atom(N), kind_store(K, P), !, type_normalize(T0, T),
+                                   ( K == 'SpaceOf' -> retype_space(N, T) ; true ),
                                    Old =.. [P, N, _], New =.. [P, N, T], retractall(Old), assertz(New).
 note_type_decl([C, _, T]) :- C == ':', is_list(T), T = [H|Ts], \+ ( atom(H), arrow(H, _) ),
                              member(A, Ts), atom(A), arrow(A, _), !,
                              throw(error(syntax_error('Arrows are prefix: write (-> A B), not (A -> B)'), _)).
 note_type_decl([C, F, T]) :- C == ':', atom(F), fn_type(T, As, O, D), !, length(As, N),
                              ( type_decl(F, N, As2, O2, _), [As2, O2] =@= [As, O] -> true
-                             ; assertz(type_decl(F, N, As, O, D)), redeclared(F) ).
+                             ; ( may_hold(F) -> true ; \+ ( sub_term(A, As-O), A == 'Atom' ) -> true ; assertz(may_hold(F)) ),
+                               assertz(type_decl(F, N, As, O, D)), redeclared(F) ).
+%F has a declaration that mentions Atom, so a call may hold some argument
+%(type_arg_policy/3 decides); for other functions every argument is evaluated:
+:- dynamic may_hold/1.
 note_type_decl([C, S, T0]) :- C == ':', atom(S), !, type_normalize(T0, T), representation_declaration(S, T),
                               ( symbol_type(S, T1), T1 =@= T -> true ; assertz(symbol_type(S, T)) ).
 note_type_decl(_).
@@ -76,7 +90,7 @@ representation_declaration(S, T) :- ( \+ type_flag('--no-type-checks'), checkabl
                                         \+ typecheck_ok(S, C)
                                       -> throw(error(literal_type_mismatch(S, T), typecheck))
                                        ; true ).
-representation(T) :- primitive(T) ; list_type(T, _).
+representation(T) :- primitive(T) ; list_type(T, _) ; is_list(T), T = [U|Ts], U == '|', Ts \== [], maplist(representation, Ts).
 kind_store('Alias', type_alias).
 kind_store('Newtype', newtype).
 kind_store('SpaceOf', space_type).
@@ -86,6 +100,9 @@ represented(T, R) :- is_list(T), !, maplist(represented, T, R).
 represented(T, T).
 %(brand N E) makes E, a value of N's representation, a value of N:
 newtype_representation(N, R) :- ( atom(N), newtype(N, R0) -> R = R0 ; R = '%Undefined%' ).
+forget_type_decl(A) :- A = [C|_], C == ':', retractall(constructor_plans_cache(_, _, _)), retractall(name_kind_cache(_, _)),
+                       retractall(space_plan_cache(_, _, _)), fail.
+forget_type_decl([C, N, [K, _, _]]) :- C == ':', K == 'Refine', atom(N), !, retractall(refinement(N, _, _)).
 forget_type_decl([C, N, [K, _]]) :- C == ':', atom(N), kind_store(K, P), !, Old =.. [P, N, _], retractall(Old).
 forget_type_decl([C, F, T]) :- C == ':', atom(F), fn_type(T, As, O, _), !, length(As, N),
                                forall(( clause(type_decl(F, N, As2, O2, _), true, Ref), [As2, O2] =@= [As, O] ),
@@ -97,8 +114,8 @@ forget_type_decl(_).
 
 %A change to F's declarations renews the contract that calls reaching F only at
 %runtime check (see dynamic_call/4) and recompiles F's clauses against them:
-redeclared(F) :- retractall(dynamic_contract(F, _, _)),
-                 forall(( \+ type_flag('--no-type-checks'), distinct(N, type_decl(F, N, _, _, _)),
+redeclared(F) :- retractall(dynamic_contract(F, _, _)), retractall(nonparametric(F, _)),
+                 forall(( \+ type_flag('--no-type-checks'), distinct(N, decl_arity(F, N)),
                           contract_of(F, N, C) ),
                         assertz(dynamic_contract(F, N, C))),
                  ( translated_from(_, [=, [G|_], _]), G == F
@@ -122,7 +139,7 @@ builtin_type(F, ['->'|Ts]) :- member(Fs-Ts, [ ['+','-','*','/','%',min,max,'pow-
                                                [and,or,xor,implies]-['Bool','Bool','Bool'],
                                                [not]-['Bool','Bool'],
                                                ['==','!=','=','=?','=alpha','=@=','@<','@>','@<=','@>=']-[_,_,'Bool'],
-                                               ['min-atom','max-atom','size-atom']-[_,'Number'],
+                                               ['min-atom','max-atom','size-atom']-[_,'%Undefined%'],
                                                ['is-var','is-ground','is-expr','is-space']-[_,'Bool'],
                                                ['random-int','random-float']-['Number','Number','Number'],
                                                [repr]-[_,'String'],
@@ -134,13 +151,29 @@ add_builtin_signatures(Space, true) :- forall(builtin_type(F, T), 'add-atom'(Spa
 
 unique_type_decl(F, N, As, O, D) :- findall(d(As0, O0, D0), type_decl(F, N, As0, O0, D0), [d(As, O, D)]).
 
+%F's declarations as seen by a call with N arguments: those of F/N or, without
+%any, a shorter one whose result arrow takes the rest; a function declared
+%(-> A (-> B C)) and called with two arguments is (-> A B C) (currying):
+decl_at(F, N, As, O, D) :- ( type_decl(F, N, _, _, _) -> type_decl(F, N, As, O, D)
+                           ; type_decl(F, K, As0, O0, D), K < N, M is N - K, arrow_params(O0, M, Bs, O),
+                             append(As0, Bs, As) ).
+%The first M parameter types of a curried arrow type T, and what it returns then:
+arrow_params(T, 0, [], T) :- !.
+arrow_params(T, M, Bs, O) :- nonvar(T), fn_type(T, Ps, R, _), length(Ps, L),
+                             ( L >= M -> length(Bs, M), append(Bs, Rest, Ps),
+                                         ( Rest == [] -> O = R ; T = [A|_], append([A|Rest], [R], O) )
+                             ; M1 is M - L, arrow_params(R, M1, Bs1, O), append(Ps, Bs1, Bs) ).
+decl_arity(F, N) :- type_decl(F, K, _, O, _), ( N = K ; curried_arity(O, K, N) ).
+curried_arity(O, K, N) :- nonvar(O), fn_type(O, Ps, R, _), length(Ps, L),
+                          ( between(1, L, I), N is K + I ; K1 is K + L, curried_arity(R, K1, N) ).
+
 %The contract of F/N for calls whose callee is known only at runtime: with one
 %declaration its parameters (its clauses check its result), with several each
 %declaration's parameters and result, since its clauses check neither:
-contract_of(F, N, params(Cs)) :- unique_type_decl(F, N, As, _, _), !,
-                                 maplist(checkable, As, Cs), \+ maplist(wildcard, Cs).
-contract_of(F, N, overloads(Os)) :- findall(o(Cs, R), ( type_decl(F, N, As, O, _), maplist(checkable, As, Cs),
-                                                         checkable(O, R) ), Os),
+contract_of(F, N, params(Cs)) :- findall(As0, decl_at(F, N, As0, _, _), [As]), !,
+                                 maplist(runtime_type, As, Cs), \+ maplist(wildcard, Cs).
+contract_of(F, N, overloads(Os)) :- findall(o(Cs, R), ( decl_at(F, N, As, O, _), maplist(runtime_type, As, Cs),
+                                                         runtime_type(O, R) ), Os),
                                     \+ forall(member(o(Cs, R), Os), maplist(wildcard, [R|Cs])).
 
 %The contract a clause of F/N is compiled against: of F's declarations, those
@@ -149,7 +182,7 @@ contract_of(F, N, overloads(Os)) :- findall(o(Cs, R), ( type_decl(F, N, As, O, _
 %commitment; several leave the clause unchecked, since each call is checked
 %against the declarations its arguments fit; none is an error.
 clause_contract(F, N, Args, PTs, OT, Det) :-
-    findall(d(As, O, D), type_decl(F, N, As, O, D), Ds),
+    findall(d(As, O, D), decl_at(F, N, As, O, D), Ds),
     include({Args}/[d(As, _, _)]>>( instantiate(Args, As),
                                     \+ ( nth1(I, Args, V), nth1(I, As, T), static_type(V, S),
                                          represented(T, R), conflict(S, R) ) ), Ds, Fits),
@@ -164,7 +197,7 @@ joint_commitment(_, plain).
 
 %Argument positions that every declaration of F/N types Atom stay unevaluated.
 %The result is a list of types for translate_args_by_type/4: Atom or unknown.
-type_arg_policy(F, N, Ps) :- findall(As, type_decl(F, N, As, _, _), Ass), Ass \== [],
+type_arg_policy(F, N, Ps) :- findall(As, decl_at(F, N, As, _, _), Ass), Ass \== [],
                              length(Ps, N),
                              foldl({Ass}/[P, I, J]>>( J is I + 1,
                                                      ( forall(member(As, Ass), (nth1(I, As, A), A == 'Atom')) -> P = 'Atom' ; true ) ),
@@ -195,14 +228,15 @@ static_type(V, T) :- atom(V), !, ( \+ fun(V), \+ type_decl(V, _, _, _, _), finda
                                    -> true ; T = '%Undefined%' ).
 static_type(partial(F, Bs), T) :- atom(F), is_list(Bs), length(Bs, K), callable_type(F, K, T), !.
 %A constructor application has its declared type, if its fields establish it:
-static_type([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), type_decl(C, N, _, _, _), !,
-                          ( unique_type_decl(C, N, As, O, _), instantiate(Fs, As), maplist(value_established, Fs, As)
+static_type([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N),
+                          \+ \+ ( type_decl(C, N, _, O0, _), constructor_result(O0) ), !,
+                          ( unique_type_decl(C, N, As, O, _), constructor_result(O), instantiate(Fs, As),
+                            maplist(value_established, Fs, As)
                             -> result_static_type(constructor, As, O, T) ; T = '%Undefined%' ).
 %Other data is a list of the type its elements agree on, else the tuple of their
 %types; but a symbol without a type gives the expression it heads none, as an
 %undeclared function gives none to its calls, and an application of a function
 %held as data (quoted, say) is an expression whose head's type is unknown:
-static_type([B, N, _], N) :- B == brand, atom(N), newtype(N, _), !.        %a literal (brand N E), quoted say
 static_type([X|Xs], T) :- is_list(Xs), atom(X), fun(X), !, maplist(static_type, Xs, Ss), T = ['%Undefined%'|Ss].
 static_type([X|Xs], T) :- is_list(Xs), static_type(X, S), \+ ( atom(X), S == '%Undefined%' ), !,
                           maplist(static_type, Xs, Ss),
@@ -212,7 +246,7 @@ static_type(_, '%Undefined%').
 %A value matched by a constructor pattern has the pattern's type as well
 %(occurrence typing): the intersection (& T0 P) establishes what either does.
 narrowed([C|Fs], T0, T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), unique_type_decl(C, N, _, O, _),
-                           copy_term(O, P), P \=@= T0, !, T = ['&', T0, P].
+                           constructor_result(O), copy_term(O, P), P \=@= T0, !, T = ['&', T0, P].
 narrowed(_, T, T).
 
 %A function, or its partial application to K arguments, as a value: the rest of
@@ -246,7 +280,7 @@ strip_static_types(Term) :- term_attvars(Term, Vs), maplist([V]>>del_attr(V, pt)
 %time; and data checked against a tuple type element by element, a symbol
 %fitting itself as its tag, as in typecheck_ok/2:
 value_established(V, T) :- static_type(V, S), established(S, T), !.
-value_established(V, T) :- ground(V), closed(T), \+ nominal(T), typecheck_ok(V, T), !.
+value_established(V, T) :- ground(V), acyclic_term(V), closed(T), \+ nominal(T), \+ refined(T), typecheck_ok(V, T), !.
 value_established(V, T) :- is_list(V), tuple_type(T), same_length(V, T), maplist(fits_position, V, T).
 fits_position(X, T) :- atom(X), X == T, literal_tag(T), ! ; value_established(X, T).
 established(S, T) :- \+ \+ ( copy_term(S, S1), est(S1, T) ).
@@ -254,10 +288,13 @@ est(S, T) :- var(T), !, T = S.
 est(S, T) :- var(S), !, S = T.
 est(_, T) :- wildcard(T), !.
 est(S, _) :- wildcard(S), !, fail.
+est(S, T) :- atom(S), type_alias(S, D), !, est(D, T).     %an alias declared after a use of its name
+est(S, T) :- atom(T), type_alias(T, D), !, est(S, D).
 est([U|Ss], T) :- U == '|', !, forall(member(S, Ss), est(S, T)).
 est([U|Ss], T) :- U == '&', !, member(S, Ss), est(S, T), !.
 est(S, [U|Ts]) :- U == '|', !, member(T, Ts), est(S, T), !.
 est(S, T) :- atom(S), S \== T, newtype(S, R), !, \+ wildcard(R), est(R, T).
+est(S, T) :- atom(S), S \== T, refinement(S, B, _), !, est(B, T).     %a refinement is a subset of its base
 est(S, T) :- list_type(S, SE), !, list_type(T, TE), est(SE, TE).
 est(S, T) :- list_type(T, TE), !, tuple_type(S), maplist({TE}/[X]>>est(X, TE), S).
 est(S, T) :- ( atom(T) ; rigid(T) ), !, S == T.
@@ -266,17 +303,22 @@ est(S, T) :- is_list(S), is_list(T), same_length(S, T), maplist(est, S, T).
 %Consistency (Siek and Taha), directional where unions are involved (as in
 %consistent subtyping): two types are consistent unless they disagree where
 %both are known. A variable, a wildcard or a metatype is consistent with
-%every type. Every alternative of a union S must be consistent with T, and some
-%alternative of a union T with S. A value of a rigid type is used only at that
+%every type. Every alternative of a union S must be consistent with T (a value
+%of S may be any of them: narrow it with the), and some alternative of a union
+%T with S. A value of a rigid type is used only at that
 %type, while any value may be returned at it (trusted, see TYPES.md). Types
 %that are not consistent are a conflict, a type error at compile time.
 conflict(S, T) :- \+ consistent(S, T).
 consistent(S, T) :- ( var(S) ; var(T) ; unknown(S) ; unknown(T) ), !.
+consistent(S, T) :- atom(S), type_alias(S, D), !, consistent(D, T).
+consistent(S, T) :- atom(T), type_alias(T, D), !, consistent(S, D).
 consistent([U|Ss], T) :- U == '|', !, forall(member(S, Ss), consistent(S, T)).
 consistent([U|Ss], T) :- U == '&', !, once(( member(S, Ss), consistent(S, T) )).
 consistent(S, [U|Ts]) :- U == '|', !, once(( member(T, Ts), consistent(S, T) )).
 consistent(S, T) :- rigid(S), !, S == T.
 consistent(_, T) :- rigid(T), !.
+consistent(S, T) :- atom(S), refinement(S, B, _), !, consistent(B, T).
+consistent(S, T) :- atom(T), refinement(T, B, _), !, consistent(S, B).
 consistent(S, T) :- atom(T), newtype(T, _), !, S == T.                 %a value of N is made by (brand N E)
 consistent(S, T) :- atom(S), newtype(S, R), !, \+ wildcard(R), consistent(R, T).
 consistent(S, T) :- atom(S), atom(T), !, ( S == T -> true ; may_share_values(S, T) ).
@@ -294,13 +336,38 @@ unknown(T) :- wildcard(T), ! ; atom(T), ( memberchk(T, ['Symbol', 'Grounded', 'V
 may_share_values(S, T) :- symbol_type(X, S), symbol_type(X, T), !.
 may_share_values(S, T) :- ( literal_tag(S), symbol_type(S, T) ; literal_tag(T), symbol_type(T, S) ), !.   %a tag and a name declaring it
 may_share_values(S, T) :- type_decl(C, N, _, S, _), \+ fun(C), type_decl(C, N, _, T, _), !.
-open_type_name(T) :- get_type_extended, \+ primitive(T).
+open_type_name(T) :- get_type_extended, \+ primitive(T), classifier_results(Rs), ( Rs == all -> true ; memberchk(T, Rs) ).
+%A get-type rule opens only the names it can return: one whose results are all
+%literal names opens those names, one with a computed result every name (known
+%again after each change of the get-type equations):
+:- dynamic classifier_results_cache/1.
+classifier_results(Rs) :- ( classifier_results_cache(Rs) -> true
+                          ; findall(B, ( user:translated_from(_, [E, [GT|_], B]), E == '=', GT == 'get-type' ), Bs),
+                            ( foldl(result_names, Bs, [], Ns) -> Rs = Ns ; Rs = all ),
+                            assertz(classifier_results_cache(Rs)) ).
+:- multifile user:metta_on_function_changed/1, user:metta_on_function_removed/1.
+user:metta_on_function_changed(F) :- F == 'get-type', retractall(types:classifier_results_cache(_)), retractall(types:name_kind_cache(_, _)).
+user:metta_on_function_removed(F) :- F == 'get-type', retractall(types:classifier_results_cache(_)), retractall(types:name_kind_cache(_, _)).
+user:metta_on_function_changed(_) :- retractall(types:classifier_purity(_)).   %a definition reachable from a rule
+result_names(B, Ns0, Ns) :- atom(B), !, ( memberchk(B, Ns0) -> Ns = Ns0 ; Ns = [B|Ns0] ).
+result_names([H|As], Ns0, Ns) :- atom(H), result_positions(H, As, Rs), !, foldl(result_names, Rs, Ns0, Ns).
+result_positions(if, [_, A, B], [A, B]).
+result_positions(if, [_, A], [A]).
+result_positions(case, [_, Cs], Rs) :- is_list(Cs), findall(R, member([_, R], Cs), Rs).
+result_positions(let, [_, _, B], [B]).
+result_positions('let*', [_, B], [B]).
+result_positions(chain, [_, _, B], [B]).
+result_positions(progn, As, [L]) :- last(As, L).
+result_positions(catch, [E], [E]).
+result_positions(superpose, [As], As) :- is_list(As).
+result_positions(empty, [], []).
 %An atom in a type that names no declared type - no symbol or constructor is
 %declared with it, nor is it a kind - is a literal tag, whose one value is the
 %symbol itself, as the head of (STV Number) is STV:
 literal_tag(T) :- atom(T), \+ primitive(T), \+ wildcard(T), \+ memberchk(T, ['Symbol', 'Grounded', 'Variable', 'Type']),
+                  \+ symbol_type(T, 'Type'),
                   \+ symbol_type(_, T), \+ ( type_decl(C, _, _, T, _), \+ fun(C) ),
-                  \+ newtype(T, _), \+ type_alias(T, _), \+ ( symbol_type(T, K), nonvar(K), K = [F|_], F == 'Foreign' ).
+                  \+ newtype(T, _), \+ type_alias(T, _), \+ refinement(T, _, _), \+ ( symbol_type(T, K), nonvar(K), K = [F|_], F == 'Foreign' ).
 %A tuple type may be that of an application of one of a name's constructors:
 constructed(Name, _) :- primitive(Name), !, fail.            %no expression is a Number, String or Bool
 constructed(Name, [C|Fs]) :- tuple_type([C|Fs]),
@@ -357,15 +424,20 @@ checkable(T, C) :- ( var(T) ; rigid(T) ), !, C = '%Undefined%'.
 checkable(T, C) :- is_list(T), !, maplist(checkable, T, C).
 checkable(T, T).
 closed(T) :- checkable(T, C), C =@= T.
+%What a runtime check of T tests: nothing (%Undefined%) when every value fits it
+%at runtime, as a Newtype over Atom does:
+runtime_type(T, C) :- checkable(T, C0), rplan(C0, C).
 %A Newtype is nominal: inspecting a value cannot make it one, only (brand N E):
 nominal(T) :- sub_term(N, T), atom(N), newtype(N, _), !.
+%A refinement's predicate is user code, which runs at runtime only:
+refined(T) :- sub_term(N, T), atom(N), refinement(N, _, _), !.
 
 %%% Boundaries %%%
 
 %type_boundary(Ctx, V, T, Goals): what passing value V where T is required needs.
 %An argument's T is the declaration instance the call's arguments chose; its
 %runtime check tests the declared type K, whose type variables are unknown
-%there (§2.6), so one argument's value never decides another's check.
+%there (TYPES.md §5), so one argument's value never decides another's check.
 type_boundary(Ctx, V, T, Gs) :- type_boundary(Ctx, V, T, T, Gs).
 type_boundary(_, _, T, _, []) :- ( var(T) ; wildcard(T) ; type_flag('--no-type-checks') ), !.
 type_boundary(Ctx, V, T, K, Gs) :- static_type(V, S0), ( Ctx = the(_) -> forget_open(S0, S) ; S = S0 ),
@@ -376,8 +448,8 @@ boundary(_, V, S, T, _, _) :- conflict(S, T), !,
                            ( ground(V), \+ rigid(S) -> throw(error(literal_type_mismatch(V, T), typecheck))
                                                      ; throw(error(type_conflict(existing(S), required(T)), typecheck)) ).
 boundary(native, _, _, _, _, []) :- !.                 %a native builtin tests its own arguments
-boundary(_, _, _, _, K, []) :- checkable(K, C), wildcard(C), !.
-boundary(Ctx, V, _, T, K, [G]) :- checkable(K, C), guard(V, C, G),
+boundary(_, _, _, _, K, []) :- checkable(K, C), rplan(C, P), wildcard(P), !.
+boundary(Ctx, V, _, T, K, [G]) :- checkable(K, C0), rplan(C0, C), guard(V, C, C0, G),
                                  ( type_flag('--warn-runtime-checks')
                                    -> ( nb_current('$compiling', F), F \== none -> true ; F = 'a runnable' ),
                                       format(user_error, "Warning: runtime type check of ~w against ~p in ~w~n", [Ctx, T, F])
@@ -391,8 +463,11 @@ type_boundary_args(Ctx, Vs, Ts, Goals) :- copy_term(Ts, Ks), instantiate(Vs, Ts)
 %values AVs needs Checks before it and Extra after it, and has the result Type.
 type_call(Fun, AVs, Out, Checks, Extra, Type) :-
         length(AVs, N), ( native_builtin(Fun) -> Ctx = native ; Ctx = Fun ),
-        findall(d(As, O), type_decl(Fun, N, As, O, _), Ds),
-        ( Ds = [d(As, O)] -> type_boundary_args(Ctx, AVs, As, Checks), result_static_type(Ctx, As, O, Type),
+        findall(d(As, O), decl_at(Fun, N, As, O, _), Ds),
+        ( Ds = [d(As, O)] -> copy_term(O, O0), type_boundary_args(Ctx, AVs, As, Checks),
+                             result_static_type(Ctx, As, O0, Plain), result_static_type(Ctx, As, O, Inst),
+                             ( Inst =@= Plain -> T0 = Plain ; result_trusted(Ctx, Fun, N, O0) -> T0 = Inst ; T0 = Plain ),
+                             builtin_result_type(Fun, AVs, T0, Type),
                              %a foreign function's primitive result is checked, not trusted:
                              ( foreign(Fun), primitive(Type) -> type_boundary(foreign(Fun), Out, Type, Extra) ; Extra = [] )
         ; Ds = [_, _|_] -> type_overload(Ctx, Fun, AVs, Out, Ds, Checks, Extra, Type)
@@ -400,11 +475,21 @@ type_call(Fun, AVs, Out, Checks, Extra, Type) :-
         ; Arity is N + 1, \+ arity(Fun, Arity),
           findall(As, ( type_decl(Fun, M, As0, _, _), M > N, length(As, N), append(As, _, As0) ), [As])
           -> type_boundary_args(Ctx, AVs, As, Checks), Extra = [], Type = '%Undefined%'
+        %a row read from a space declared (SpaceOf Row) is of type Row:
+        ; Fun == 'get-atoms', AVs = [S], atom(S), space_type(S, Row) -> Checks = [], Extra = [], copy_term(Row, Type)
         %cons builds a list of the type that the head and the tail's elements agree on:
         ; memberchk(Fun, [cons, 'cons-atom']), AVs = [H, Tl], static_type(Tl, TT), list_type(TT, E0)
           -> Checks = [], Extra = [], static_type(H, S),
              ( agreed_type([S, E0], E) -> Type = ['List', E] ; Type = ['List', '%Undefined%'] )
         ; Checks = [], Extra = [], Type = '%Undefined%' ).
+
+%size-atom, min-atom and max-atom return () for a value that is not a list,
+%and min/max a list's own element: their result is a Number only when the
+%argument is known to be a list (of Numbers, for min and max).
+builtin_result_type(F, [V], _, 'Number') :-
+    ( F == 'size-atom' -> E = '%Undefined%' ; memberchk(F, ['min-atom','max-atom']), E = 'Number' ),
+    static_type(V, S), established(S, ['List', E]), !.
+builtin_result_type(_, _, T, T).
 
 %A call of a closure whose arrow type is known is checked against it. The
 %closure is known only at runtime, and its arrow type was checked as its arity
@@ -417,6 +502,43 @@ type_closure_call(F, AVs, Out, Checks, Extra, Type) :-
         type_boundary(closure_result, Out, Type, Extra).
 type_closure_call(_, _, _, [], [], '%Undefined%').
 
+%Parametric trust (TYPES.md §5): a function's result at a type variable is of the type
+%its arguments instantiate only if no clause of the function returns a value of
+%unknown type there. A caller that relies on it is recorded, and compiled again
+%if a clause found later breaks it (before the next runnable, or once an
+%equation added at runtime is in place); a runnable relies only on the clauses
+%it sees.
+:- dynamic nonparametric/2, trusted_result/3, stale_trust/1.
+result_trusted(Ctx, _, _, O0) :- ( Ctx == native ; term_variables(O0, []) ), !.
+result_trusted(_, F, N, _) :- \+ nonparametric(F, N),
+        ( nb_current('$compiling', C0), C0 \== none
+          -> ( user:ho_specialization(B, C0) -> C = B ; C = C0 ),     %a specialized copy goes with its base
+             ( trusted_result(F, N, C) -> true ; assertz(trusted_result(F, N, C)) )
+        ; A is N + 1, functor(H, F, A), predicate_property(user:H, number_of_clauses(K)), K > 0 ).
+%A clause of F/N whose declared result mentions type variables is parametric
+%when each is rigid in the body (a parameter's whole type or a list parameter's
+%element type) and the answer's static type carries them where the result does:
+note_parametricity(F, N, Out, OT) :-
+        ( atom(F), \+ type_flag('--no-type-checks'), findall(As-O, decl_at(F, N, As, O, _), [As-O]),
+          term_variables(O, OVs), OVs \== [],
+          \+ ( maplist(rigid_in(As), OVs), static_type(Out, S), rigid_established(S, OT) )
+          -> mark_nonparametric(F, N) ; true ).
+rigid_in(As, V) :- member(A, As), ( A == V ; list_type(A, E), E == V ), !.
+rigid_established(S, T) :- rigid(T), !, S == T.
+rigid_established(_, T) :- \+ ( sub_term(X, T), rigid(X) ), !.
+rigid_established(S, T) :- is_list(T), is_list(S), same_length(S, T), maplist(rigid_established, S, T).
+mark_nonparametric(F, N) :- ( nonparametric(F, N) -> true
+                            ; assertz(nonparametric(F, N)),
+                              forall(retract(trusted_result(F, N, C)), ( stale_trust(C) -> true ; assertz(stale_trust(C)) )) ).
+recompile_stale :- ( retract(stale_trust(C)) -> user:recompile_function_clauses(C), recompile_stale ; true ).
+:- multifile user:metta_on_definitions_settled/0.
+user:metta_on_definitions_settled :- types:recompile_stale.
+%The result of a constructor application is a declared name, or a name applied
+%to types ((Maybe $a)); a declaration without equations whose result is a type
+%variable, a primitive, a list, an arrow or a union declares no constructor:
+constructor_result(O) :- nonvar(O), \+ primitive(O), \+ wildcard(O), \+ list_type(O, _),
+                         \+ ( O = [A|_], atom(A), ( arrow(A, _) ; A == '|' ) ).
+
 %Several declarations of Fun: those the arguments may fit are tried in order
 %at runtime, and the result must fit one that accepted the arguments.
 type_overload(_, _, _, _, _, [], [], '%Undefined%') :- type_flag('--no-type-checks'), !.
@@ -424,129 +546,45 @@ type_overload(Ctx, Fun, AVs, Out, Ds, Checks, Extra, Type) :-
         include({Ctx, AVs}/[d(As, _)]>>catch(\+ \+ type_boundary_args(Ctx, AVs, As, _), error(_, typecheck), fail),
                 Ds, Fits),
         ( Fits == [] -> throw(error(no_matching_overload(Fun), typecheck)) ; true ),
-        maplist(overload_tests(Ctx, AVs, Out), Fits, ArgTests, JointTests, Types),
+        maplist(overload_tests(Ctx, AVs), Fits, ArgTests, Os, Types),
         merged_type(Types, Type),
-        Fits = [d(_, O1)|_],
         test_goal(ArgTests, throw(error(no_matching_overload(Fun), typecheck)), Checks),
-        test_goal(JointTests, throw(error(literal_type_mismatch(Out, O1), typecheck)), Extra).
-overload_tests(Ctx, AVs, Out, d(As0, O0), ArgTest, JointTest, Type) :-
-        copy_term(As0-O0, As-O), instantiate(AVs, As),
-        foldl([V, T, G0, G]>>( checkable(T, C), \+ value_established(V, T), \+ wildcard(C)
-                               -> and(G0, typecheck_ok(V, C), G) ; G = G0 ),
-              AVs, As, true, ArgTest),
-        ( checkable(O, OC), \+ wildcard(OC) -> and(ArgTest, typecheck_ok(Out, OC), JointTest) ; JointTest = ArgTest ),
-        result_static_type(Ctx, As, O, Type).
+        %one admitted alternative: its result type alone, as a guard; several: held jointly
+        ( Os = [o(_, RC)] -> ( wildcard(RC) -> Extra = [] ; guard(Out, RC, G), Extra = [G] )
+        ; Extra = [hold_call(Fun, AVs, Out, Os)] ).
+%An alternative is tested at runtime against its declared types, their type
+%variables unknown (one argument never decides another's check); its result
+%evidence is the declared schema's, not an instance's:
+overload_tests(Ctx, AVs, d(As0, O0), ArgTest, o(Cs, RC), Type) :-
+        maplist(runtime_type, As0, Cs), runtime_type(O0, RC),
+        foldl([V, C, G0, G]>>( ( wildcard(C) ; value_established(V, C) ) -> G = G0 ; and(G0, typecheck_ok(V, C), G) ),
+              AVs, Cs, true, ArgTest),
+        result_static_type(Ctx, As0, O0, Type).
 %Some alternative must hold, or Else: no goal when one surely does.
 test_goal(Alts, _, []) :- memberchk(true, Alts), !.
 test_goal(Alts, Else, [( Any -> true ; Else )]) :- foldl([G, A0, A]>>( A0 == fail -> A = G ; A = (A0 ; G) ), Alts, fail, Any).
 and(true, G, G) :- !.
 and(G0, G, (G0, G)).
 
-%%% Runtime %%%
-
-:- meta_predicate dynamic_call(+, +, ?, 0), contract_call(+, +, +, ?, 0).
-%A call whose callee is known only at runtime (a closure, reduce) runs Goal
-%under the callee's contract, as a known call site would (type_call/6):
-dynamic_call(F, Args, Out, Goal) :- length(Args, N),
-                                    ( dynamic_contract(F, N, C) -> contract_call(C, F, Args, Out, Goal) ; call(Goal) ).
-contract_call(params(Ts), _, Args, _, Goal) :- maplist(typecheck_or_error, Args, Ts), call(Goal).
-%Several declarations: those the arguments fit admit the call, the body runs
-%once, and each result must fit one of them jointly with the arguments:
-contract_call(overloads(Os), F, Args, Out, Goal) :-
-        include({Args}/[o(Ts, _)]>>maplist(typecheck_ok, Args, Ts), Os, Fits),
-        ( Fits == [] -> throw(error(no_matching_overload(F), typecheck)) ; true ),
-        call(Goal),
-        ( member(o(Ts, R), Fits), maplist(typecheck_ok, Args, Ts), typecheck_ok(Out, R) -> true
-        ; Fits = [o(_, R1)|_], throw(error(literal_type_mismatch(Out, R1), typecheck)) ),
-        findall(R, member(o(_, R), Fits), Rs), retain_open(Out, ['|'|Rs]).
-%(the T V) evaluated at runtime checks what a runtime check can know of T:
-runtime_the(V, T) :- ( type_flag('--no-type-checks') -> true
-                      ; checkable(T, C), ( wildcard(C) -> true ; typecheck_or_error(V, C) ) ).
-%reduce turns a failing call into data, but a type error stays an error:
-rethrow_type_error(E) :- E = error(_, typecheck), throw(E).
-
 %A runtime check: an inline test of the common case, else the value relation.
-guard(V, T, ( Fast -> true ; typecheck_or_error(V, T) )) :- fast_test(V, T, Fast), !.
-guard(V, T, typecheck_or_error(V, T)).
+%A check against a plan names the declared type D when it fails:
+guard(V, T, G) :- guard(V, T, T, G).
+guard(V, T, D, ( Fast -> true ; Check )) :- fast_test(V, T, Fast), !, check_goal(V, T, D, Check).
+guard(V, T, D, Check) :- check_goal(V, T, D, Check).
+check_goal(V, T, D, G) :- ( T == D -> G = typecheck_or_error(V, T) ; G = typecheck_or_error(V, T, D) ).
 fast_test(V, 'Number', number(V)) :- !.
 fast_test(V, 'String', string(V)) :- !.
 fast_test(V, 'Bool', ( V == true ; V == false )) :- !.
-fast_test(V, T, ( V == [] ; nonvar(V), V = [_|_] )) :- list_type(T, E), wildcard(E), !.
+fast_test(V, T, is_list(V)) :- list_type(T, E), wildcard(E), !.
 fast_test(V, Ts, ( is_list(V), V = Xs, Test )) :- tuple_type(Ts), length(Ts, N), length(Xs, N),
         foldl([X, T, G0, G]>>( wildcard(T) -> G = G0
                              ; literal_tag(T) -> and(G0, X == T, G)
                              ; fast_test(X, T, F) -> and(G0, F, G)
-                             ; and(G0, typecheck_ok(X, T), G) ), Xs, Ts, true, Test).
+                             ; and(G0, ( ground(X), typecheck_ok(X, T) ), G) ), Xs, Ts, true, Test).
 
-typecheck_or_error(V, T) :- ( typecheck_ok(V, T) -> retain_open(V, T)
-                             ; throw(error(literal_type_mismatch(V, T), typecheck)) ).
+%%% Runtime: contracts, the value relation and held checks (types_runtime.pl) %%%
 
-%A check of a value with unbound parts holds them to T: each part is checked
-%when it is bound, so a later binding cannot break what the check established.
-retain_open(V, _) :- ground(V), !.
-retain_open(_, T) :- ( var(T) ; wildcard(T) ), !.
-retain_open(_, [A|_]) :- A == '->', !.            %a callable keeps its arity once bound
-retain_open(V, T) :- var(V), !, when(nonvar(V), typecheck_or_error(V, T)).
-retain_open(V, T) :- list_type(T, E), !, ( V = [X|Xs] -> retain_open(X, E), retain_open(Xs, T) ; true ).
-retain_open([C|Fs], T) :- atom(C), is_list(Fs), length(Fs, N), type_decl(C, N, As0, O0, _), \+ fun(C),
-                          copy_term(As0-O0, As-O), O = T, !, maplist(retain_open, Fs, As).
-retain_open(V, Ts) :- tuple_type(Ts), is_list(V), same_length(V, Ts), !,
-                      maplist([X, T]>>( literal_tag(T), X == T -> true ; retain_open(X, T) ), V, Ts).
-retain_open(V, T) :- when(ground(V), typecheck_or_error(V, T)).
-
-%The value relation. An unbound value fits every type: the relation describes
-%the value as it is, and typecheck_or_error/2 holds its later binding to the
-%type (retain_open/2).
-typecheck_ok(V, _) :- var(V), !.
-typecheck_ok(_, T) :- var(T), !.
-typecheck_ok(V, 'Number') :- !, number(V).
-typecheck_ok(V, 'String') :- !, string(V).
-typecheck_ok(V, 'Bool') :- !, ( V == true -> true ; V == false ).
-typecheck_ok(_, T) :- wildcard(T), !.
-typecheck_ok(V, T) :- list_type(T, E), !, ( wildcard(E) -> ( V == [] -> true ; V = [_|_] ) ; list_ok(V, E) ).
-typecheck_ok(V, [A|Ts]) :- A == '->', !, length(Ts, N), callable_arity(V, N).
-typecheck_ok(V, T) :- atom(T), newtype(T, R), !, typecheck_ok(V, R).
-typecheck_ok(V, [S, _]) :- S == 'SpaceOf', !, atom(V).               %a space is named by its symbol
-typecheck_ok(V, [U|Ts]) :- U == '|', !, member(T, Ts), typecheck_ok(V, T), !.
-typecheck_ok(V, _) :- opaque(V), !.
-%A constructor application fits by its declaration, a tuple field by field
-%(a literal tag in the type is matched by the symbol itself); anything else as
-%get-type says:
-typecheck_ok([C|Fs], T) :- atom(C), is_list(Fs), length(Fs, N), type_decl(C, N, As, O, _),
-                           \+ \+ ( O = T, maplist(typecheck_ok, Fs, As) ), !.
-typecheck_ok(V, Ts) :- is_list(Ts), is_list(V), same_length(V, Ts),
-                       maplist([X, T]>>( X == T, literal_tag(T) -> true ; typecheck_ok(X, T) ), V, Ts), !.
-typecheck_ok(V, T) :- atom(T), V == T, literal_tag(T), !.             %a tag is its own one value
-typecheck_ok(V, T) :- \+ \+ ( classifier(V, T) ; 'get-metatype'(V, T) ).
-%The program's get-type rules classify values only if no effect is reachable
-%from them, so that a check never acts (TYPES.md, erasure); else the builtin
-%classification alone:
-classifier(V, T) :- ( \+ get_type_extended ; classifier_pure ) -> 'get-type'(V, T) ; get_type_candidate(V, T).
-classifier_pure :- ( classifier_purity(P) -> true
-                   ; ( reaches_effect(['get-type'], []) -> P = false ; P = true ), assertz(classifier_purity(P)),
-                     ( P == false -> format(user_error, "Warning: get-type rules that may act are not used by type checks~n", [])
-                                   ; true ) ),
-                   P == true.
-%An effect is reachable from functions Fs if their equations mention an effect
-%(an atom ending in !, a space or Python operation, a foreign function) or a
-%function from which one is reachable:
-reaches_effect([F|Fs], Seen) :- memberchk(F, Seen), !, reaches_effect(Fs, Seen).
-reaches_effect([F|Fs], Seen) :- findall(B, ( translated_from(_, [=, [G|_], B]), G == F ), Bodies),
-                                ( sub_term(A, Bodies), atom(A), effectful(A) -> true
-                                ; findall(G, ( sub_term(G, Bodies), atom(G), G \== F, fun(G), \+ native_builtin(G) ), Gs),
-                                  append(Fs, Gs, Next), reaches_effect(Next, [F|Seen]) ).
-effectful(A) :- sub_atom(A, _, 1, 0, '!') ; memberchk(A, ['add-atom', 'remove-atom', 'py-call', 'py-exec', 'py-eval'])
-                ; foreign(A).
-%A foreign value - a Prolog term or blob that is no MeTTa value - cannot be
-%inspected: it fits every type that is not primitive, a list or an arrow.
-opaque(V) :- compound(V), !, \+ is_list(V), V \= partial(_, _).
-opaque(V) :- blob(V, B), B \== text.
-%A function or constructor, or a partial application, taking N - 1 more arguments:
-callable_arity(F, N) :- atom(F), !, ( arity(F, N) -> true ; M is N - 1, type_decl(F, M, _, _, _) ).
-callable_arity(partial(F, Bs), N) :- atom(F), length(Bs, K), M is N + K, arity(F, M).
-list_ok(V, _) :- var(V), !.
-list_ok([], _) :- !.
-list_ok([X|Xs], T) :- typecheck_ok(X, T), list_ok(Xs, T).
+:- include(types_runtime).
 
 %%% Patterns %%%
 
@@ -557,15 +595,42 @@ bind_pattern(P, T) :- var(P), !, ( get_attr(P, pt, _) -> true ; set_static_type(
 bind_pattern(_, T) :- ( var(T) ; wildcard(T) ), !.
 bind_pattern(P, T) :- list_type(T, E), !, ( P = [H|R] -> bind_pattern(H, E), bind_pattern(R, T) ; true ).
 bind_pattern([C|Fs], T) :- atom(C), \+ fun(C), is_list(Fs), length(Fs, N), unique_type_decl(C, N, As, O, _),
-                           O = T, !, maplist(bind_pattern, Fs, As).
+                           constructor_result(O), O = T, !, maplist(bind_pattern, Fs, As).
 %a tuple type headed by the pattern's own tag, or by the first element's type:
 bind_pattern([C|Ps], [H|Ts]) :- atom(C), C == H, same_length(Ps, Ts), !, maplist(bind_pattern, Ps, Ts).
-bind_pattern(Ps, [H|Ts]) :- is_list(Ps), ( var(H) ; is_list(H) ; rigid(H) ; primitive(H) ; wildcard(H) ),
-                            same_length(Ps, [H|Ts]), !, maplist(bind_pattern, Ps, [H|Ts]).
+bind_pattern(Ps, [H|Ts]) :- is_list(Ps), ( var(H) ; is_list(H) ; rigid(H) ; \+ literal_tag(H) ),
+                            \+ arrow_or_union(H), same_length(Ps, [H|Ts]), !, maplist(bind_pattern, Ps, [H|Ts]).
 bind_pattern(_, _).
+arrow_or_union(H) :- atom(H), ( arrow(H, _) ; H == '|' ; H == 'SpaceOf' ; H == 'List' ), !.
 
 %The variable of map-atom, filter-atom and foldl-atom ranges over the list's elements:
 type_element_var(L, X) :- static_type(L, LT), ( list_type(LT, E) -> type_pattern(X, E) ; true ).
+
+%%% Typed spaces %%%
+
+%A space declared (SpaceOf Row) holds rows of Row only: a row added is checked
+%against Row and its open parts are held, travelling with the stored row, so
+%each row read from the space fits Row (rows written by Prolog code are trusted):
+space_row(S, Row) :- ( atom(S), space_type(S, _), \+ type_flag('--no-type-checks')
+                       -> space_plan(S, P, T), row_fits(Row, P, T) ; true ).
+row_fits(Row, P, T) :- ( fits_held(Row, P) -> true ; type_mismatch(Row, T) ).
+:- dynamic space_plan_cache/3.
+space_plan(S, P, T) :- ( space_plan_cache(S, P0, T0) -> true
+                       ; space_type(S, T0), runtime_type(T0, P0), assertz(space_plan_cache(S, P0, T0)) ), P = P0, T = T0.
+%A space declared (SpaceOf Row) after rows were added: they are checked first,
+%in order (a row that does not fit rejects the declaration), and stored again,
+%so that their open parts are held as well:
+retype_space(S, _) :- ( S == '&self' ; type_flag('--no-type-checks') ), !.
+retype_space(S, T) :- findall(R, user:'get-atoms'(S, R), Rs),
+                      ( Rs == [] -> true
+                      ; runtime_type(T, P), maplist({P, T}/[X]>>row_fits(X, P, T), Rs),
+                        ( ground(Rs) -> true
+                        ; forall(( current_predicate(user:S/A), functor(H, S, A) ), retractall(user:H)),
+                          forall(member(R, Rs), user:add_sexp(S, R)) ) ).
+%A pattern matched in a space declared (SpaceOf Row) matches rows of Row, so its
+%parts have the types of the corresponding parts of Row (see type_pattern/2):
+space_read_types(P, Row) :- ( nonvar(P), P = [C|Ps], C == ',' -> maplist({Row}/[Q]>>type_pattern(Q, Row), Ps)
+                            ; type_pattern(P, Row) ).
 
 %%% Flags %%%
 

@@ -18,6 +18,11 @@
 
 % Type error messages (see types.pl); examples/fail_*.metta expect them.
 % Values and types print as MeTTa, a rigid type variable as $1, $2, ...:
+prolog:error_message(refinement_predicate(Name, Pred)) -->
+    [ 'Refinement: the predicate ~w of ~w is not a pure function of its value'-[Pred, Name] ].
+prolog:error_message(cyclic_type_value(Required)) -->
+    { metta_text(Required, R) },
+    [ 'Type mismatch: cyclic value does not fit ~w'-[R] ].
 prolog:error_message(literal_type_mismatch(Value, Required)) -->
     { metta_text(Value, V), metta_text(Required, R) },
     [ 'Type mismatch: got ~w but expected ~w'-[V, R] ].

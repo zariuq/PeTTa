@@ -1,0 +1,7 @@
+(: pick-first (-> Number Number Number))
+(= (pick-first $x $y) $x)
+(: curried (-> Number (-> Number Number)))
+(= (curried $x) (pick-first $x))
+!(bind! &fns (new-space))
+!(add-atom &fns curried)
+!(let $f (match &fns $f $f) ($f 1 "bad"))

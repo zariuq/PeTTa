@@ -1,0 +1,8 @@
+(= (unknown-id $x) $x)
+(= (bind-num $x) (let $x 1 ok))
+(= (bind-str $x) (let $x "s" ok))
+(: f (-> Number (List Number)))
+(: f (-> String String))
+(= (f $arg) (unknown-id (cons 1 $tail)))
+!(let $v (f (unknown-id 1))
+   (let (cons $head $tail) $v (let $tail $v ok)))

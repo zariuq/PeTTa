@@ -1,0 +1,8 @@
+(: Edge Type)
+(: edge (-> Number Number Edge))
+(: &g (SpaceOf Edge))
+!(bind! &g (new-space))
+(= (put $s $x) (add-atom $s $x))
+(= (two) "two")
+!(put &g (edge 1 2))
+!(let $t (two) (put &g (edge 1 $t)))

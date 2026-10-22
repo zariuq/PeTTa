@@ -1,0 +1,7 @@
+(: Colour Type)
+(: red Colour)
+(: box (-> Number Colour))
+(= (unknown-id $x) $x)
+(= (bind-string $x) (let $x "bad" ok))
+!(let $v (the (tag Colour) (unknown-id (tag $x)))
+   (progn (bind-string $x) (the (tag Colour) $v)))

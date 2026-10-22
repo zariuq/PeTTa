@@ -1,0 +1,7 @@
+== default 0
+is 10, should 10. ✅ 
+is (), should (). ✅ 
+true
+true
+true
+== strict 2

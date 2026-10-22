@@ -1,0 +1,3 @@
+== default 1
+is (5 5), should (5). ❌ 
+== strict 2

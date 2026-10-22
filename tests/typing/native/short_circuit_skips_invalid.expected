@@ -1,0 +1,10 @@
+== checked 0
+is false, should false. ✅ 
+is true, should true. ✅ 
+true
+true
+== erased 0
+is false, should false. ✅ 
+is true, should true. ✅ 
+true
+true

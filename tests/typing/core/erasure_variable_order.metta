@@ -1,0 +1,5 @@
+(= (probe $x $y)
+  (let $before (@< $x $y)
+    (let $checked (the Number $x)
+      (data $before (@< $x $y)))))
+!(probe $x $y)

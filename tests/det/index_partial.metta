@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> (List Number) Number))
+(= (f $xs) (index-atom $xs 1))
+!(det-verdict f)
+!(collapse (f ()))

@@ -1,0 +1,8 @@
+!(import! &self (library lib_det))
+(: choose-bool (-[det]-> Bool Bool Bool))
+(= (choose-bool true false) true)
+(= (choose-bool false true) false)
+(= (choose-bool true true) true)
+(= (choose-bool false false) false)
+!(det-verdict choose-bool)
+!(collapse (choose-bool $x $x))

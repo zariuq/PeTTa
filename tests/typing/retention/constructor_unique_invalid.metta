@@ -1,0 +1,7 @@
+(= (unknown-id $x) $x)
+(= (bind-num $x) (let $x 1 ok))
+(= (bind-str $x) (let $x "s" ok))
+(: N Type)
+(: c (-> Number N))
+!(let $v (the N (unknown-id (quote (c $x))))
+   (progn (bind-str $x) $v))

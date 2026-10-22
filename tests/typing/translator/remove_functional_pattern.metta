@@ -1,0 +1,7 @@
+(= (mk $x) (box $x))
+(= (inc $x) (+ $x 1))
+!(add-atom &self (= (app $f (mk $a)) ($f $a)))
+!(app inc (box 4))
+!(remove-atom &self (= (app $f (mk $a)) ($f $a)))
+!(add-atom &self (= (app $f $x) ($f 10)))
+!(collapse (app inc (box 4)))

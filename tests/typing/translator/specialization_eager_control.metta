@@ -1,0 +1,5 @@
+(: inc (-> Number Number))
+(= (inc $x) (+ $x 1))
+(= (apply-twice $f $x) ($f ($f $x)))
+!(test (apply-twice inc 1) 3)
+!(test (match &self (= (apply-twice_Spec_[inc] inc $x) $body) found) found)

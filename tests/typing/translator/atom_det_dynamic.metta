@@ -1,0 +1,5 @@
+(: f (-[det]-> Atom Atom))
+(= (f $x) $x)
+!(bind! &fns (new-space))
+!(add-atom &fns f)
+!(let $f (match &fns $f $f) ($f (+ 1 2)))

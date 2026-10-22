@@ -1,0 +1,8 @@
+(: number-id (-> Number Number))
+(= (number-id $x) $x)
+!(let $r (number-id $x)
+   (progn (add-atom &s (row $r))
+     (data (match &s (row 5) ok)
+           (let (row $v) (get-atoms &s) (let $v 6 $v))
+           (remove-atom &s (row $r))
+           (collapse (get-atoms &s)))))

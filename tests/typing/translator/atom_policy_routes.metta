@@ -1,0 +1,8 @@
+(: echo (-> Atom %Undefined%))
+(= (echo $x) $x)
+(= (is-source $v) (== $v (quote (+ 1 2))))
+!(echo (+ 1 2))
+!(reduce (echo (+ 1 2)))
+!(let $f echo (reduce ($f (+ 1 2))))
+!(forall (echo (+ 1 2)) is-source)
+!(foldall (|-> ($v $acc) $v) (echo (+ 1 2)) 0)

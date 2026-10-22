@@ -92,7 +92,7 @@ run overload <<'EOF'
 (= (f $x) $x)
 !(test (f 1) 1)
 EOF
-status_is overload 0; has overload "f(1,"; lacks overload "no_matching_overload"; has overload "typecheck_ok(B, 'Number')"
+status_is overload 0; has overload "f(1,"; lacks overload "no_matching_overload"; has overload "typecheck_or_error(B, 'Number')"
 
 # Data is checked against a tuple type element by element, its symbol as the tag:
 run tagged <<'EOF'

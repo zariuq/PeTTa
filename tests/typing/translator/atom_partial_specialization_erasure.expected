@@ -1,0 +1,4 @@
+== checked 0
+(progn (println! effect) 3)
+== erased 0
+(progn (println! effect) 3)

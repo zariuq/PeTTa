@@ -116,24 +116,25 @@ process_form(_, _, parsed(runnable, FormStr, Line, Term), Result) :- !,
             ( metta_runnable_error -> true ; assertz(metta_runnable_error) ) )).
 process_form(Space, space_only, parsed(function, _, _, Term), []) :- !, add_sexp(Space, Term).
 process_form(Space, compile_functions, parsed(function, FormStr, Line, Term), []) :- add_sexp(Space, Term),
-                                                                  with_form_location(Line, FormStr, translate_clause(Term, Clause)),
-                                                                  assertz(Clause, Ref),
-                                                                  assertz(translated_from(Ref, Term)),
+                                                                  with_form_location(Line, FormStr, translate_clause(Term, Clauses)),
+                                                                  assert_translated(Term, Clauses, Refs),
                                                                   Term = [=, [Fn|_], _],
                                                                   forall(metta_on_function_changed(Fn), true),
                                                                   ( silent(true) -> true ; format("\e[33m--> metta function -->~n\e[36m~w~n\e[33m--> prolog clause -->~n\e[32m", [FormStr]),
-                                                                                           clause(Head, Body, Ref),
-                                                                                           ( Body == true -> Show = Head; Show = (Head :- Body) ),
-                                                                                           portray_clause(current_output, Show),
+                                                                                           forall(member(Ref, Refs),
+                                                                                                  ( clause(Head, Body, Ref),
+                                                                                                    ( Body == true -> Show = Head; Show = (Head :- Body) ),
+                                                                                                    print_clause(Show) )),
                                                                                            format("\e[33m^^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ).
 
 process_form(_, _, In, _) :- format(atom(Msg), "failed to process form: ~w", [In]), throw(error(syntax_error(Msg), none)).
 
 process_runnable(FormStr, Line, Term, Result) :- forall(metta_on_definitions_settled, true),
+                                                 with_form_location(Line, FormStr, forall(metta_on_runnable(Term), true)),
                                                  with_form_location(Line, FormStr, translate_expr([collapse, Term], Goals, Result)),
                                                  strip_static_types(Goals-Result),
                                                  ( silent(true) -> true ; format("\e[33m--> metta runnable  -->~n\e[36m!~w~n\e[33m-->  prolog goal  -->\e[35m ~n", [FormStr]),
-                                                                          forall(member(G, Goals), portray_clause((:- G))),
+                                                                          forall(member(G, Goals), print_clause((:- G))),
                                                                           format("\e[33m^^^^^^^^^^^^^^^^^^^^^^^~n\e[0m") ),
                                                  call_goals(Goals).
 %Like blanks but counts newlines:

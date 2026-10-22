@@ -63,13 +63,13 @@ parse(Str, R) :- sread(Str, R).
 '=?'(A,B,R) :- (\+ \+ A=B -> R=true ; R=false).
 %(brand N E) and (the T E) reached at runtime (inside data, or through reduce):
 %a brand is erased, and the checks its value as a compiled (the T E) does.
-brand(_, X, X).
+brand(N, X, X) :- runtime_brand(N, X).
 the(T0, X, X) :- type_normalize(T0, T), runtime_the(X, T).
 '=alpha'(A,B,R) :- (variant(A, B) -> R=true ; R=false).
 '=@='(A,B,R) :- (variant(A, B) -> R=true ; R=false).
 %Variant comparison of values. A type check held on an unbound part of a value
 %(retain_open/2 in types.pl) is no part of it, so attributes are left out:
-variant(A, B) :- ( term_attvars(A-B, []) -> A =@= B ; copy_term(A-B, A1-B1, _), A1 =@= B1 ).
+variant(A, B) :- ( term_attvars(A-B, []) -> A =@= B ; copy_term_nat(A-B, A1-B1), A1 =@= B1 ).
 '<='(A,B,R) :- (A =< B -> R=true ; R=false).
 '>='(A,B,R) :- (A >= B -> R=true ; R=false).
 '@<='(A,B,R) :- (A @=< B -> R=true ; R=false).

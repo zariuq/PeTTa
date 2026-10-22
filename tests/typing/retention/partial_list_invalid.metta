@@ -1,0 +1,6 @@
+(= (unknown-id $x) $x)
+(= (bind-num $x) (let $x 1 ok))
+(= (bind-str $x) (let $x "s" ok))
+(= (bind-bool $x) (let $x True ok))
+!(let $v (the (List _) (unknown-id (cons $x $tail)))
+   (progn (bind-num $x) (bind-str $tail) $v))

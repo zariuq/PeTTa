@@ -1,0 +1,10 @@
+== checked 0
+true
+true
+(20 50)
+((edge 1 2) (edge 2 5))
+== erased 0
+true
+true
+(20 50)
+((edge 1 2) (edge 2 5))

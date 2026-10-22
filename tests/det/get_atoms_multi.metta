@@ -1,0 +1,7 @@
+!(import! &self (library lib_det))
+(item a)
+(item b)
+(: f (-[det]-> Expression))
+(= (f) (get-atoms &self))
+!(det-verdict f)
+!(collapse (f))

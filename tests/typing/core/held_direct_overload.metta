@@ -1,0 +1,5 @@
+(: f (-> Number Number))
+(: f (-> String String))
+(= (f $x) $x)
+(= (bind-bool $x) (let $x True ok))
+!(let $r (f $x) (progn (bind-bool $x) $r))

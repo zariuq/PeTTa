@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> Bool))
+(= (f) (is-member a (a a)))
+!(det-verdict f)
+!(collapse (f))

@@ -1,0 +1,5 @@
+!(import! &self (library lib_det))
+(: f (-[det]-> (List Number) (List Number)))
+(= (f $xs) (map-atom $xs $x (empty)))
+!(det-verdict f)
+!(collapse (f (1)))

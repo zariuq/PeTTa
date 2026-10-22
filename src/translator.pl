@@ -24,40 +24,70 @@ functional_pattern_application([F|Args], F, Args) :-
     atom(F), F \== cons, fun(F),
     is_list(Args).
 
-%Flatten (= Head Body) MeTTa function into Prolog Clause. A function with one
+%Flatten (= Head Body) MeTTa function into Prolog clauses. A function with one
 %declaration has its parameters typed by it and its result checked against it
 %(see types.pl); -[det]-> and -[semidet]-> functions commit to the first clause
-%whose head matches:
-translate_clause(Input, Clause) :- translate_clause(Input, Clause, true).
-translate_clause(Input, (Head :- BodyConj), ConstrainArgs) :-
-                                               Input = [=, [F|Args0], BodyExpr],
-                                               length(Args0, N),
-                                               ( ConstrainArgs -> maplist(constrain_args, Args0, Args1, GoalsA),
-                                                                  flatten(GoalsA,GoalsPrefix)
-                                                                ; Args1 = Args0, GoalsPrefix = [] ),
-                                               ( atom(F), nb_current(F, Prev) -> true ; Prev = [] ),
-                                               copy_term_nat(fun_meta(Args1, BodyExpr), Meta),
-                                               nb_setval(F, [Meta | Prev]),
-                                               %the contract the clause is compiled against (see types.pl):
-                                               clause_contract(F, N, Args1, PTs, OT, Det),
-                                               with_compiling(F, Args1-PTs,
-                                                              ( ( nonvar(PTs) -> maplist(type_pattern, Args1, PTs) ; true ),
-                                                                translate_declared_body(F, N, BodyExpr, GoalsBody, ExpOut),
-                                                                ( nonvar(ExpOut), ExpOut = partial(_, _) -> OutChecks = []
-                                                                ; type_boundary(output(F), ExpOut, OT, OutChecks) ) )),
-                                               (  nonvar(ExpOut) , ExpOut = partial(Base,Bound)
-                                               -> arity(Base, Arity), length(Bound, NB), M is (Arity - NB) - 1,
-                                                  length(ExtraArgs, M), append(Bound, ExtraArgs, CallInArgs),
-                                                  resolve_memoization(Base, CallInArgs, Out, Goal),
-                                                  append(GoalsBody,[Goal],FinalGoals), append(Args1,ExtraArgs,HeadArgs)
-                                               ; FinalGoals= GoalsBody , HeadArgs = Args1, Out = ExpOut ),
-                                               append(HeadArgs, [Out], FinalArgs),
-                                               Head =.. [F|FinalArgs],
-                                               length(FinalArgs, CompiledArity),
-                                               (arity(F, CompiledArity) -> true ; assertz(arity(F, CompiledArity))),
-                                               ( memberchk(Det, [det, semidet]) -> Commit = [!] ; Commit = [] ),
-                                               append([GoalsPrefix, Commit, FinalGoals, OutChecks], Goals),
-                                               goals_list_to_conj(Goals, BodyConj).
+%whose head matches. A body that returns a partial application returns that
+%closure at the function's own arity; a second, saturated clause takes the
+%closure's further arguments and calls it at once, as applying it does.
+%Mode true elaborates the head's functional patterns, prefix(Gs) gives their goals:
+translate_clause(Input, Clauses) :- translate_clause(Input, Clauses, true).
+translate_clause(Input, [(Head :- BodyConj)|Saturated], Mode) :-
+        Input = [=, [F|Args0], BodyExpr],
+        length(Args0, N),
+        ( Mode == true -> maplist(constrain_args, Args0, Args1, GoalsA), flatten(GoalsA, GoalsPrefix)
+        ; Args1 = Args0, ( Mode = prefix(GoalsPrefix) -> true ; GoalsPrefix = [] ) ),
+        ( atom(F), nb_current(F, Prev) -> true ; Prev = [] ),
+        copy_term_nat(fun_meta(Args0, Args1, GoalsPrefix, BodyExpr), Meta),
+        nb_setval(F, [Meta | Prev]),
+        %the contract the clause is compiled against (see types.pl):
+        clause_contract(F, N, Args1, PTs, OT, Det),
+        with_compiling(F, Args1-PTs,
+                       ( ( nonvar(PTs) -> maplist(type_pattern, Args1, PTs) ; true ),
+                         translate_declared_body(F, N, BodyExpr, GoalsBody, Out),
+                         type_boundary(output(F), Out, OT, OutChecks), note_parametricity(F, N, Out, OT),
+                         ( nonvar(Out), Out = partial(Base, Bound), atom(Base)
+                           -> ignore(saturated_call(F, Base, Bound, OT, Extra, SatGoals, SatOut)) ; true ) )),
+        ( memberchk(Det, [det, semidet]) -> Commit = [!] ; Commit = [] ),
+        append(Args1, [Out], FinalArgs),
+        Head =.. [F|FinalArgs],
+        note_arity(F, FinalArgs),
+        append([GoalsPrefix, Commit, GoalsBody, OutChecks], Goals),
+        goals_list_to_conj(Goals, BodyConj),
+        ( var(Extra) -> Saturated = []
+        ; append([Args1, Extra, [SatOut]], SatArgs),
+          SatHead =.. [F|SatArgs],
+          note_arity(F, SatArgs),
+          append([GoalsPrefix, Commit, GoalsBody, SatGoals], SatGs),
+          goals_list_to_conj(SatGs, SatBody),
+          Saturated = [(SatHead :- SatBody)] ).
+
+%The saturated call of a returned closure partial(Base, Bound): the M further
+%arguments the declared result arrow takes (else the fewest Base can take),
+%typed by that arrow, and Base called with them as a known call; the
+%result is checked against what the arrow returns:
+saturated_call(F, Base, Bound, OT, Extra, Goals, Out) :-
+        length(Bound, NB),
+        findall(M, ( arity(Base, A), M is A - NB - 1, M > 0 ), Ms0), sort(Ms0, Ms),
+        ( nonvar(OT), fn_type(OT, Ps, _, _), length(Ps, L), memberchk(L, Ms) -> M = L ; Ms = [M|_] ),
+        length(Extra, M),
+        ( arrow_params(OT, M, Bs, R) -> maplist(type_pattern, Extra, Bs) ; R = '%Undefined%' ),
+        append(Bound, Extra, AVs),
+        type_call(Base, AVs, Out, Checks, After, Type),
+        build_call_or_partial(Base, AVs, Out, Checks, After, CallGoals),
+        set_static_type(Out, Type),
+        type_boundary(output(F), Out, R, OutChecks),
+        append(CallGoals, OutChecks, Goals).
+
+note_arity(F, Args) :- length(Args, A), ( arity(F, A) -> true ; assertz(arity(F, A)) ).
+
+%Assert an equation's clauses (see translate_clause/3) with How (assertz or
+%asserta); a saturated clause is recorded as derived from the equation, so what
+%reads the program's equations through translated_from/2 sees each once:
+assert_translated(Term, Clauses, Refs) :- assert_translated(assertz, Term, Clauses, Refs).
+assert_translated(How, Term, [C|Cs], [R|Rs]) :-
+        call(How, C, R), assertz(translated_from(R, Term)),
+        maplist({How, Term}/[S, Ref]>>( call(How, S, Ref), assertz(translated_from(Ref, saturated(Term))) ), Cs, Rs).
 
 %A function declared (-> .. Atom) returns its body as data; under the other
 %arrows an Atom result is any value, computed by the body:
@@ -75,13 +105,14 @@ with_compiling(F, Params, Goal) :- ( nb_current('$compiling', Prev) -> true ; Pr
 %declaration arrived late, or a name they used as data became a function.
 recompile_function_clauses(F) :- findall(Ref-Term, ( translated_from(Ref, Term), Term = [=, [G|_], _], G == F,
                                                      clause(_, _, Ref) ), Us),
+                                 findall(Ref, ( translated_from(Ref, saturated([=, [G|_], _])), G == F ), Ss),
                                  ( Us == [] -> true
                                  ; ( nb_current(F, Metas) -> true ; Metas = [] ),
                                    nb_setval(F, []),
-                                   ( catch(maplist([_-Term, Term-Clause]>>translate_clause(Term, Clause), Us, TCs), E, true) -> true ; true ),
+                                   ( catch(maplist([_-Term, Term-Clauses]>>translate_clause(Term, Clauses), Us, TCs), E, true) -> true ; true ),
                                    ( nonvar(TCs), var(E)
-                                     -> forall(member(Ref-_, Us), ( retractall(translated_from(Ref, _)), erase(Ref) )),
-                                        forall(member(Term-Clause, TCs), ( assertz(Clause, Ref), assertz(translated_from(Ref, Term)) )),
+                                     -> forall(( member(Ref-_, Us) ; member(Ref, Ss) ), ( retractall(translated_from(Ref, _)), erase(Ref) )),
+                                        forall(member(Term-Clauses, TCs), assert_translated(Term, Clauses, _)),
                                         invalidate_specializations(F)
                                       ; nb_setval(F, Metas),
                                         ( nonvar(E) -> throw(E) ; true ) ) ).
@@ -100,11 +131,20 @@ late_function(F) :- note_function(F),
 
 %Print compiled clause:
 maybe_print_compiled_clause(_, _, _) :- silent(true), !.
+maybe_print_compiled_clause(Label, FormTerm, Clauses) :- is_list(Clauses), !,
+    forall(member(Clause, Clauses), maybe_print_compiled_clause(Label, FormTerm, Clause)).
 maybe_print_compiled_clause(Label, FormTerm, Clause) :-
     swrite(FormTerm, FormStr),
     format("\e[33m-->  ~w  -->~n\e[36m~w~n\e[33m--> prolog clause -->~n\e[32m", [Label, FormStr]),
-    portray_clause(current_output, Clause),
+    print_clause(Clause),
     format("\e[33m^^^^^^^^^^^^^^^^^^^^^~n\e[0m").
+
+%Printing a clause must not change the program: portray_clause/2 asks for each
+%goal's meta-predicate declaration, which would autoload a library predicate of
+%the same name as a function not yet defined (ugraphs' compose/3, say):
+print_clause(Clause) :- current_prolog_flag(autoload, A),
+                        setup_call_cleanup(set_prolog_flag(autoload, explicit), portray_clause(current_output, Clause),
+                                           set_prolog_flag(autoload, A)).
 
 %Conjunction builder, turning goals list to a flat conjunction:
 goals_list_to_conj([], true)      :- !.
@@ -281,18 +321,16 @@ translate_expr([H0|T0], Goals, Out) :-
                                                        merge_static_type(Out, Types),
                                                        append([GsH, Gk, KeyGoal, [IfGoal]], Goals) )
         %--- Short-circuit boolean operators ---:
-        ; HV == 'and-then', T = [A, B] -> translate_expr_to_conj(A, ConjA, Av),
-                                           translate_expr_to_conj(B, ConjB, Bv),
-                                           type_boundary(native, Av, 'Bool', _), type_boundary(native, Bv, 'Bool', _),
+        ; HV == 'and-then', T = [A, B] -> translate_bool_operand(A, ConjA, Av),
+                                           translate_bool_operand(B, ConjB, Bv),
                                            set_static_type(Out, 'Bool'),
                                            append(GsH, [(ConjA, (Av == true -> (ConjB, Out = Bv) ; Out = false))], Goals)
-        ; HV == 'or-else', T = [A, B] -> translate_expr_to_conj(A, ConjA, Av),
-                                          translate_expr_to_conj(B, ConjB, Bv),
-                                          type_boundary(native, Av, 'Bool', _), type_boundary(native, Bv, 'Bool', _),
+        ; HV == 'or-else', T = [A, B] -> translate_bool_operand(A, ConjA, Av),
+                                           translate_bool_operand(B, ConjB, Bv),
                                           set_static_type(Out, 'Bool'),
                                           append(GsH, [(ConjA, (Av == true -> Out = true ; (ConjB, Out = Bv)))], Goals)
         %--- Unification constructs ---:
-        ; (HV == let ; HV == chain), T = [Pat, Val, In] -> translate_expr(Pat, Gp, Pv),
+        ; (HV == let ; HV == chain), T = [Pat, Val, In] -> translate_pattern(Pat, Gp, Pv),
                                                            translate_expr(Val, Gv, V),
                                                            static_type(V, VT), type_pattern(Pv, VT),
                                                            translate_expr(In,  Gi, Out),
@@ -306,7 +344,7 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == 'forall', T = [GF, TF]
           -> ( is_list(GF) -> GF = [GFH|GFA],
                               translate_expr(GFH, GsGFH, GFHV),
-                              translate_args(GFA, GsGFA, GFAv),
+                              route_args(GFHV, GFA, GsGFA, GFAv),
                               append(GsGFH, GsGFA, GsGF),
                               GenList = [GFHV|GFAv]
                             ; translate_expr(GF, GsGF, GFHV),
@@ -326,7 +364,7 @@ translate_expr([H0|T0], Goals, Out) :-
                                                               GenList = [GFHV]
              ; is_list(GF) -> GF = [GFH|GFA],
                               translate_expr(GFH, GsGFH, GFHV),
-                              translate_args(GFA, GsGFA, GFAv),
+                              route_args(GFHV, GFA, GsGFA, GFAv),
                               append(GsGFH, GsGFA, GsGF),
                               GenList = [GFHV|GFAv]
                             ; translate_expr(GF, GsGF, GFHV),
@@ -372,12 +410,11 @@ translate_expr([H0|T0], Goals, Out) :-
                                            % compile clause with all bound + free vars, from a copy so that
                                            % what is learned inside the deferred body stays inside it
                                            copy_term([=, [F|FullArgs], Body], LambdaSource),
-                                           translate_clause(LambdaSource, Clause),
+                                           translate_clause(LambdaSource, Clauses),
                                            register_fun(F),
-                                           assertz(Clause, Ref),
-                                           assertz(translated_from(Ref, LambdaSource)),
+                                           assert_translated(LambdaSource, Clauses, _),
                                            format(atom(Label), "metta lambda (~w)", [F]),
-                                           maybe_print_compiled_clause(Label, ['|->', Args, Body], Clause),
+                                           maybe_print_compiled_clause(Label, ['|->', Args, Body], Clauses),
                                            length(FullArgs, N),
                                            Arity is N + 1,
                                            (arity(F, Arity) -> true ; assertz(arity(F, Arity))),
@@ -385,13 +422,20 @@ translate_expr([H0|T0], Goals, Out) :-
                                            ( FreeVars == [] -> Out = F
                                                              ; Out = partial(F, FreeVars) )
         %--- Spaces ---:
+        %a row added to a space declared (SpaceOf Row) is checked against Row as
+        %a boundary, and a pattern matched in it has the types of Row's parts:
         ; ( HV == 'add-atom' ; HV == 'remove-atom' ), T = [Space,Atom] ->
                                                                    translate_expr(Space, G1, S),
-                                                                   Goal =.. [HV,S,Atom,Out],
-                                                                   set_static_type(Out, 'Bool'),
-                                                                   append([GsH,G1,[Goal]], Goals)
+                                                                   ( HV == 'add-atom', atom(S), space_type(S, Row),
+                                                                     \+ ( nonvar(Atom), Atom = [E|_], E == '=' )
+                                                                     -> type_boundary(row(S), Atom, Row, Cs),
+                                                                        append([GsH, G1, Cs, [add_sexp(S, Atom)]], Goals), Out = true
+                                                                   ; Goal =.. [HV,S,Atom,Out],
+                                                                     set_static_type(Out, 'Bool'),
+                                                                     append([GsH,G1,[Goal]], Goals) )
         ; HV == match, T = [Space, Pattern, Body] -> translate_expr(Space, G1, S),
                                                      space_pattern(Space, Pattern, RuntimePattern, PatternGoals),
+                                                     ( atom(S), space_type(S, Row) -> space_read_types(RuntimePattern, Row) ; true ),
                                                      translate_expr(Body, GsB, Out),
                                                      append([G1, [match(S, RuntimePattern, Out, Out)], PatternGoals, GsB], Goals)
         %--- Predicate to compiled goal ---:
@@ -403,7 +447,7 @@ translate_expr([H0|T0], Goals, Out) :-
         %--- Manual dispatch options: ---
         %Generate a predicate call on compilation, translating Args for nesting:
         ; HV == call,  T = [Expr] -> Expr = [F|Args],
-                                     translate_args(Args, GsArgs, ArgsOut),
+                                     route_args(F, Args, GsArgs, ArgsOut),
                                      type_call(F, ArgsOut, Out, Checks, Extra, Type),
                                      append([GsH, GsArgs, Checks], Inner),
                                      append(ArgsOut, [Out], CallArgs),
@@ -414,7 +458,7 @@ translate_expr([H0|T0], Goals, Out) :-
         ; HV == reduce, T = [Expr] -> ( var(Expr) -> translate_expr(Expr, GsH, ExprOut),
                                                      Goals = [reduce(ExprOut, Out)|GsH]
                                                    ; Expr = [F|Args],
-                                                     translate_args(Args, GsArgs, ArgsOut),
+                                                     route_args(F, Args, GsArgs, ArgsOut),
                                                      ( atom(F), fun(F) -> type_call(F, ArgsOut, Out, Checks, Extra, Type)
                                                                         ; Checks = [], Extra = [], Type = '%Undefined%' ),
                                                      append([GsH, GsArgs, Checks], Inner),
@@ -467,8 +511,10 @@ translate_expr([H0|T0], Goals, Out) :-
                          append(Inner, Gd, Goals),
                          Out = [HV1|AVs]
         %Variable head applied to arguments: a closure call, checked against its
-        %arrow type when that is known; a lone ($x) is dispatched at runtime:
-        ; translate_args(T, GsT, AVs),
+        %arrow type when that is known; a lone ($x) is dispatched at runtime.
+        %The callee's own declaration decides whether an argument is evaluated
+        %(see call_args/4):
+        ; route_args(HV, T, GsT, AVs),
           append(GsH, GsT, Inner),
           ( var(HV), AVs \== []
             -> type_closure_call(HV, AVs, Out, Checks, Extra, Type),
@@ -476,6 +522,65 @@ translate_expr([H0|T0], Goals, Out) :-
                append([Inner, Checks, [Goal], Extra], Goals),
                set_static_type(Out, Type)
           ; append(Inner, [reduce([HV|AVs], Out)], Goals) ) ).
+
+%The arguments of a call whose callee is known only at runtime (through a
+%variable, reduce, call, a generator): a known function's own policy holds or
+%evaluates each, as at a direct call; with a variable head see call_args/4:
+route_args(F, Args, Gs, AVs) :-
+        ( atom(F), length(Args, N), type_arg_policy(F, N, Ps) -> translate_args_by_type(Args, Ps, Gs, AVs)
+        ; var(F), Args \== [] -> call_args(F, Args, Gs, AVs)
+        ; translate_args(Args, Gs, AVs) ).
+%The arguments of a call through a variable: the callee, known only at runtime,
+%decides as a direct call does. Its mask (held_mask/3) is read first, then an
+%argument that computes is passed as its source where the callee holds it, and
+%evaluated elsewhere; a position the head's known arrow type gives a value type
+%is evaluated (the callee cannot hold it there):
+call_args(HV, Args, Gs, AVs) :- static_type(HV, K), ( nonvar(K), K = [A|Ts0], A == '->' -> Ts = Ts0 ; Ts = [] ),
+                                same_length(Args, Ps), call_args_(Args, Ts, Ps, ArgGs, AVs, false, Held),
+                                ( Held == true -> length(Args, N), Gs = [( held_mask(HV, N, Ps) -> true ; true )|ArgGs]
+                                ; Gs = ArgGs ).
+call_args_([], _, [], [], [], H, H).
+call_args_([A|As], Ts0, [P|Ps], Gs, [V|Vs], H0, H) :-
+        ( Ts0 = [T|Ts] -> true ; T = '%Undefined%', Ts = [] ),
+        ( computes(A), \+ value_position(T)
+          -> expression_arg_value(A, Src), translate_expr_to_conj(A, Conj, VA),
+             ( Conj == true -> Eval = (V = VA) ; Eval = (Conj, V = VA) ),
+             G1 = [( P == 'Atom' -> V = Src ; Eval )], H1 = true
+        ; translate_expr(A, G1, V), H1 = H0 ),
+        call_args_(As, Ts, Ps, G2, Vs, H1, H), append(G1, G2, Gs).
+computes([H|_]) :- atom(H), ( fun(H) ; syntax_head(H) ), !.
+computes(L) :- is_list(L), member(X, L), is_list(X), computes(X), !.
+value_position(T) :- nonvar(T), \+ wildcard_type(T), \+ T == 'Atom'.
+wildcard_type(T) :- atom(T), memberchk(T, ['%Undefined%', 'Expression', '_']).
+%The positions F, or a partial application of it, holds when called with N
+%arguments: Atom there, unbound elsewhere; it fails for a callee that holds none:
+held_mask(F, N, Ps) :- ( atom(F) -> may_hold(F), type_arg_policy(F, N, Ps)
+                       ; compound(F), F = partial(G, Bs), atom(G), may_hold(G), length(Bs, K), M is K + N,
+                         type_arg_policy(G, M, Ps0), length(Pre, K), append(Pre, Ps, Ps0) ).
+%The heads this translator handles as syntax rather than as calls, those of
+%translate_expr/3 and rewrite_streamops/2 (tests/test_syntax_heads.pl keeps the
+%table complete), and those that translator rules add:
+syntax_heads([data, 'make-list', superpose, collapse, cut, test, once, hyperpose, with_mutex, transaction,
+              progn, prog1, if, case, 'and-then', 'or-else', let, chain, 'let*', sealed, forall, foldall,
+              'foldl-atom', 'map-atom', 'filter-atom', '|->', 'add-atom', 'remove-atom', match,
+              translatePredicate, call, reduce, eval, the, brand, quote, catch, 'trace!', unique,
+              'alpha-unique', 'import!', union, intersection, subtraction]).
+syntax_head(H) :- syntax_heads(Hs), memberchk(H, Hs), !.
+syntax_head(H) :- translator_rule(H).
+
+%An operand of and-then or or-else is checked as a Bool where it is evaluated
+%(an operand that is skipped is never evaluated, so never checked):
+translate_bool_operand(E, Conj, V) :- translate_expr(E, Gs, V), type_boundary(boolean, V, 'Bool', Cs),
+                                     append(Gs, Cs, All), goals_list_to_conj(All, Conj).
+
+%A let pattern is matched, not evaluated, where its head is a variable: such a
+%sub-pattern is destructured as data (a function-headed one keeps PeTTa's
+%evaluation, as (let (cons $h $t) ...) does):
+translate_pattern(P, Gs, V) :- is_list(P), P = [H|_], var(H), !, translate_patterns(P, Gs, V).
+translate_pattern(P, Gs, V) :- translate_expr(P, Gs, V).
+translate_patterns([], [], []).
+translate_patterns([P|Ps], Gs, [V|Vs]) :- translate_pattern(P, G1, V), translate_patterns(Ps, G2, Vs),
+                                          append(G1, G2, Gs).
 
 %In a space declared (SpaceOf Row), a pattern position applying a function
 %with one det declaration constrains the matched value, as a clause head's
@@ -496,39 +601,17 @@ closure_apply_goal(HV, [A, B], Out, apply_fn2(HV, A, B, Out)) :- !.
 closure_apply_goal(HV, [A, B, C], Out, apply_fn3(HV, A, B, C, Out)) :- !.
 closure_apply_goal(HV, AVs, Out, apply_fnN(HV, AVs, Out)).
 
-%Runtime closure application; the last clause keeps reduce/2 semantics for
-%values that are not callable at this arity (data, or a partial application).
-%Errors raised inside the callee propagate:
-apply_fn1(F, A, Out) :- atom(F), arity(F, 2), !, ( dynamic_contract(F, 1, C) -> contract_call(C, F, [A], Out, safe_apply(call(F, A, Out)))
-                                                                             ; safe_apply(call(F, A, Out)) ).
-apply_fn1(P, A, Out) :- compound(P), P = partial(F, Bs), length(Bs, K), Arity is K + 2, arity(F, Arity), !,
-                        append(Bs, [A], Args), append(Args, [Out], CallArgs),
-                        Goal =.. [F|CallArgs], dynamic_call(F, Args, Out, safe_apply(Goal)).
-apply_fn1(F, A, Out) :- reduce([F, A], Out).
-
-apply_fn2(F, A, B, Out) :- atom(F), arity(F, 3), !, ( dynamic_contract(F, 2, C) -> contract_call(C, F, [A, B], Out, safe_apply(call(F, A, B, Out)))
-                                                                                ; safe_apply(call(F, A, B, Out)) ).
-apply_fn2(P, A, B, Out) :- compound(P), P = partial(F, Bs), length(Bs, K), Arity is K + 3, arity(F, Arity), !,
-                           append(Bs, [A, B], Args), append(Args, [Out], CallArgs),
-                           Goal =.. [F|CallArgs], dynamic_call(F, Args, Out, safe_apply(Goal)).
-apply_fn2(F, A, B, Out) :- reduce([F, A, B], Out).
-
-apply_fn3(F, A, B, C, Out) :- atom(F), arity(F, 4), !, ( dynamic_contract(F, 3, K) -> contract_call(K, F, [A, B, C], Out, safe_apply(call(F, A, B, C, Out)))
-                                                                                   ; safe_apply(call(F, A, B, C, Out)) ).
-apply_fn3(P, A, B, C, Out) :- compound(P), P = partial(F, Bs), length(Bs, K), Arity is K + 4, arity(F, Arity), !,
-                              append(Bs, [A, B, C], Args), append(Args, [Out], CallArgs),
-                              Goal =.. [F|CallArgs], dynamic_call(F, Args, Out, safe_apply(Goal)).
-apply_fn3(F, A, B, C, Out) :- reduce([F, A, B, C], Out).
-
-apply_fnN(F, Args, Out) :- atom(F), length(Args, N), Arity is N + 1, arity(F, Arity), !,
-                           append(Args, [Out], CallArgs), Goal =.. [F|CallArgs], dynamic_call(F, Args, Out, safe_apply(Goal)).
-apply_fnN(P, Args, Out) :- compound(P), P = partial(F, Bs), append(Bs, Args, All),
-                           length(All, N), Arity is N + 1, arity(F, Arity), !,
-                           append(All, [Out], CallArgs),
-                           Goal =.. [F|CallArgs], dynamic_call(F, All, Out, safe_apply(Goal)).
+%Runtime closure application: a function, or a partial application of one,
+%that has the arity is called as a known call is, under its contract (see
+%dynamic_call/4) and through its memo table; any other value is reduce/2's
+%(data, or a partial application). Errors raised inside the callee propagate:
+apply_fn1(F, A, Out) :- apply_fnN(F, [A], Out).
+apply_fn2(F, A, B, Out) :- apply_fnN(F, [A, B], Out).
+apply_fn3(F, A, B, C, Out) :- apply_fnN(F, [A, B, C], Out).
+apply_fnN(F, Args, Out) :- ( atom(F) -> G = F, All = Args ; compound(F), F = partial(G, Bs), atom(G), append(Bs, Args, All) ),
+                           length(All, N), Arity is N + 1, arity(G, Arity), current_predicate(G/Arity), !,
+                           resolve_memoization(G, All, Out, Goal), dynamic_call(G, All, Out, Goal).
 apply_fnN(F, Args, Out) :- reduce([F|Args], Out).
-
-safe_apply(Goal) :- catch(Goal, error(existence_error(procedure, _), _), fail).
 
 %A call of a known function: arguments are evaluated or held by the declared
 %policy and checked against the declarations (see types.pl), then the function
